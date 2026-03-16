@@ -139,21 +139,36 @@ class _TextPagePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 繪製邏輯 (省略詳細內容，保持原有繪製代碼)
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    final width = size.width - paddingLeft * 2;
 
-    // 繪製標題 (如果是第一頁)
-    if (page.index == 0) {
-      textPainter.text = TextSpan(text: page.title, style: titleStyle);
-      textPainter.layout(maxWidth: size.width - paddingLeft * 2);
-      textPainter.paint(canvas, Offset(paddingLeft, 40));
-    }
-
-    // 繪製正文
+    // 繪製每一行
     for (var line in page.lines) {
       if (line.image != null) continue;
-      textPainter.text = TextSpan(text: line.text, style: contentStyle);
-      textPainter.layout(maxWidth: size.width - paddingLeft * 2);
+
+      // 處理 TTS 高亮 (對位 Android：朗讀時背景高亮)
+      final bool isTtsActive = ttsStart != -1 && 
+          line.chapterPosition >= ttsStart && 
+          line.chapterPosition < ttsEnd;
+
+      if (isTtsActive) {
+        final highlightPaint = Paint()
+          ..color = contentStyle.color?.withOpacity(0.2) ?? Colors.yellow.withOpacity(0.3);
+        canvas.drawRect(
+          Rect.fromLTWH(paddingLeft, 40.0 + line.lineTop, width, line.height),
+          highlightPaint,
+        );
+      }
+
+      textPainter.text = TextSpan(
+        text: line.text, 
+        style: line.isTitle ? titleStyle : contentStyle
+      );
+      
+      // 關鍵：對位 Android 的兩端對齊繪製
+      textPainter.textAlign = line.shouldJustify ? TextAlign.justify : TextAlign.left;
+      
+      textPainter.layout(minWidth: width, maxWidth: width);
       textPainter.paint(canvas, Offset(paddingLeft, 40.0 + line.lineTop));
     }
   }

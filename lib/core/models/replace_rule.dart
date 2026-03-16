@@ -64,12 +64,16 @@ class ReplaceRule {
       if (isRegex) {
         final reg = RegExp(pattern, multiLine: true, dotAll: true);
         return content.replaceAllMapped(reg, (match) {
+          // 替換 $0 為整個匹配項，替換 $1...$N 為捕獲組
           return replacement.replaceAllMapped(RegExp(r'\\\$|\$(\d+)'), (m) {
             final hit = m.group(0)!;
             if (hit == r'\$') {
               return r'$';
             } else {
               final groupIndex = int.tryParse(m.group(1)!) ?? 0;
+              if (groupIndex == 0) {
+                return match.group(0) ?? '';
+              }
               if (groupIndex > 0 && groupIndex <= match.groupCount) {
                 return match.group(groupIndex) ?? '';
               }

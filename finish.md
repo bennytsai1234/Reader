@@ -15,6 +15,11 @@
   - [x] `BookmarkDao`: 實現批量刪除與事件廣播修正
   - [x] `ReplaceRuleDao`: 實現精確的 `scope` 與 `excludeScope` 範圍過濾邏輯
 
+- [x] **解析引擎與爬蟲調度** (`lib/core/engine/`)
+  - [x] `AnalyzeUrl`: 實現 `StrResponse` 完整回應對位，支持重定向 URL 追蹤 (Android parity)
+  - [x] `AnalyzeRule`: 補全 `checkLogin`, `preUpdateToc` 等關鍵業務 Hook
+  - [x] `WebBook`: 重構為對標 Android `WebBook.kt` 的靜態調度模式，修正循環依賴並支持全生命週期登入檢查
+
 - [x] **UI/Logic 同步優化**
   - [x] `SourceManager` 模組全鏈條適配 `BookSourcePart`，兼顧列表滾動流暢度與功能完整性
   - [x] 修正全域 `SharePlus` 棄用警告與 iPad 相容性

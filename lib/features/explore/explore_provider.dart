@@ -8,7 +8,6 @@ import 'package:legado_reader/core/engine/explore_url_parser.dart';
 
 class ExploreProvider extends ChangeNotifier {
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
-  final WebBookService _webBookService = WebBookService();
 
   List<BookSource> _sources = [];
   BookSource? _selectedSource;
@@ -106,7 +105,7 @@ class ExploreProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final results = await _webBookService.exploreBook(
+      final results = await WebBook.exploreBookAwait(
         _selectedSource!, 
         _selectedKind!.url, 
         page: _page

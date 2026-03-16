@@ -99,13 +99,26 @@ class BookSourceDao extends BaseDao<BookSource> {
     return maps.map((m) => BookSourcePart.fromJson(m)).toList();
   }
 
+  /// 搜尋啟用的局部書源 (對標 Android: flowSearchEnabled)
+  Future<List<BookSourcePart>> getSearchEnabledPart(String searchKey) async {
+    final client = await db;
+    final List<Map<String, dynamic>> maps = await client.query(
+      tableName,
+      columns: _partColumns,
+      where: 'enabled = 1 AND (bookSourceName LIKE ? OR bookSourceGroup LIKE ? OR bookSourceUrl LIKE ? OR bookSourceComment LIKE ?)',
+      whereArgs: List.filled(4, '%$searchKey%'),
+      orderBy: 'customOrder ASC',
+    );
+    return maps.map((m) => BookSourcePart.fromJson(m)).toList();
+  }
+
   /// 獲取未分組書源 (對標 Android: flowNoGroup)
   Future<List<BookSourcePart>> getNoGroupPart() async {
     final client = await db;
     final List<Map<String, dynamic>> maps = await client.query(
       tableName,
       columns: _partColumns,
-      where: 'bookSourceGroup IS NULL OR bookSourceGroup = "" OR bookSourceGroup LIKE "%未分組%"',
+      where: "bookSourceGroup IS NULL OR bookSourceGroup = '' OR bookSourceGroup LIKE '%未分組%'",
       orderBy: 'customOrder ASC',
     );
     return maps.map((m) => BookSourcePart.fromJson(m)).toList();

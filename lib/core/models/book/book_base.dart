@@ -43,6 +43,10 @@ class BookBase {
   int syncTime; // 同步時間
   bool isInBookshelf; // 是否在書架上 (iOS 特有標記)
 
+  // --- Transient Properties (Not persisted, Android parity) ---
+  String? infoHtml; // 緩存的書籍詳情 HTML
+  String? tocHtml;  // 緩存的目錄 HTML
+
   BookBase({
     this.bookUrl = '',
     this.tocUrl = '',

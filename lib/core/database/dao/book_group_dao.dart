@@ -38,7 +38,7 @@ class BookGroupDao extends BaseDao<BookGroup> {
     final client = await db;
     final List<Map<String, dynamic>> maps = await client.query(
       tableName,
-      orderBy: 'groupOrder ASC',
+      orderBy: '`order` ASC',
     );
     return maps.map((m) => BookGroup.fromJson(m)).toList();
   }
@@ -59,12 +59,12 @@ class BookGroupDao extends BaseDao<BookGroup> {
     final client = await db;
     final List<Map<String, dynamic>> maps = await client.query(
       tableName,
-      columns: ['groupOrder'],
-      orderBy: 'groupOrder DESC',
+      columns: ['`order`'],
+      orderBy: '`order` DESC',
       limit: 1,
     );
     if (maps.isEmpty) return 0;
-    return maps.first['groupOrder'] as int;
+    return maps.first['order'] as int;
   }
 
   /// 是否可以新增分組 (限制 64 個，因為 64 位整數限制)

@@ -4,38 +4,37 @@ import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/models/search_book.dart';
 import 'package:legado_reader/core/engine/web_book/web_book_service.dart';
 
-/// BookSourceService - 書源核心業務調度 (對標 Android model/BookModel.kt)
+/// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
 class BookSourceService {
-  final WebBookService _webBookService = WebBookService();
 
   /// 獲取書籍詳情 (對標 getBookInfoAwait)
   Future<Book> getBookInfo(BookSource source, Book book) async {
-    return await _webBookService.getBookInfo(source, book);
+    return await WebBook.getBookInfoAwait(source, book);
   }
 
   /// 獲取目錄列表 (對標 getChapterListAwait)
   Future<List<BookChapter>> getChapterList(BookSource source, Book book) async {
-    return await _webBookService.getChapterList(source, book);
+    return await WebBook.getChapterListAwait(source, book);
   }
 
   /// 獲取正文內容 (對標 getContentAwait)
   Future<String> getContent(BookSource source, Book book, BookChapter chapter, {String? nextChapterUrl}) async {
-    return await _webBookService.getContent(source, book, chapter, nextChapterUrl: nextChapterUrl);
+    return await WebBook.getContentAwait(source, book, chapter, nextChapterUrl: nextChapterUrl);
   }
 
   /// 搜尋書籍 (對標 searchBookAwait)
   Future<List<SearchBook>> searchBooks(BookSource source, String key, {int page = 1}) async {
-    return await _webBookService.searchBook(source, key, page: page);
+    return await WebBook.searchBookAwait(source, key, page: page);
   }
 
   /// 發現/探索書籍 (對標 exploreBookAwait)
   Future<List<SearchBook>> exploreBooks(BookSource source, String url, {int page = 1}) async {
-    return await _webBookService.exploreBook(source, url, page: page);
+    return await WebBook.exploreBookAwait(source, url, page: page);
   }
 
   /// 精確搜尋
   Future<List<SearchBook>> preciseSearch(BookSource source, String name, String author) async {
-    return await _webBookService.searchBook(
+    return await WebBook.searchBookAwait(
       source,
       name,
       filter: (n, a) => n == name && a == author,

@@ -36,7 +36,7 @@ class DefaultData {
   static Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     // 原 Android versionCode 判斷
-    const currentDataVersion = 100;
+    const currentDataVersion = 101;
     final savedDataVersion = prefs.getInt('default_data_version') ?? 0;
 
     if (savedDataVersion < currentDataVersion) {

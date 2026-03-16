@@ -26,6 +26,19 @@ class ChapterDao extends BaseDao<BookChapter> {
     return maps.map((m) => BookChapter.fromJson(m)).toList();
   }
 
+  /// 獲取指定書籍的所有章節 URL 列表 (對標 Android: getChapterUrls)
+  Future<List<String>> getChapterUrls(String bookUrl) async {
+    final client = await db;
+    final List<Map<String, dynamic>> maps = await client.query(
+      tableName,
+      columns: ['url'],
+      where: 'bookUrl = ?',
+      whereArgs: [bookUrl],
+      orderBy: '`index` ASC',
+    );
+    return maps.map((m) => m['url'] as String).toList();
+  }
+
   /// 獲取指定書籍的所有章節 (對標 Android: getChapterList)
   Future<List<BookChapter>> getChapterList(String bookUrl, {int? start, int? end}) async {
     final client = await db;

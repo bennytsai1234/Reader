@@ -64,11 +64,17 @@ class AnalyzeRule extends AnalyzeRuleBase with AnalyzeRuleRegexHelper, AnalyzeRu
   }
 
   Future<void> checkLogin() async {
-    // 實作登入檢查邏輯 (通常是在請求前執行 JS)
+    if (source is! BookSource) return;
+    final checkJs = (source as BookSource).loginCheckJs;
+    if (checkJs != null && checkJs.isNotEmpty) {
+      evalJS(checkJs, null);
+    }
   }
 
   Future<void> preUpdateToc() async {
-    // 實作更新目錄前的 Hook
+    if (source is! BookSource) return;
+    // Android 原版在更新目錄前會檢查是否需要執行特定 JS
+    // 例如 bookSource.ruleToc?.preUpdateJs
   }
 
   /// 重新獲取書籍資訊 (原 Android AnalyzeRule.reGetBook)

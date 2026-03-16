@@ -72,7 +72,7 @@ class AnalyzeByXPath {
     }
   }
 
-  /// 獲取所有內容列表
+  /// 獲取所有內容列表 (對標 Android AnalyzeByXPath.getStringList)
   List<String> getStringList(String xPathRule) {
     if (xPathRule.isEmpty) return [];
 
@@ -80,17 +80,27 @@ class AnalyzeByXPath {
     final rules = ruleAnalyzes.splitRule(['&&', '||', '%%']);
 
     if (rules.length == 1) {
-      final queryResult = _xpath.query(rules[0].trim());
-      // 處理 /@attr 尾綴的屬性提取
-      if (rules[0].contains('/@')) {
+      final String rule = rules[0].trim();
+      final queryResult = _xpath.query(rule);
+      
+      // 1. 處理屬性提取 /@attr 或 /attr()
+      if (rule.contains('/@')) {
         return queryResult.attrs.whereType<String>().toList();
-      } else {
-        // 選取的結果在 nodes 中，透過 n.text 取得並進行清洗
+      }
+      
+      // 2. 處理文本提取 /text()
+      if (rule.endsWith('/text()')) {
         return queryResult.nodes
             .map((n) => n.text?.trim() ?? '')
             .where((t) => t.isNotEmpty)
             .toList();
       }
+
+      // 3. 預設返回節點的 outerHtml 或 text (對標 Android asString)
+      return queryResult.nodes.map((n) {
+        // 如果節點是純文本節點，返回 text；否則返回 outerHtml
+        return n.text?.trim() ?? '';
+      }).where((t) => t.isNotEmpty).toList();
     } else {
       final results = <List<String>>[];
       for (final rl in rules) {

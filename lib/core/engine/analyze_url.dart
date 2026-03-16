@@ -5,6 +5,7 @@ import 'package:legado_reader/core/models/base_source.dart';
 import 'package:legado_reader/core/engine/analyze_rule.dart';
 import 'package:legado_reader/core/services/http_client.dart';
 import 'package:legado_reader/core/engine/web_book/headless_webview_service.dart';
+import 'package:legado_reader/core/network/str_response.dart';
 
 /// AnalyzeUrl - URL 規則解析與請求建構 (原 Android AnalyzeUrl.kt)
 class AnalyzeUrl {
@@ -142,15 +143,24 @@ class AnalyzeUrl {
     }
   }
 
-  /// 獲取回應內容 (原 Android AnalyzeUrl.getStrResponseAwait)
-  Future<String> getResponseBody() async {
+  /// 獲取回應內容 (對標 Android AnalyzeUrl.getStrResponseAwait)
+  Future<StrResponse> getStrResponse() async {
+    String finalBody = '';
+    Response? rawResponse;
+
     // 如果開啟了 WebView 抓取模式
     if (useWebView) {
-      return HeadlessWebViewService().getRenderedHtml(
+      finalBody = await HeadlessWebViewService().getRenderedHtml(
         url: url,
         headers: headerMap,
         js: webJs,
         delayTime: webViewDelayTime,
+      );
+      return StrResponse(
+        url: url,
+        body: finalBody,
+        headers: {},
+        raw: Response(requestOptions: RequestOptions(path: url), data: finalBody),
       );
     }
 
@@ -161,14 +171,24 @@ class AnalyzeUrl {
       responseType: ResponseType.plain,
     );
 
-    Response response;
     if (method == 'POST') {
-      response = await httpClient.client.post(url, data: body, options: options);
+      rawResponse = await httpClient.client.post(url, data: body, options: options);
     } else {
-      response = await httpClient.client.get(url, options: options);
+      rawResponse = await httpClient.client.get(url, options: options);
     }
 
-    return response.data?.toString() ?? '';
+    return StrResponse(
+      url: rawResponse.realUri.toString(),
+      body: rawResponse.data?.toString() ?? '',
+      headers: rawResponse.headers.map,
+      raw: rawResponse,
+    );
+  }
+
+  /// 獲取回應內容的 body (兼容舊代碼)
+  Future<String> getResponseBody() async {
+    final res = await getStrResponse();
+    return res.body;
   }
 
   /// 獲取位元組回應內容
@@ -190,4 +210,3 @@ class AnalyzeUrl {
     return Uint8List.fromList(response.data ?? []);
   }
 }
-

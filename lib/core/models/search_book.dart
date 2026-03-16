@@ -23,6 +23,10 @@ class SearchBook implements RuleDataInterface {
   String? tocUrl; // 目錄 URL
   int respondTime; // 回應時間
 
+  // --- Transient Properties (Not persisted, Android parity) ---
+  String? infoHtml;
+  String? tocHtml;
+
   late final Set<String> origins = {origin};
 
   void addOrigin(String o) {

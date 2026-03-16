@@ -4,18 +4,30 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'network/interceptors/app_interceptor.dart';
+import 'package:synchronized/synchronized.dart';
+import 'package:legado_reader/core/network/interceptors/app_interceptor.dart';
 
 /// NetworkService - 專業網路伺服 (具備反爬蟲對應能力)
-/// 封裝全域 Dio 實例並支持 Cookie 持久化
+/// 封裝全域 Dio 實例並支持 Cookie 持久化與書源併發控制
 class NetworkService {
+  static final NetworkService _instance = NetworkService._internal();
+  factory NetworkService() => _instance;
+  NetworkService._internal();
+
   late Dio _dio;
   late PersistCookieJar _cookieJar;
+  final Map<String, Lock> _sourceLocks = {}; // 書源併發鎖
   
   Dio get dio => _dio;
   PersistCookieJar get cookieJar => _cookieJar;
 
   bool _isInitialized = false;
+
+  /// 獲取書源專屬的鎖 (用於併發控制)
+  Lock getSourceLock(String? sourceUrl) {
+    if (sourceUrl == null || sourceUrl.isEmpty) return Lock();
+    return _sourceLocks.putIfAbsent(sourceUrl, () => Lock());
+  }
 
   Future<void> init() async {
     if (_isInitialized) return;
@@ -49,6 +61,12 @@ class NetworkService {
   /// 快速 POST 請求
   Future<Response> post(String url, {dynamic data, Options? options}) async {
     return await _dio.post(url, data: data, options: options);
+  }
+
+  /// 手動保存 Cookie (用於 WebView 同步等場景)
+  Future<void> saveCookies(String url, String cookieStr) async {
+    final uri = Uri.parse(url);
+    await _cookieJar.saveFromResponse(uri, [Cookie.fromSetCookieValue(cookieStr)]);
   }
 }
 

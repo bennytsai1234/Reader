@@ -26,7 +26,7 @@ class BookSourceSerialization {
     return {};
   }
 
-  /// 將 BookSource 轉換為 1:1 對標 Android 3.x 的 JSON (用於分享 .legado)
+  /// 將 BookSource 轉換為 1:1 對標 Android 3.x 的 JSON
   static Map<String, dynamic> sourceToJson(BookSource source) {
     return {
       'bookSourceUrl': source.bookSourceUrl,
@@ -43,9 +43,9 @@ class BookSourceSerialization {
       'variableComment': source.variableComment,
       'customOrder': source.customOrder,
       'weight': source.weight,
-      'enabled': source.enabled,
-      'enabledExplore': source.enabledExplore,
-      'enabledCookieJar': source.enabledCookieJar,
+      'enabled': source.enabled ? 1 : 0,
+      'enabledExplore': source.enabledExplore ? 1 : 0,
+      'enabledCookieJar': source.enabledCookieJar ? 1 : 0,
       'lastUpdateTime': source.lastUpdateTime,
       'respondTime': source.respondTime,
       'jsLib': source.jsLib,
@@ -53,12 +53,12 @@ class BookSourceSerialization {
       'exploreUrl': source.exploreUrl,
       'exploreScreen': source.exploreScreen,
       'searchUrl': source.searchUrl,
-      'ruleSearch': source.ruleSearch?.toJson(),
-      'ruleExplore': source.ruleExplore?.toJson(),
-      'ruleBookInfo': source.ruleBookInfo?.toJson(),
-      'ruleToc': source.ruleToc?.toJson(),
-      'ruleContent': source.ruleContent?.toJson(),
-      'ruleReview': source.ruleReview?.toJson(),
+      'ruleSearch': ruleToString(source.ruleSearch),
+      'ruleExplore': ruleToString(source.ruleExplore),
+      'ruleBookInfo': ruleToString(source.ruleBookInfo),
+      'ruleToc': ruleToString(source.ruleToc),
+      'ruleContent': ruleToString(source.ruleContent),
+      'ruleReview': ruleToString(source.ruleReview),
     };
   }
 }

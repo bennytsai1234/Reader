@@ -75,11 +75,22 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   const PopupMenuItem(value: 'export', child: Row(children: [Icon(Icons.file_upload_outlined, size: 20), SizedBox(width: 12), Text('匯出書架')])),
                   const PopupMenuItem(value: 'log', child: Row(children: [Icon(Icons.bug_report_outlined, size: 20), SizedBox(width: 12), Text('日誌')])),
                 ],
-                onSelected: (value) {
+import 'package:file_picker/file_picker.dart';
+...
+                onSelected: (value) async {
                   switch (value) {
                     case 'grid': provider.setGridView(!provider.isGridView); break;
                     case 'update_toc': ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在背景更新...'))); break;
-                    case 'add_local': Navigator.push(context, MaterialPageRoute(builder: (_) => const SourceManagerPage())); break; // 暫代
+                    case 'add_local': 
+                      final result = await FilePicker.platform.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['txt', 'epub'],
+                      );
+                      if (result != null && result.files.single.path != null) {
+                        await provider.importLocalBookPath(result.files.single.path!);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在解析本地書籍...')));
+                      }
+                      break;
                     case 'manage': setState(() { _isMultiSelect = true; }); break;
                     case 'group_manage': ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('分組管理開發中'))); break;
                     case 'log': Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())); break; // 暫代

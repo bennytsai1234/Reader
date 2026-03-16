@@ -2,14 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/models/replace_rule.dart';
+import 'package:legado_reader/core/models/book/book_content.dart';
 import 'package:legado_reader/core/services/chinese_utils.dart';
 import 'package:legado_reader/core/constant/app_pattern.dart';
 
-/// ContentProcessor - 閱讀器正文處理引擎 (效能優化版)
+/// ContentProcessor - 閱讀器正文處理引擎 (對標 Android ContentProcessor.kt)
 class ContentProcessor {
   
-  /// 異步處理正文 (自動切換 Isolate 防止 UI 阻塞)
-  static Future<String> process({
+  /// 異步處理正文
+  static Future<BookContent> process({
     required Book book,
     required BookChapter chapter,
     required String rawContent,
@@ -17,11 +18,12 @@ class ContentProcessor {
     int chineseConvertType = 0,
     bool reSegmentEnabled = true,
     bool removeSameTitle = true,
+    bool includeTitle = true,
   }) async {
-    if (rawContent.isEmpty) return '';
+    if (rawContent.isEmpty) return BookContent(content: '');
 
-    // 1. 在 Isolate 中執行 CPU 密集型操作 (正則替換、分段)
-    var processedContent = await compute(_internalProcess, {
+    // 1. 在 Isolate 中執行 CPU 密集型操作
+    final resultData = await compute(_internalProcess, {
       'bookName': book.name,
       'bookOrigin': book.origin,
       'chapterTitle': chapter.title,
@@ -29,20 +31,38 @@ class ContentProcessor {
       'rules': rules,
       'reSegmentEnabled': reSegmentEnabled,
       'removeSameTitle': removeSameTitle,
+      'includeTitle': includeTitle,
     });
 
-    // 2. 簡繁轉換 (這部分通常已經是異步插件實現，或在此處繼續處理)
+    String content = resultData['content'];
+    final effectiveRules = resultData['effectiveRules'] as List<ReplaceRule>;
+    final bool sameTitleRemoved = resultData['sameTitleRemoved'];
+
+    // 2. 簡繁轉換 (這部分保持在主 Isolate 呼叫 OpenCC 插件)
     if (chineseConvertType == 1) {
-      processedContent = await ChineseUtils.t2s(processedContent);
+      content = await ChineseUtils.t2s(content);
     } else if (chineseConvertType == 2) {
-      processedContent = await ChineseUtils.s2t(processedContent);
+      content = await ChineseUtils.s2t(content);
     }
 
-    return processedContent.trim();
+    // 3. 重新添加處理後的標題
+    if (includeTitle) {
+      final processedTitle = await chapter.getDisplayTitle(
+        replaceRules: rules,
+        chineseConvertType: chineseConvertType,
+      );
+      content = processedTitle + '\n' + content;
+    }
+
+    return BookContent(
+      content: content,
+      effectiveReplaceRules: effectiveRules,
+      sameTitleRemoved: sameTitleRemoved,
+    );
   }
 
-  /// 內部同步處理邏輯 (Isolate 友善)
-  static String _internalProcess(Map<String, dynamic> args) {
+  /// 內部同步處理邏輯
+  static Map<String, dynamic> _internalProcess(Map<String, dynamic> args) {
     final String bookName = args['bookName'];
     final String bookOrigin = args['bookOrigin'];
     final String chapterTitle = args['chapterTitle'];
@@ -51,78 +71,87 @@ class ContentProcessor {
     final bool reSegmentEnabled = args['reSegmentEnabled'];
     final bool removeSameTitle = args['removeSameTitle'];
 
-    var result = rawContent;
+    var mContent = rawContent;
+    var sameTitleRemoved = false;
+    final effectiveRules = <ReplaceRule>[];
 
+    // 1. 去除重複標題 (對標 Android ContentProcessor.kt line 110)
     if (removeSameTitle) {
-      result = _removeSameTitle(result, chapterTitle, bookName);
-    }
-
-    if (reSegmentEnabled) {
-      result = _reSegment(result);
-    }
-
-    result = _applyRules(result, bookName, bookOrigin, rules);
-
-    return result;
-  }
-
-  static String _removeSameTitle(String content, String title, String bookName) {
-    try {
-      final titleStr = RegExp.escape(title).replaceAll(AppPattern.spaceRegex, r'\s*');
-      final nameStr = RegExp.escape(bookName);
-      final pattern = RegExp('^(\\s|\\p{P}|$nameStr)*$titleStr(\\s)*', unicode: true);
+      final nameRegex = RegExp.escape(bookName);
+      final titleRegex = RegExp.escape(chapterTitle).replaceAll(AppPattern.spaceRegex, r'\s*');
+      final pattern = RegExp('^(\\s|\\p{P}|$nameRegex)*$titleRegex(\\s)*', unicode: true);
       
-      final match = pattern.firstMatch(content);
+      final match = pattern.firstMatch(mContent);
       if (match != null) {
-        return content.substring(match.end);
+        mContent = mContent.substring(match.end);
+        sameTitleRemoved = true;
       }
-    } catch (_) {}
-    return content;
-  }
-
-  static String _reSegment(String content) {
-    final paragraphs = content.split(RegExp(r'\n+'));
-    final result = <String>[];
-
-    for (var p in paragraphs) {
-      final text = p.trim().replaceAll(RegExp(r'[\u3000\s]+'), ' ').trim();
-      if (text.isEmpty) continue;
-      result.add(text);
     }
-    
-    return result.join('\n');
-  }
 
-  static String _applyRules(String content, String bookName, String bookOrigin, List<ReplaceRule> rules) {
-    var result = content;
-    final stopwatch = Stopwatch()..start();
-    const timeout = Duration(seconds: 2); // 規則替換超時保護
+    // 2. 重新分段 (對標 Android line 135)
+    if (reSegmentEnabled) {
+      mContent = _reSegment(mContent);
+    }
 
+    // 3. 預處理：修剪每行空白
+    mContent = mContent.split('\n').map((line) => line.trim()).join('\n');
+
+    // 4. 執行淨化規則替換 (對標 Android line 150)
     for (final rule in rules) {
       if (!rule.isEnabled || !rule.scopeContent) continue;
-      if (stopwatch.elapsed > timeout) break;
+      if (rule.pattern.isEmpty) continue;
 
+      // 範圍過濾
       if (rule.scope?.isNotEmpty == true) {
         if (!rule.scope!.contains(bookName) && !rule.scope!.contains(bookOrigin)) continue;
       }
+      if (rule.excludeScope?.isNotEmpty == true) {
+        if (rule.excludeScope!.contains(bookName) || rule.excludeScope!.contains(bookOrigin)) continue;
+      }
 
       try {
+        final String oldContent = mContent;
         if (rule.isRegex) {
           final reg = RegExp(rule.pattern, multiLine: true, dotAll: true);
-          result = result.replaceAllMapped(reg, (match) {
+          mContent = mContent.replaceAllMapped(reg, (match) {
             return rule.replacement.replaceAllMapped(RegExp(r'\\\$|\$(\d+)'), (m) {
               final hit = m.group(0)!;
               if (hit == r'\$') return r'$';
               final idx = int.tryParse(m.group(1)!) ?? 0;
+              if (idx == 0) return match.group(0) ?? '';
               return (idx > 0 && idx <= match.groupCount) ? (match.group(idx) ?? '') : hit;
             });
           });
         } else {
-          result = result.replaceAll(rule.pattern, rule.replacement);
+          mContent = mContent.replaceAll(rule.pattern, rule.replacement);
+        }
+
+        if (mContent != oldContent) {
+          effectiveRules.add(rule);
         }
       } catch (_) {}
     }
-    return result;
+
+    // 5. 段落美化與縮進 (對標 Android line 195)
+    final finalParagraphs = <String>[];
+    const indent = '　　'; // 預設使用兩個全形空格作為縮進
+    
+    mContent.split('\n').forEach((line) {
+      final p = line.trim();
+      if (p.isNotEmpty) {
+        finalParagraphs.add('$indent$p');
+      }
+    });
+
+    return {
+      'content': finalParagraphs.join('\n'),
+      'effectiveRules': effectiveRules,
+      'sameTitleRemoved': sameTitleRemoved,
+    };
+  }
+
+  static String _reSegment(String content) {
+    // 簡單的重新分段邏輯
+    return content.replaceAll(RegExp(r'\n+'), '\n');
   }
 }
-

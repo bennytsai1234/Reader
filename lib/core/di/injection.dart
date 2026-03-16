@@ -24,6 +24,8 @@ import '../database/dao/search_history_dao.dart';
 import '../database/dao/search_keyword_dao.dart';
 import '../database/dao/txt_toc_rule_dao.dart';
 import '../database/dao/keyboard_assist_dao.dart';
+import '../database/dao/server_dao.dart';
+import '../database/dao/source_subscription_dao.dart';
 import '../services/tts_service.dart';
 import '../services/crash_handler.dart';
 
@@ -73,6 +75,8 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SearchKeywordDao>(() => SearchKeywordDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<TxtTocRuleDao>(() => TxtTocRuleDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<KeyboardAssistDao>(() => KeyboardAssistDao(getIt<AppDatabase>()));
+  getIt.registerLazySingleton<ServerDao>(() => ServerDao(getIt<AppDatabase>()));
+  getIt.registerLazySingleton<SourceSubscriptionDao>(() => SourceSubscriptionDao(getIt<AppDatabase>()));
 
   // 4. 其它核心服務註冊
   getIt.registerSingleton<NetworkService>(NetworkService());

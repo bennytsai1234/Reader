@@ -14,17 +14,45 @@ class BookDao extends BaseDao<Book> {
     return maps.map((m) => Book.fromJson(m)).toList();
   }
 
-  /// 根據分組獲取書籍 (對標 Android: flowByGroup)
+  /// 獲取書架根目錄書籍 (對標 Android: flowRoot)
+  /// 過濾條件：在書架上、非本地、且不屬於任何已存在的分組
+  Future<List<Book>> getInRoot() async {
+    final client = await db;
+    final List<Map<String, dynamic>> maps = await client.rawQuery(
+      '''SELECT * FROM $tableName 
+         WHERE isInBookshelf = 1 
+         AND (type & ?) = 0
+         AND (`group` & (SELECT SUM(groupId) FROM book_groups WHERE groupId > 0)) = 0
+         ORDER BY durChapterTime DESC''',
+      [BookType.local]
+    );
+    return maps.map((m) => Book.fromJson(m)).toList();
+  }
+
+  /// 根據書名清單獲取書籍 (對標 Android: findByName)
+  Future<List<Book>> findByNames(List<String> names) async {
+    if (names.isEmpty) return [];
+    final client = await db;
+    final List<Map<String, dynamic>> maps = await client.query(
+      tableName,
+      where: 'name IN (${List.filled(names.length, '?').join(',')})',
+      whereArgs: names,
+    );
+    return maps.map((m) => Book.fromJson(m)).toList();
+  }
+
+  /// 根據分組 ID 獲取書籍 (對標 Android: flowByGroup)
   Future<List<Book>> getInGroup(int groupId) async {
     if (groupId == BookGroup.idAll) return getInBookshelf();
+    if (groupId == BookGroup.idRoot) return getInRoot();
     if (groupId == BookGroup.idAudio) return getAudioBooks();
     if (groupId == BookGroup.idLocal) return getLocalBooks();
     if (groupId == BookGroup.idError) return getUpdateErrorBooks();
     
-    // 預設為使用者自定義分組 (位運算)
+    // 處理特殊分組 ID (對標 Android BookDao.kt line 25)
+    // 這些 ID 在 Android 中有特定的過濾邏輯，這裡我們轉向 getByUserGroup
     return getByUserGroup(groupId);
   }
-
   /// 獲取所有書架上的書籍 (對標 Android: flowAll)
   Future<List<Book>> getInBookshelf() async {
     final client = await db;

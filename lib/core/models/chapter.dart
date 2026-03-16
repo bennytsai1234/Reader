@@ -88,20 +88,31 @@ class BookChapter {
     return displayTitle;
   }
 
-  /// 獲取絕對 URL (原 Android getAbsoluteURL)
+  /// 獲取絕對 URL (對標 Android BookChapter.getAbsoluteURL)
   String getAbsoluteURL() {
+    if (url.isEmpty) return baseUrl;
     if (url.startsWith(title) && isVolume) return baseUrl;
-    if (url.startsWith('http')) return url;
-    
-    // 簡單的拼接邏輯，未來可進一步優化參數處理
+
+    // 處理帶有參數的 URL, 例如: "http://xxx.com/page1,{\"headers\":...}"
+    // 對標 Android AnalyzeUrl.paramPattern = RegExp(r"\s*,\s*(?=\{)")
+    final paramSplitRegex = RegExp(r'\s*,\s*(?=\{)');
+    final match = paramSplitRegex.firstMatch(url);
+
+    String urlBefore = match != null ? url.substring(0, match.start) : url;
+    String urlAfter = match != null ? url.substring(match.start) : '';
+
+    if (urlBefore.startsWith('http')) {
+      return urlBefore + urlAfter;
+    }
+
     try {
       final base = Uri.parse(baseUrl);
-      return base.resolve(url).toString();
+      final absolute = base.resolve(urlBefore).toString();
+      return absolute + urlAfter;
     } catch (e) {
       return url;
     }
   }
-
   /// 獲取緩存文件名 (原 Android getFileName)
   String getFileName({String suffix = 'nb'}) {
     final titleMD5 = md5.convert(utf8.encode(title)).toString().substring(0, 16);

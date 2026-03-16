@@ -111,6 +111,31 @@ class BookSource extends BookSourceBase {
 
   Map<String, dynamic> toJson() => BookSourceSerialization.sourceToJson(this);
 
+  SearchRule getSearchRule() {
+    ruleSearch ??= SearchRule();
+    return ruleSearch!;
+  }
+
+  ExploreRule getExploreRule() {
+    ruleExplore ??= ExploreRule();
+    return ruleExplore!;
+  }
+
+  BookInfoRule getBookInfoRule() {
+    ruleBookInfo ??= BookInfoRule();
+    return ruleBookInfo!;
+  }
+
+  TocRule getTocRule() {
+    ruleToc ??= TocRule();
+    return ruleToc!;
+  }
+
+  ContentRule getContentRule() {
+    ruleContent ??= ContentRule();
+    return ruleContent!;
+  }
+
   String getCheckKeyword(String defaultValue) {
     return (ruleSearch?.checkKeyWord != null && ruleSearch!.checkKeyWord!.isNotEmpty) ? ruleSearch!.checkKeyWord! : defaultValue;
   }

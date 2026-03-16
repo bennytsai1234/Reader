@@ -1,8 +1,45 @@
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:legado_reader/core/constant/app_pattern.dart';
+import 'package:legado_reader/core/models/book.dart';
 
-/// BookHelp - 輔助書籍處理工具 (原 Android help/book/BookHelp.kt)
+/// BookHelp - 輔助書籍處理工具 (對標 Android help/book/BookHelp.kt)
 class BookHelp {
   BookHelp._();
+
+  static const String cacheFolderName = 'book_cache';
+
+  /// 獲取下載/快取根目錄
+  static Future<String> getCachePath() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final path = '${appDir.path}/$cacheFolderName';
+    final dir = Directory(path);
+    if (!dir.existsSync()) {
+      await dir.create(recursive: true);
+    }
+    return path;
+  }
+
+  /// 獲取指定書籍的快取目錄
+  static Future<String> getBookCachePath(Book book) async {
+    final root = await getCachePath();
+    final folderName = book.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final path = '$root/$folderName';
+    final dir = Directory(path);
+    if (!dir.existsSync()) {
+      await dir.create(recursive: true);
+    }
+    return path;
+  }
+
+  /// 清除全體快取 (對標 Android BookHelp.clearCache)
+  static Future<void> clearAllCache() async {
+    final root = await getCachePath();
+    final dir = Directory(root);
+    if (dir.existsSync()) {
+      await dir.delete(recursive: true);
+    }
+  }
 
   /// 格式化書名 (對標 Android BookHelp.formatBookName)
   static String formatBookName(String name) {

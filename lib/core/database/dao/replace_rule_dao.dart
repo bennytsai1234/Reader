@@ -16,6 +16,29 @@ class ReplaceRuleDao extends BaseDao<ReplaceRule> {
     return maps.map((m) => ReplaceRule.fromJson(m)).toList();
   }
 
+  /// 獲取未分組規則 (對標 Android: flowNoGroup)
+  Future<List<ReplaceRule>> getNoGroup() async {
+    final client = await db;
+    final List<Map<String, dynamic>> maps = await client.query(
+      tableName,
+      where: '`group` IS NULL OR `group` = "" OR `group` LIKE "%未分組%"',
+      orderBy: '`order` ASC',
+    );
+    return maps.map((m) => ReplaceRule.fromJson(m)).toList();
+  }
+
+  /// 根據 ID 列表獲取規則 (對標 Android: findByIds)
+  Future<List<ReplaceRule>> findByIds(List<int> ids) async {
+    if (ids.isEmpty) return [];
+    final client = await db;
+    final List<Map<String, dynamic>> maps = await client.query(
+      tableName,
+      where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+      whereArgs: ids,
+    );
+    return maps.map((m) => ReplaceRule.fromJson(m)).toList();
+  }
+
   /// 獲取所有啟用的替換規則 (對標 Android: allEnabled)
   Future<List<ReplaceRule>> getEnabled() async {
     final client = await db;

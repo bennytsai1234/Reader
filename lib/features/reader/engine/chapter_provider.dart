@@ -35,21 +35,26 @@ class ChapterProvider {
     final titlePainter = TextPainter(
       text: TextSpan(text: chapter.title, style: titleStyle),
       textDirection: TextDirection.ltr,
-      maxLines: 2,
     );
     titlePainter.layout(maxWidth: width);
     
-    currentLines.add(TextLine(
-      text: chapter.title,
-      width: titlePainter.width,
-      height: titlePainter.height,
-      isTitle: true,
-      lineTop: titleTopSpacing,
-      lineBottom: titleTopSpacing + titlePainter.height,
-      chapterPosition: chapterPos,
-    ));
+    // 將標題拆分為行 (對標 Android 標題多行處理)
+    final titleLines = titlePainter.computeLineMetrics();
+    for (var i = 0; i < titleLines.length; i++) {
+      final metric = titleLines[i];
+      currentLines.add(TextLine(
+        text: i == 0 ? chapter.title : '', // 標題互動邏輯通常綁定首行
+        width: metric.width,
+        height: metric.height,
+        isTitle: true,
+        lineTop: currentHeight + titleTopSpacing,
+        lineBottom: currentHeight + titleTopSpacing + metric.height,
+        chapterPosition: chapterPos,
+      ));
+      currentHeight += metric.height;
+    }
     chapterPos += chapter.title.length;
-    currentHeight += titleTopSpacing + titlePainter.height + titleBottomSpacing;
+    currentHeight += titleBottomSpacing;
 
     // 2. 處理段落
     final paragraphs = content.split('\n');
@@ -58,7 +63,7 @@ class ChapterProvider {
     for (var pIdx = 0; pIdx < paragraphs.length; pIdx++) {
       final p = paragraphs[pIdx].trim();
       if (p.isEmpty) {
-        chapterPos += 1; // 換行符
+        chapterPos += 1;
         continue;
       }
       
@@ -73,42 +78,51 @@ class ChapterProvider {
         );
         tp.layout(maxWidth: width);
         
+        // 獲取當前寬度能容納的字符數 (對位 Android breakStrategy)
         var end = tp.getPositionForOffset(Offset(width, 0)).offset;
         if (end <= 0) break;
 
-        // 避頭尾處理
+        // 避頭尾處理 (精確版)
         if (start + end < text.length) {
           final nextChar = text.substring(start + end, start + end + 1);
-          if (_lineStartForbidden.contains(nextChar) && end > 1) end--;
+          if (_lineStartForbidden.contains(nextChar) && end > 1) {
+            end--;
+          }
         }
-        final lastChar = text.substring(start + end - 1, start + end);
-        if (_lineEndForbidden.contains(lastChar) && end > 1) end--;
+        if (end > 1) {
+          final lastChar = text.substring(start + end - 1, start + end);
+          if (_lineEndForbidden.contains(lastChar)) {
+            end--;
+          }
+        }
 
         final lineText = text.substring(start, start + end);
         final isLastLine = (start + end == text.length);
+        final lineHeight = contentStyle.fontSize! * (contentStyle.height ?? 1.2);
         
-        // 判斷是否需要兩端對齊
-        final shouldJustify = textFullJustify && !isLastLine && !lineText.endsWith('\n');
+        // 判斷是否兩端對齊 (正文非末行需要對齊)
+        final shouldJustify = textFullJustify && !isLastLine;
 
         currentLines.add(TextLine(
           text: lineText,
-          width: tp.width,
-          height: tp.preferredLineHeight,
+          width: width, // 佔滿可用寬度以支持 justify
+          height: lineHeight,
           isParagraphStart: isFirstLineOfParagraph,
           isParagraphEnd: isLastLine,
           shouldJustify: shouldJustify,
           chapterPosition: chapterPos,
           lineTop: currentHeight,
-          lineBottom: currentHeight + tp.preferredLineHeight,
+          lineBottom: currentHeight + lineHeight,
           paragraphNum: pIdx,
         ));
 
         start += end;
         chapterPos += end;
-        currentHeight += tp.preferredLineHeight * (contentStyle.height ?? 1.1);
+        currentHeight += lineHeight;
         isFirstLineOfParagraph = false;
 
-        if (currentHeight >= height) {
+        // 檢查分頁 (預留足夠空間給頁碼或頁邊距)
+        if (currentHeight + lineHeight > height) {
           pages.add(TextPage(
             index: pages.length,
             lines: List.from(currentLines),
@@ -117,11 +131,12 @@ class ChapterProvider {
             chapterSize: chapterSize,
           ));
           currentLines = [];
-          currentHeight = 0;
+          currentHeight = 0; // 重置高度
         }
       }
-      chapterPos += 1; // 段落換行符
-      currentHeight += (contentStyle.fontSize ?? 18) * (paragraphSpacing - 1.0).clamp(0, 5.0);
+      chapterPos += 1; // 段落換行
+      // 段落間距 (對標 Android ReadBookConfig.paragraphSpacing)
+      currentHeight += (contentStyle.fontSize! * (paragraphSpacing - 1.0)).clamp(0, 50.0);
     }
 
     if (currentLines.isNotEmpty) {

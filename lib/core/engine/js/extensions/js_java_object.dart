@@ -47,6 +47,19 @@ extension JsJavaObject on JsExtensionsBase {
         },
         webView: function(html, url, js) { return sendMessage('webView', JSON.stringify([html, url, js])); }
       };
+
+      var cookie = {
+        get: function(url) { return sendMessage('getCookie', JSON.stringify(url)); },
+        set: function(url, value) { return sendMessage('setCookie', JSON.stringify([url, value])); },
+        remove: function(url) { return sendMessage('removeCookie', JSON.stringify(url)); },
+        all: function() { return sendMessage('allCookies', ''); }
+      };
+
+      var cache = {
+        get: function(key) { return sendMessage('getCache', JSON.stringify(key)); },
+        put: function(key, value, time) { return sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
+        delete: function(key) { return sendMessage('deleteCache', JSON.stringify(key)); }
+      };
     ''');
   }
 }

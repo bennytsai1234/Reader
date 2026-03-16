@@ -4,7 +4,7 @@ import '../app_database.dart';
 
 /// CookieDao - SQLite 實作 (對標 Android CookieDao.kt)
 class CookieDao extends BaseDao<Cookie> {
-  CookieDao(AppDatabase appDatabase) : super(appDatabase, 'cookie');
+  CookieDao(AppDatabase appDatabase) : super(appDatabase, 'cookies');
 
   /// 根據 URL 獲取 Cookie (對標 Android: getCookie)
   Future<Cookie?> getByUrl(String url) async {

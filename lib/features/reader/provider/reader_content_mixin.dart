@@ -7,6 +7,7 @@ import 'package:legado_reader/core/services/local_book_service.dart';
 import 'package:legado_reader/core/engine/reader/content_processor.dart' as engine;
 import 'package:legado_reader/shared/theme/app_theme.dart';
 import 'package:legado_reader/core/models/book_source.dart';
+import 'package:legado_reader/core/models/book/book_content.dart';
 
 /// ReaderProvider 的內容加載與分頁邏輯擴展
 mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
@@ -20,7 +21,6 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     final ts = TextStyle(fontSize: fontSize + 4, fontWeight: FontWeight.bold, color: currentTheme.textColor, letterSpacing: letterSpacing);
     final cs = TextStyle(fontSize: fontSize, height: lineHeight, color: currentTheme.textColor, letterSpacing: letterSpacing);
     
-    // 將耗時的排版運算移至 Isolate
     final chapter = chapters[currentChapterIndex];
     final chapterSize = chapters.length;
     final currentViewSize = viewSize!;
@@ -67,7 +67,6 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       currentChapterIndex = i;
       chapterContentCache[i] = content;
       
-      // 獲取正文後即時分頁 (已封裝為 Isolate 友好)
       await doPaginate(fromEnd: fromEnd);
       
       chapterCache[i] = pages;
@@ -99,11 +98,11 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       }
     }
     final rules = await replaceDao.getEnabled();
-    final c = await engine.ContentProcessor.process(
+    final BookContent bookContent = await engine.ContentProcessor.process(
       book: book, chapter: chapter, rawContent: raw, rules: rules,
       chineseConvertType: chineseConvert, reSegmentEnabled: true,
     );
-    return (content: c, pages: []); 
+    return (content: bookContent.content, pages: []); 
   }
 
   void nextPage() {
@@ -127,4 +126,3 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   Future<void> nextChapter() async { if (currentChapterIndex < chapters.length - 1) await loadChapter(currentChapterIndex + 1); }
   Future<void> prevChapter() async { if (currentChapterIndex > 0) await loadChapter(currentChapterIndex - 1, fromEnd: true); }
 }
-

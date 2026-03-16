@@ -81,24 +81,34 @@ class AppDatabase {
     _createTable(batch, 'book_sources', '''
       bookSourceUrl TEXT PRIMARY KEY,
       bookSourceName TEXT NOT NULL,
-      bookSourceGroup TEXT,
       bookSourceType INTEGER DEFAULT 0,
+      bookSourceGroup TEXT,
       bookSourceComment TEXT,
+      loginUrl TEXT,
+      loginUi TEXT,
+      loginCheckJs TEXT,
+      coverDecodeJs TEXT,
+      bookUrlPattern TEXT,
+      header TEXT,
+      variableComment TEXT,
       customOrder INTEGER DEFAULT 0,
+      weight INTEGER DEFAULT 0,
       enabled INTEGER DEFAULT 1,
       enabledExplore INTEGER DEFAULT 1,
-      header TEXT,
-      loginUrl TEXT,
-      ruleBookInfo TEXT,
-      ruleContent TEXT,
-      ruleExplore TEXT,
-      ruleSearch TEXT,
-      ruleToc TEXT,
-      weight INTEGER DEFAULT 0,
-      exploreUrl TEXT,
+      enabledCookieJar INTEGER DEFAULT 1,
       lastUpdateTime INTEGER DEFAULT 0,
       respondTime INTEGER DEFAULT 0,
-      variable TEXT
+      jsLib TEXT,
+      concurrentRate TEXT,
+      exploreUrl TEXT,
+      exploreScreen TEXT,
+      searchUrl TEXT,
+      ruleSearch TEXT,
+      ruleExplore TEXT,
+      ruleBookInfo TEXT,
+      ruleToc TEXT,
+      ruleContent TEXT,
+      ruleReview TEXT
     ''');
 
     _createTable(batch, 'book_groups', '''
@@ -142,7 +152,7 @@ class AppDatabase {
       content TEXT
     ''');
 
-    _createTable(batch, 'cookie', '''
+    _createTable(batch, 'cookies', '''
       url TEXT PRIMARY KEY,
       cookie TEXT NOT NULL
     ''');
