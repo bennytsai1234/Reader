@@ -49,6 +49,7 @@ class BookSourceSerialization {
       'lastUpdateTime': source.lastUpdateTime,
       'respondTime': source.respondTime,
       'jsLib': source.jsLib,
+      'concurrentRate': source.concurrentRate,
       'exploreUrl': source.exploreUrl,
       'exploreScreen': source.exploreScreen,
       'searchUrl': source.searchUrl,
