@@ -87,13 +87,14 @@ class ReaderBottomMenu extends StatelessWidget {
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
               ),
               child: Slider(
-                value: provider.currentChapterIndex.toDouble(),
+                value: provider.currentChapterIndex.toDouble().clamp(0, (provider.chapters.isEmpty ? 0 : provider.chapters.length - 1).toDouble()),
                 min: 0,
-                max: (provider.chapters.length - 1).clamp(0, 999999).toDouble(),
-                onChanged: (v) => provider.jumpToChapter(v.toInt()),
+                max: (provider.chapters.length <= 1 ? 0 : provider.chapters.length - 1).toDouble(),
+                onChanged: provider.chapters.length <= 1 ? null : (v) => provider.jumpToChapter(v.toInt()),
                 activeColor: Colors.blue,
                 inactiveColor: Colors.white24,
               ),
+
             ),
           ),
           TextButton(

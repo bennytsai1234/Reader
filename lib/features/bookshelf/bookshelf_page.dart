@@ -197,20 +197,22 @@ class _BookshelfPageState extends State<BookshelfPage> {
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: isLocalCover 
-                    ? Image.file(
-                        File(coverUrl.replaceFirst('local://', '')),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
-                      )
-                    : CachedNetworkImage(
-                        imageUrl: coverUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        placeholder: (context, url) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
-                        errorWidget: (context, url, error) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
-                      ),
+                  child: coverUrl.isEmpty
+                    ? Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey))
+                    : isLocalCover 
+                      ? Image.file(
+                          File(coverUrl.replaceFirst('local://', '')),
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
+                        )
+                      : CachedNetworkImage(
+                          imageUrl: coverUrl,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          placeholder: (context, url) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
+                          errorWidget: (context, url, error) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
+                        ),
                 ),
               ),
               const SizedBox(height: 4),
@@ -254,17 +256,19 @@ class _BookshelfPageState extends State<BookshelfPage> {
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-              child: isLocalCover
-                ? Image.file(
-                    File(coverUrl.replaceFirst('local://', '')),
-                    width: 80, height: 110, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(width: 80, color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
-                  )
-                : CachedNetworkImage(
-                    imageUrl: coverUrl,
-                    width: 80, height: 110, fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(width: 80, color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
-                  ),
+              child: coverUrl.isEmpty
+                ? Container(width: 80, color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey))
+                : isLocalCover
+                  ? Image.file(
+                      File(coverUrl.replaceFirst('local://', '')),
+                      width: 80, height: 110, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(width: 80, color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: coverUrl,
+                      width: 80, height: 110, fit: BoxFit.cover,
+                      errorWidget: (context, url, error) => Container(width: 80, color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
+                    ),
             ),
             Expanded(
               child: Padding(
@@ -297,7 +301,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         context, 
         MaterialPageRoute(
           builder: (_) => ChangeNotifierProvider(
-            create: (ctx) => ReaderProvider(book: book, initialChapterIndex: book.durChapterIndex, initialChapterPos: book.durChapterPos),
+            create: (ctx) => ReaderProvider(book: book, chapterIndex: book.durChapterIndex, chapterPos: book.durChapterPos),
             child: ReaderPage(book: book, chapterIndex: book.durChapterIndex, chapterPos: book.durChapterPos),
           )
         )

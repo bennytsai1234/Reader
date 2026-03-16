@@ -23,7 +23,7 @@ class AppDatabase {
 
     return await openDatabase(
       path,
-      version: 2, // 升級版本
+      version: 5, // 升級版本 (新增淨化規則欄位)
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -72,15 +72,22 @@ class AppDatabase {
 
     _createTable(batch, 'chapters', '''
       url TEXT PRIMARY KEY,
-      bookUrl TEXT NOT NULL,
       title TEXT NOT NULL,
+      isVolume INTEGER DEFAULT 0,
+      baseUrl TEXT,
+      bookUrl TEXT NOT NULL,
       `index` INTEGER NOT NULL,
-      content TEXT,
       isVip INTEGER DEFAULT 0,
+      isPay INTEGER DEFAULT 0,
+      resourceUrl TEXT,
       tag TEXT,
+      wordCount TEXT,
+      start INTEGER,
+      `end` INTEGER,
       startFragmentId TEXT,
       endFragmentId TEXT,
-      variable TEXT
+      variable TEXT,
+      content TEXT
     ''');
     batch.execute('CREATE INDEX idx_chapters_bookUrl ON chapters (bookUrl)');
 
@@ -103,7 +110,7 @@ class AppDatabase {
       enabledExplore INTEGER DEFAULT 1,
       enabledCookieJar INTEGER DEFAULT 1,
       lastUpdateTime INTEGER DEFAULT 0,
-      respondTime INTEGER DEFAULT 0,
+      respondTime INTEGER DEFAULT 180000,
       jsLib TEXT,
       concurrentRate TEXT,
       exploreUrl TEXT,
@@ -139,11 +146,16 @@ class AppDatabase {
       pattern TEXT NOT NULL,
       replacement TEXT,
       scope TEXT,
-      enabled INTEGER DEFAULT 1,
+      scopeTitle INTEGER DEFAULT 0,
+      scopeContent INTEGER DEFAULT 1,
+      excludeScope TEXT,
+      isEnabled INTEGER DEFAULT 1,
       isRegex INTEGER DEFAULT 1,
+      timeoutMillisecond INTEGER DEFAULT 3000,
       `group` TEXT,
       `order` INTEGER DEFAULT 0
     ''');
+
 
     _createTable(batch, 'bookmarks', '''
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -376,7 +388,50 @@ class AppDatabase {
       await batch.commit();
       debugPrint('Database Upgraded to v2: Added missing columns to books table');
     }
+
+    if (oldVersion < 3) {
+      final batch = db.batch();
+      // 為 chapters 表格補上缺失欄位
+      batch.execute('ALTER TABLE chapters ADD COLUMN isVolume INTEGER DEFAULT 0');
+      batch.execute('ALTER TABLE chapters ADD COLUMN baseUrl TEXT');
+      batch.execute('ALTER TABLE chapters ADD COLUMN isPay INTEGER DEFAULT 0');
+      batch.execute('ALTER TABLE chapters ADD COLUMN resourceUrl TEXT');
+      batch.execute('ALTER TABLE chapters ADD COLUMN wordCount TEXT');
+      batch.execute('ALTER TABLE chapters ADD COLUMN start INTEGER');
+      batch.execute('ALTER TABLE chapters ADD COLUMN `end` INTEGER');
+      await batch.commit();
+      debugPrint('Database Upgraded to v3: Added missing columns to chapters table');
+    }
+
+    if (oldVersion < 4) {
+      final batch = db.batch();
+      // 為 book_sources 表格補上缺失欄位
+      batch.execute('ALTER TABLE book_sources ADD COLUMN loginUi TEXT');
+      // 確保其他可能缺失的欄位也補上 (依據 _onCreate 的定義)
+      // 如果 respondTime 之前是 0, 這裡可以更新為預設值 180000
+      batch.execute('UPDATE book_sources SET respondTime = 180000 WHERE respondTime = 0 OR respondTime IS NULL');
+      await batch.commit();
+      debugPrint('Database Upgraded to v4: Added missing columns to book_sources table');
+    }
+    if (oldVersion < 5) {
+      final batch = db.batch();
+      // 為 replace_rules 補上缺失欄位
+      batch.execute('ALTER TABLE replace_rules ADD COLUMN scopeTitle INTEGER DEFAULT 0');
+      batch.execute('ALTER TABLE replace_rules ADD COLUMN scopeContent INTEGER DEFAULT 1');
+      batch.execute('ALTER TABLE replace_rules ADD COLUMN excludeScope TEXT');
+      batch.execute('ALTER TABLE replace_rules ADD COLUMN isEnabled INTEGER DEFAULT 1');
+      batch.execute('ALTER TABLE replace_rules ADD COLUMN timeoutMillisecond INTEGER DEFAULT 3000');
+      
+      // 遷移舊的 enabled 數據到新的 isEnabled
+      try {
+        batch.execute('UPDATE replace_rules SET isEnabled = enabled');
+      } catch (_) {}
+      
+      await batch.commit();
+      debugPrint('Database Upgraded to v5: Added missing columns to replace_rules table');
+    }
   }
+
 
   Future<void> close() async {
     if (_db != null) {

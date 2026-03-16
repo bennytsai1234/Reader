@@ -22,6 +22,8 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   final BookSourceService service = BookSourceService();
   final BookmarkDao bookmarkDao = getIt<BookmarkDao>();
   final StreamController<int> jumpPageController = StreamController<int>.broadcast();
+  final StreamController<double> scrollOffsetController = StreamController<double>.broadcast();
+
 
   final Book book;
   BookSource? source;
@@ -53,9 +55,11 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   @override
   void dispose() {
     jumpPageController.close();
+    scrollOffsetController.close();
     batteryLevelNotifier.dispose();
     autoPageProgressNotifier.dispose();
     super.dispose();
   }
+
 }
 

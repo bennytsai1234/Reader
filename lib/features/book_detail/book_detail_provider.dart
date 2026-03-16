@@ -129,8 +129,29 @@ class BookDetailProvider extends ChangeNotifier {
   Future<void> toggleInBookshelf() async {
     _isInBookshelf = !_isInBookshelf;
     _book.isInBookshelf = _isInBookshelf;
-    await _bookDao.upsert(_book);
-    if (_isInBookshelf && _allChapters.isNotEmpty) await _chapterDao.insertChapters(_allChapters);
+    
+    if (_isInBookshelf) {
+      _isLoading = true;
+      notifyListeners();
+      try {
+        if (_allChapters.isEmpty) {
+          await _loadChapters();
+        }
+        await _bookDao.upsert(_book);
+        if (_allChapters.isNotEmpty) {
+          await _chapterDao.insertChapters(_allChapters);
+        }
+      } catch (e) {
+        debugPrint('加入書架失敗: $e');
+      } finally {
+        _isLoading = false;
+        notifyListeners();
+      }
+    } else {
+      await _bookDao.upsert(_book);
+      // 選用：移除書架時是否刪除章節？通常保留以利再次加入
+    }
+    
     AppEventBus().fire(AppEventBus.upBookshelf);
     notifyListeners();
   }

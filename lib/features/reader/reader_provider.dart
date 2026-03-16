@@ -85,12 +85,24 @@ class ReaderProvider extends ReaderProviderBase with ReaderSettingsMixin, Reader
     source = await sourceDao.getByUrl(book.origin);
   }
 
+  void setViewSize(Size size) {
+    if (viewSize != size) {
+      viewSize = size;
+      if (content.isNotEmpty) {
+        doPaginate();
+      }
+    }
+  }
+
   void onPageChanged(int i) {
+
+
     if (currentPageIndex != i) {
       currentPageIndex = i;
       notifyListeners();
       // 非同步更新進度到資料庫
-      unawaited(bookDao.updateProgress(book.bookUrl, i));
+      final title = chapters.isNotEmpty ? chapters[currentChapterIndex].title : '';
+      unawaited(bookDao.updateProgress(book.bookUrl, currentChapterIndex, title, i));
     }
   }
 
@@ -99,13 +111,6 @@ class ReaderProvider extends ReaderProviderBase with ReaderSettingsMixin, Reader
     notifyListeners();
   }
   
-  void updateViewSize(Size s) {
-    if (viewSize != s) {
-      viewSize = s;
-      doPaginate();
-    }
-  }
-
   ReadingTheme get currentTheme => AppTheme.readingThemes[themeIndex.clamp(0, AppTheme.readingThemes.length - 1)];
 
   String get currentChapterTitle => chapters.isNotEmpty ? chapters[currentChapterIndex].title : '';

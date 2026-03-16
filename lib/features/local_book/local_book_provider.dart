@@ -62,8 +62,9 @@ class LocalBookProvider extends ChangeNotifier {
       if (ext == '.txt') {
         final parser = TxtParser(file);
         await parser.load();
-        final chaptersData = await parser.splitChapters();
-        await _importTxt(file, info['name']!, info['author']!, chaptersData);
+        final result = await parser.splitChapters();
+        await _importTxt(file, info['name']!, info['author']!, result.chapters, result.charset);
+
       } else if (ext == '.epub') {
         await _importEpub(file);
       }
@@ -77,7 +78,7 @@ class LocalBookProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _importTxt(File file, String name, String author, List<Map<String, dynamic>> chaptersData) async {
+  Future<void> _importTxt(File file, String name, String author, List<Map<String, dynamic>> chaptersData, String charset) async {
     final book = Book(
       bookUrl: 'local://${file.path}',
       name: name,
@@ -85,7 +86,9 @@ class LocalBookProvider extends ChangeNotifier {
       origin: 'local',
       originName: '本地',
       isInBookshelf: true,
+      charset: charset,
     );
+
 
     await _bookDao.upsert(book);
 
@@ -103,6 +106,8 @@ class LocalBookProvider extends ChangeNotifier {
         index: i,
         bookUrl: book.bookUrl,
         content: item['content'] ?? '',
+        start: item['start'],
+        end: item['end'],
       );
       chapters.add(chapter);
       

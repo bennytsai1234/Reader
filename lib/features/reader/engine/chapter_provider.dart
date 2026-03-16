@@ -24,12 +24,25 @@ class ChapterProvider {
     double padding = 16.0,
   }) {
     final width = viewSize.width - (padding * 2);
-    final height = viewSize.height - 80;
+    final height = viewSize.height - 80; // 預留上下邊距 40
 
     final pages = <TextPage>[];
     var currentLines = <TextLine>[];
     double currentHeight = 0;
     var chapterPos = 0;
+
+    void addPage() {
+      if (currentLines.isEmpty) return;
+      pages.add(TextPage(
+        index: pages.length,
+        lines: List.from(currentLines),
+        title: chapter.title,
+        chapterIndex: chapterIndex,
+        chapterSize: chapterSize,
+      ));
+      currentLines = [];
+      currentHeight = 0;
+    }
 
     // 1. 處理標題
     final titlePainter = TextPainter(
@@ -38,17 +51,19 @@ class ChapterProvider {
     );
     titlePainter.layout(maxWidth: width);
     
-    // 將標題拆分為行 (對標 Android 標題多行處理)
     final titleLines = titlePainter.computeLineMetrics();
+    currentHeight += titleTopSpacing;
     for (var i = 0; i < titleLines.length; i++) {
       final metric = titleLines[i];
+      if (currentHeight + metric.height > height) addPage();
+
       currentLines.add(TextLine(
-        text: i == 0 ? chapter.title : '', // 標題互動邏輯通常綁定首行
+        text: i == 0 ? chapter.title : '', 
         width: metric.width,
         height: metric.height,
         isTitle: true,
-        lineTop: currentHeight + titleTopSpacing,
-        lineBottom: currentHeight + titleTopSpacing + metric.height,
+        lineTop: currentHeight,
+        lineBottom: currentHeight + metric.height,
         chapterPosition: chapterPos,
       ));
       currentHeight += metric.height;
@@ -78,11 +93,10 @@ class ChapterProvider {
         );
         tp.layout(maxWidth: width);
         
-        // 獲取當前寬度能容納的字符數 (對位 Android breakStrategy)
         var end = tp.getPositionForOffset(Offset(width, 0)).offset;
         if (end <= 0) break;
 
-        // 避頭尾處理 (精確版)
+        // 避頭尾處理
         if (start + end < text.length) {
           final nextChar = text.substring(start + end, start + end + 1);
           if (_lineStartForbidden.contains(nextChar) && end > 1) {
@@ -100,16 +114,15 @@ class ChapterProvider {
         final isLastLine = (start + end == text.length);
         final lineHeight = contentStyle.fontSize! * (contentStyle.height ?? 1.2);
         
-        // 判斷是否兩端對齊 (正文非末行需要對齊)
-        final shouldJustify = textFullJustify && !isLastLine;
+        if (currentHeight + lineHeight > height) addPage();
 
         currentLines.add(TextLine(
           text: lineText,
-          width: width, // 佔滿可用寬度以支持 justify
+          width: width,
           height: lineHeight,
           isParagraphStart: isFirstLineOfParagraph,
           isParagraphEnd: isLastLine,
-          shouldJustify: shouldJustify,
+          shouldJustify: textFullJustify && !isLastLine,
           chapterPosition: chapterPos,
           lineTop: currentHeight,
           lineBottom: currentHeight + lineHeight,
@@ -120,36 +133,13 @@ class ChapterProvider {
         chapterPos += end;
         currentHeight += lineHeight;
         isFirstLineOfParagraph = false;
-
-        // 檢查分頁 (預留足夠空間給頁碼或頁邊距)
-        if (currentHeight + lineHeight > height) {
-          pages.add(TextPage(
-            index: pages.length,
-            lines: List.from(currentLines),
-            title: chapter.title,
-            chapterIndex: chapterIndex,
-            chapterSize: chapterSize,
-          ));
-          currentLines = [];
-          currentHeight = 0; // 重置高度
-        }
       }
       chapterPos += 1; // 段落換行
-      // 段落間距 (對標 Android ReadBookConfig.paragraphSpacing)
       currentHeight += (contentStyle.fontSize! * (paragraphSpacing - 1.0)).clamp(0, 50.0);
     }
 
-    if (currentLines.isNotEmpty) {
-      pages.add(TextPage(
-        index: pages.length,
-        lines: currentLines,
-        title: chapter.title,
-        chapterIndex: chapterIndex,
-        chapterSize: chapterSize,
-      ));
-    }
+    addPage();
 
     return pages.asMap().entries.map((e) => e.value.copyWith(index: e.key, pageSize: pages.length)).toList();
   }
 }
-

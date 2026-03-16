@@ -7,6 +7,14 @@ import 'package:fast_gbk/fast_gbk.dart';
 /// EncodingDetect - 簡易編碼偵測工具
 /// 針對中文書源優化，支援 UTF-8 (含 BOM) 與 GBK 識別
 class EncodingDetect {
+  static Encoding detect(Uint8List bytes) {
+    final name = getEncode(bytes).toUpperCase();
+    if (name == 'GBK' || name == 'GB2312' || name == 'GB18030') {
+      return gbk;
+    }
+    return utf8;
+  }
+
   /// 執行安全解碼，避免崩潰 (原 Android EncodingDetect.getEncode)
   static String decode(Uint8List bytes) {
     if (bytes.isEmpty) return '';
@@ -17,8 +25,7 @@ class EncodingDetect {
       if (charset == 'UTF-8') {
         return utf8.decode(bytes, allowMalformed: true);
       } else if (charset == 'GBK' || charset == 'GB2312' || charset == 'GB18030') {
-        // 使用 fast_gbk 進行寬鬆解碼 (allowMalformed 目前在 fast_gbk 較難直接支援，
-        // 但我們可以透過 try-catch 回退到 utf8 malformed)
+
         try {
           return gbk.decode(bytes);
         } catch (_) {
@@ -29,6 +36,7 @@ class EncodingDetect {
     } catch (e) {
       return utf8.decode(bytes, allowMalformed: true);
     }
+
   }
 
   /// 針對 HTML 內容偵測編碼
@@ -66,13 +74,34 @@ class EncodingDetect {
       return 'UTF-8';
     }
 
-    // 2. 嘗試 UTF-8 解碼
+    // 2. 檢查 UTF-16 BE BOM (FE FF)
+    if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      return 'UTF-16BE';
+    }
+
+    // 3. 檢查 UTF-16 LE BOM (FF FE)
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      return 'UTF-16LE';
+    }
+
+    // 4. 嘗試 UTF-8 解碼 (最快路徑)
     try {
       utf8.decode(bytes);
       return 'UTF-8';
     } catch (_) {
-      // 3. 若解碼失敗，初步判定為 GBK (中文環境常用回退)
-      return 'GBK';
+      // 5. 若 UTF-8 失敗，嘗試 GBK 偵測
+      // GBK 第一字節範圍 0x81-0xFE, 第二字節 0x40-0x7E 或 0x80-0xFE
+      bool isGbk = false;
+      for (int i = 0; i < bytes.length - 1; i++) {
+        if (bytes[i] >= 0x81 && bytes[i] <= 0xFE) {
+          if ((bytes[i + 1] >= 0x40 && bytes[i + 1] <= 0x7E) ||
+              (bytes[i + 1] >= 0x80 && bytes[i + 1] <= 0xFE)) {
+            isGbk = true;
+            break;
+          }
+        }
+      }
+      return isGbk ? 'GBK' : 'UTF-8'; // 預設回退至 UTF-8 (含 malformed 處理)
     }
   }
 }

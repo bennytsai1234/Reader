@@ -71,45 +71,42 @@ class _ReaderPageState extends State<ReaderPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ReaderProvider(book: widget.book, chapterIndex: widget.chapterIndex, chapterPos: widget.chapterPos),
-      child: Scaffold(
-        key: _key,
-        body: Consumer<ReaderProvider>(builder: (context, p, _) {
-          _updateUI(p.showControls);
-          return Container(
-            color: p.currentTheme.backgroundColor,
-            child: Stack(children: [
-              // 1. 底層自定義背景圖片 (對標 Android bgImage)
-              if (p.currentTheme.backgroundImage != null && File(p.currentTheme.backgroundImage!).existsSync())
-                Positioned.fill(
-                  child: Image.file(
-                    File(p.currentTheme.backgroundImage!),
-                    fit: BoxFit.cover,
-                  ),
+    return Scaffold(
+      key: _key,
+      body: Consumer<ReaderProvider>(builder: (context, p, _) {
+        _updateUI(p.showControls);
+        return Container(
+          color: p.currentTheme.backgroundColor,
+          child: Stack(children: [
+            // 1. 底層自定義背景圖片 (對標 Android bgImage)
+            if (p.currentTheme.backgroundImage != null && File(p.currentTheme.backgroundImage!).existsSync())
+              Positioned.fill(
+                child: Image.file(
+                  File(p.currentTheme.backgroundImage!),
+                  fit: BoxFit.cover,
                 ),
-              
-              // 2. 背景模糊特效 (對標 Android backgroundBlur)
-              if (p.currentTheme.backgroundImage != null && p.backgroundBlur > 0)
-                Positioned.fill(
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: p.backgroundBlur, sigmaY: p.backgroundBlur),
-                    child: Container(color: Colors.black.withValues(alpha: 0.1)),
-                  ),
+              ),
+            
+            // 2. 背景模糊特效 (對標 Android backgroundBlur)
+            if (p.currentTheme.backgroundImage != null && p.backgroundBlur > 0)
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: p.backgroundBlur, sigmaY: p.backgroundBlur),
+                  child: Container(color: Colors.black.withValues(alpha: 0.1)),
                 ),
+              ),
 
-              ReaderViewBuilder(provider: p, pageController: _pageCtrl),
-              if (p.pages.isNotEmpty && !p.isLoading) _buildPermanentInfo(p),
-              Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.translucent, onTapUp: (d) => p.showControls ? p.toggleControls() : _handleTap(d.localPosition, MediaQuery.of(context).size, p))),
-              IgnorePointer(child: Container(color: Colors.black.withValues(alpha: (1.0 - p.brightness).clamp(0.0, 0.8)))),
-              ReaderTopMenu(provider: p, onMore: () => _showMore(context)),
-              ReaderBrightnessBar(provider: p),
-              ReaderBottomMenu(provider: p, onOpenDrawer: () => _key.currentState?.openDrawer(), onTts: p.toggleTts, onInterface: () => ReaderSettingsSheets.showInterfaceSettings(context, p), onSettings: () => ReaderSettingsSheets.showMoreSettings(context, p), onAutoPage: p.toggleAutoPage, onToggleDayNight: () => p.setTheme(p.themeIndex == 1 ? 0 : 1)),
-            ]),
-          );
-        }),
-        drawer: Consumer<ReaderProvider>(builder: (context, p, _) => ReaderChaptersDrawer(provider: p)),
-      ),
+            ReaderViewBuilder(provider: p, pageController: _pageCtrl),
+            if (p.pages.isNotEmpty && !p.isLoading) _buildPermanentInfo(p),
+            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.translucent, onTapUp: (d) => p.showControls ? p.toggleControls() : _handleTap(d.localPosition, MediaQuery.of(context).size, p))),
+            IgnorePointer(child: Container(color: Colors.black.withValues(alpha: (1.0 - p.brightness).clamp(0.0, 0.8)))),
+            ReaderTopMenu(provider: p, onMore: () => _showMore(context)),
+            ReaderBrightnessBar(provider: p),
+            ReaderBottomMenu(provider: p, onOpenDrawer: () => _key.currentState?.openDrawer(), onTts: p.toggleTts, onInterface: () => ReaderSettingsSheets.showInterfaceSettings(context, p), onSettings: () => ReaderSettingsSheets.showMoreSettings(context, p), onAutoPage: p.toggleAutoPage, onToggleDayNight: () => p.setTheme(p.themeIndex == 1 ? 0 : 1)),
+          ]),
+        );
+      }),
+      drawer: Consumer<ReaderProvider>(builder: (context, p, _) => ReaderChaptersDrawer(provider: p)),
     );
   }
 

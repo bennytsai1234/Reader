@@ -14,7 +14,7 @@ class ContentProcessor {
     required Book book,
     required BookChapter chapter,
     required String rawContent,
-    required List<ReplaceRule> rules,
+    required List<Map<String, dynamic>> rulesJson,
     int chineseConvertType = 0,
     bool reSegmentEnabled = true,
     bool removeSameTitle = true,
@@ -28,11 +28,12 @@ class ContentProcessor {
       'bookOrigin': book.origin,
       'chapterTitle': chapter.title,
       'rawContent': rawContent,
-      'rules': rules,
+      'rulesJson': rulesJson,
       'reSegmentEnabled': reSegmentEnabled,
       'removeSameTitle': removeSameTitle,
       'includeTitle': includeTitle,
     });
+
 
     String content = resultData['content'];
     final effectiveRules = resultData['effectiveRules'] as List<ReplaceRule>;
@@ -47,12 +48,14 @@ class ContentProcessor {
 
     // 3. 重新添加處理後的標題
     if (includeTitle) {
+      final rules = rulesJson.map((j) => ReplaceRule.fromJson(j)).toList();
       final processedTitle = await chapter.getDisplayTitle(
         replaceRules: rules,
         chineseConvertType: chineseConvertType,
       );
       content = processedTitle + '\n' + content;
     }
+
 
     return BookContent(
       content: content,
@@ -63,13 +66,16 @@ class ContentProcessor {
 
   /// 內部同步處理邏輯
   static Map<String, dynamic> _internalProcess(Map<String, dynamic> args) {
-    final String bookName = args['bookName'];
-    final String bookOrigin = args['bookOrigin'];
-    final String chapterTitle = args['chapterTitle'];
-    final String rawContent = args['rawContent'];
-    final List<ReplaceRule> rules = args['rules'];
-    final bool reSegmentEnabled = args['reSegmentEnabled'];
-    final bool removeSameTitle = args['removeSameTitle'];
+    final String bookName = args['bookName'] ?? '';
+    final String bookOrigin = args['bookOrigin'] ?? '';
+    final String chapterTitle = args['chapterTitle'] ?? '';
+    final String rawContent = args['rawContent'] ?? '';
+    final List<dynamic> rulesJson = args['rulesJson'] ?? [];
+    final List<ReplaceRule> rules = rulesJson.map((j) => ReplaceRule.fromJson(j)).toList();
+    final bool reSegmentEnabled = args['reSegmentEnabled'] ?? true;
+    final bool removeSameTitle = args['removeSameTitle'] ?? true;
+
+
 
     var mContent = rawContent;
     var sameTitleRemoved = false;

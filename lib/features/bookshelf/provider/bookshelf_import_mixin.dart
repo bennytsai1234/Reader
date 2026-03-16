@@ -7,6 +7,7 @@ import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/local_book/txt_parser.dart';
 import 'package:legado_reader/core/services/epub_service.dart';
 import 'package:legado_reader/core/services/resource_service.dart';
+import 'package:legado_reader/core/services/encoding_detect.dart';
 
 /// BookshelfProvider 的本地書籍匯入邏輯擴展
 mixin BookshelfImportMixin on BookshelfProviderBase {
@@ -22,33 +23,39 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
 
     try {
       if (ext == 'txt') {
-        final chaptersData = await compute((_) async {
+        final result = await compute((_) async {
           final parser = TxtParser(file);
           return await parser.splitChapters();
         }, null);
 
-        final book = Book(bookUrl: bookUrl, name: p.basenameWithoutExtension(path), author: '本地', origin: 'local', originName: '本地', isInBookshelf: true, type: 0);
+        final List<Map<String, dynamic>> chaptersData = result.chapters;
+        final String detectedCharset = result.charset;
+
+
+        final book = Book(
+          bookUrl: bookUrl, 
+          name: p.basenameWithoutExtension(path), 
+          author: '本地', 
+          origin: 'local', 
+          originName: '本地', 
+          isInBookshelf: true, 
+          type: 0,
+          charset: detectedCharset,
+        );
         await bookDao.upsert(book);
         
         final bookChapters = <BookChapter>[];
-        const batchSize = 10;
         for (var i = 0; i < chaptersData.length; i++) {
           bookChapters.add(BookChapter(
             url: '$bookUrl#$i', 
             title: chaptersData[i]['title'] ?? '第 $i 章', 
             bookUrl: bookUrl, 
             index: i,
-            content: chaptersData[i]['content'],
+            start: chaptersData[i]['start'],
+            end: chaptersData[i]['end'],
           ));
-          if (bookChapters.length >= batchSize) {
-            await chapterDao.insertChapters(List.from(bookChapters));
-            bookChapters.clear();
-            await Future.delayed(Duration.zero);
-          }
         }
-        if (bookChapters.isNotEmpty) {
-          await chapterDao.insertChapters(bookChapters);
-        }
+        await chapterDao.insertChapters(bookChapters);
       } else if (ext == 'epub') {
         final meta = await EpubService().parseMetadata(file);
 

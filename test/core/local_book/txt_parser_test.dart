@@ -25,7 +25,9 @@ void main() {
       final parser = TxtParser(utf8File);
       await parser.load();
       
-      final chapters = await parser.splitChapters();
+      final result = await parser.splitChapters();
+      final chapters = result.chapters;
+
       expect(chapters.length, 2);
       expect(chapters[0]['title'], contains('第一章'));
       expect(chapters[1]['title'], contains('第二章'));
@@ -35,7 +37,9 @@ void main() {
       final parser = TxtParser(noChapterFile);
       await parser.load();
       
-      final chapters = await parser.splitChapters();
+      final result = await parser.splitChapters();
+      final chapters = result.chapters;
+
       // 深度還原：若無章節則返回全文作為第一章
       expect(chapters.isNotEmpty, true);
       expect(chapters[0]['title'], contains('正文'));
@@ -49,7 +53,9 @@ void main() {
       final parser = TxtParser(tempFile);
       await parser.load();
       
-      final chapters = await parser.splitChapters();
+      final result = await parser.splitChapters();
+      final chapters = result.chapters;
+
       // 驗證是否觸發了物理切塊 (預期會有 2 個或更多切片)
       expect(chapters.length, greaterThan(1));
       expect(chapters[0]['title'], contains('(1)'));
