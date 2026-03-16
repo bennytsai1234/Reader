@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:legado_reader/core/di/injection.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
 import 'package:legado_reader/core/models/book_source.dart';
+import 'package:legado_reader/core/models/book_source_part.dart';
 import 'package:legado_reader/core/services/network_service.dart';
 import 'package:legado_reader/core/services/check_source_service.dart';
 
@@ -15,21 +16,21 @@ class SourceManagerProvider with ChangeNotifier {
   final BookSourceDao _dao = getIt<BookSourceDao>();
   final CheckSourceService checkService = CheckSourceService();
 
-  List<BookSource> _sources = [];
+  List<BookSourcePart> _sources = [];
   
   String filterGroup = '全部';
   int sortMode = 0; 
   bool sortDesc = false;
   bool groupByDomain = false;
 
-  List<BookSource> get sources {
-    var list = List<BookSource>.from(_sources);
+  List<BookSourcePart> get sources {
+    var list = List<BookSourcePart>.from(_sources);
     if (filterGroup == '已啟用') {
       list = list.where((s) => s.enabled).toList();
     } else if (filterGroup == '已禁用') {
       list = list.where((s) => !s.enabled).toList();
     } else if (filterGroup == '需登錄') {
-      list = list.where((s) => s.loginUrl != null && s.loginUrl!.isNotEmpty).toList();
+      list = list.where((s) => s.hasLoginUrl).toList();
     } else if (filterGroup == '無分組') {
       list = list.where((s) => s.bookSourceGroup == null || s.bookSourceGroup!.isEmpty).toList();
     } else if (filterGroup != '全部') {
@@ -68,6 +69,9 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// 獲取完整書源 (用於編輯或調試)
+  Future<BookSource?> getFullSource(String url) => _dao.getByUrl(url);
+
   void _updateGroups() {
     final groupSet = <String>{};
     for (var s in _sources) {
@@ -101,18 +105,19 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleEnabled(BookSource source) async {
-    final fullSource = await _dao.getByUrl(source.bookSourceUrl);
+  Future<void> toggleEnabled(dynamic source) async {
+    final String url = source.bookSourceUrl;
+    final fullSource = await _dao.getByUrl(url);
     if (fullSource != null) {
       fullSource.enabled = !fullSource.enabled;
       await _dao.upsert(fullSource);
-      source.enabled = fullSource.enabled;
-      notifyListeners();
+      await loadSources(); // 刷新局部列表
     }
   }
 
-  Future<void> deleteSource(BookSource source) async {
-    await _dao.deleteByUrl(source.bookSourceUrl);
+  Future<void> deleteSource(dynamic source) async {
+    final String url = source.bookSourceUrl;
+    await _dao.deleteByUrl(url);
     await loadSources();
   }
 

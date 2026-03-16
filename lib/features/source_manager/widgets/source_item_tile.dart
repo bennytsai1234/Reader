@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../source_manager_provider.dart';
-import 'package:legado_reader/core/models/book_source.dart';
+import 'package:legado_reader/core/models/book_source_part.dart';
 
 class SourceItemTile extends StatelessWidget {
-  final BookSource source;
+  final BookSourcePart source;
   final SourceManagerProvider provider;
   final bool isSelected;
   final VoidCallback onTap;
@@ -115,12 +115,12 @@ class SourceItemTile extends StatelessWidget {
 
   Widget _buildTags() {
     final List<String> tags = [];
-    if (source.searchUrl != null && source.searchUrl!.isNotEmpty) tags.add('搜');
-    if (source.exploreUrl != null && source.exploreUrl!.isNotEmpty) tags.add('發');
-    if (source.ruleBookInfo != null) tags.add('詳');
-    if (source.ruleToc != null) tags.add('目');
-    if (source.ruleContent != null) tags.add('正');
-    if (source.loginUrl != null && source.loginUrl!.isNotEmpty) tags.add('登');
+    if (source.hasSearchUrl) tags.add('搜');
+    if (source.hasExploreUrl) tags.add('發');
+    if (source.hasBookInfoRule) tags.add('詳');
+    if (source.hasTocRule) tags.add('目');
+    if (source.hasContentRule) tags.add('正');
+    if (source.hasLoginUrl) tags.add('登');
 
     return Wrap(
       spacing: 4,

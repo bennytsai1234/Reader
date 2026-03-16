@@ -8,7 +8,7 @@ import 'source_editor_page.dart';
 import 'qr_scan_page.dart';
 import 'explore_sources_page.dart';
 import 'source_group_manage_page.dart';
-import 'package:legado_reader/core/models/book_source.dart';
+import 'package:legado_reader/core/models/book_source_part.dart';
 import 'widgets/source_item_tile.dart';
 import 'widgets/source_filter_bar.dart';
 import 'widgets/source_batch_toolbar.dart';
@@ -94,7 +94,7 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
   }
 
   Widget _buildGroupedList(SourceManagerProvider p) {
-    final Map<String, List<BookSource>> groups = {};
+    final Map<String, List<BookSourcePart>> groups = {};
     for (var s in p.sources) {
       final domain = _getDomain(s.bookSourceUrl);
       groups.putIfAbsent(domain, () => []).add(s);
@@ -122,19 +122,22 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
     } catch (_) { return '其他'; }
   }
 
-  Widget _buildItem(SourceManagerProvider p, BookSource s, {int? index}) {
-    final nav = Navigator.of(context);
+  Widget _buildItem(SourceManagerProvider p, BookSourcePart s, {int? index}) {
     return SourceItemTile(
       key: ValueKey(s.bookSourceUrl),
       source: s,
       provider: p,
       index: index,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl), 
-      onTap: () {
+      onTap: () async {
+        final nav = Navigator.of(context);
         if (p.isBatchMode) {
           p.toggleSelect(s.bookSourceUrl);
         } else {
-          nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: s)));
+          final full = await p.getFullSource(s.bookSourceUrl);
+          if (full != null && mounted) {
+            nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)));
+          }
         }
       }, 
       onLongPress: () {
@@ -146,11 +149,19 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
     );
   }
 
-  void _showSourceMenu(BuildContext context, SourceManagerProvider p, BookSource s) {
+  void _showSourceMenu(BuildContext context, SourceManagerProvider p, BookSourcePart s) {
     final nav = Navigator.of(context);
     showModalBottomSheet(context: context, builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      ListTile(leading: const Icon(Icons.bug_report), title: const Text('調試書源'), onTap: () { Navigator.pop(ctx); SourceManagerDialogs.showDebugInput(context, s); }),
-      ListTile(leading: const Icon(Icons.edit), title: const Text('編輯書源'), onTap: () { Navigator.pop(ctx); nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: s))); }),
+      ListTile(leading: const Icon(Icons.bug_report), title: const Text('調試書源'), onTap: () async { 
+        Navigator.pop(ctx); 
+        final full = await p.getFullSource(s.bookSourceUrl);
+        if (full != null && context.mounted) SourceManagerDialogs.showDebugInput(context, full); 
+      }),
+      ListTile(leading: const Icon(Icons.edit), title: const Text('編輯書源'), onTap: () async { 
+        Navigator.pop(ctx); 
+        final full = await p.getFullSource(s.bookSourceUrl);
+        if (full != null && mounted) nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: full))); 
+      }),
       ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text('刪除書源', style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(ctx); p.deleteSource(s); }),
     ])));
   }
