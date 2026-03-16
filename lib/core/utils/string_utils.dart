@@ -113,5 +113,28 @@ class StringUtils {
   static String repeat(String str, int n) {
     return List.filled(n, str).join();
   }
+
+  /// 格式化字數 (對標 wordCountFormat)
+  static String wordCountFormat(dynamic words) {
+    if (words == null) return '';
+    if (words is String) {
+      if (int.tryParse(words) != null) {
+        return _formatIntWordCount(int.parse(words));
+      }
+      return words;
+    }
+    if (words is num) {
+      return _formatIntWordCount(words.toInt());
+    }
+    return words.toString();
+  }
+
+  static String _formatIntWordCount(int words) {
+    if (words <= 0) return '';
+    if (words > 10000) {
+      return '${(words / 10000.0).toStringAsFixed(1)}萬字';
+    }
+    return '$words字';
+  }
 }
 

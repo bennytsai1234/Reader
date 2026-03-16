@@ -133,76 +133,76 @@ class SettingsProvider extends SettingsProviderBase {
     notifyListeners();
   }
 
-  void setAutoRefresh(bool v) { autoRefresh = v; save('auto_refresh', v); update(); }
-  void setDefaultToRead(bool v) { defaultToRead = v; save('default_to_read', v); update(); }
-  void setShowDiscovery(bool v) { showDiscovery = v; save('show_discovery', v); update(); }
-  void setShowRss(bool v) { showRss = v; save('show_rss', v); update(); }
-  void setThreadCount(int v) { threadCount = v; save('thread_count', v); update(); }
-  void setUserAgent(String v) { userAgent = v; save('user_agent', v); update(); }
-  void setAntiAlias(bool v) { antiAlias = v; save('anti_alias', v); update(); }
-  void setReplaceEnableDefault(bool v) { replaceEnableDefault = v; save('replace_enable_default', v); update(); }
-  void setEnableCronet(bool v) { enableCronet = v; save('enable_cronet', v); update(); }
-  void setWebServiceWakeLock(bool v) { webServiceWakeLock = v; save('web_service_wake_lock', v); update(); }
+  void setAutoRefresh(bool v) { autoRefresh = v; save(PreferKey.autoRefresh, v); update(); }
+  void setDefaultToRead(bool v) { defaultToRead = v; save(PreferKey.defaultToRead, v); update(); }
+  void setShowDiscovery(bool v) { showDiscovery = v; save(PreferKey.showDiscovery, v); update(); }
+  void setShowRss(bool v) { showRss = v; save(PreferKey.showRss, v); update(); }
+  void setThreadCount(int v) { threadCount = v; save(PreferKey.threadCount, v); update(); }
+  void setUserAgent(String v) { userAgent = v; save(PreferKey.userAgent, v); update(); }
+  void setAntiAlias(bool v) { antiAlias = v; save(PreferKey.antiAlias, v); update(); }
+  void setReplaceEnableDefault(bool v) { replaceEnableDefault = v; save(PreferKey.replaceEnableDefault, v); update(); }
+  void setEnableCronet(bool v) { enableCronet = v; save(PreferKey.cronet, v); update(); }
+  void setWebServiceWakeLock(bool v) { webServiceWakeLock = v; save(PreferKey.webServiceWakeLock, v); update(); }
   void setBookStorageDir(String v) { bookStorageDir = v; save('book_storage_dir', v); update(); }
-  void setIgnoreAudioFocus(bool v) { ignoreAudioFocus = v; save('ignore_audio_focus', v); update(); }
-  void setAutoClearExpired(bool v) { autoClearExpired = v; save('auto_clear_expired', v); update(); }
+  void setIgnoreAudioFocus(bool v) { ignoreAudioFocus = v; save(PreferKey.ignoreAudioFocus, v); update(); }
+  void setAutoClearExpired(bool v) { autoClearExpired = v; save(PreferKey.autoClearExpired, v); update(); }
   void setMediaButtonOnExit(bool v) { mediaButtonOnExit = v; save('media_button_on_exit', v); update(); }
-  void setReadAloudByMediaButton(bool v) { readAloudByMediaButton = v; save('read_aloud_by_media_button', v); update(); }
-  void setShowAddToShelfAlert(bool v) { showAddToShelfAlert = v; save('show_add_to_shelf_alert', v); update(); }
-  void setShowMangaUi(bool v) { showMangaUi = v; save('show_manga_ui', v); update(); }
+  void setReadAloudByMediaButton(bool v) { readAloudByMediaButton = v; save(PreferKey.readAloudByMediaButton, v); update(); }
+  void setShowAddToShelfAlert(bool v) { showAddToShelfAlert = v; save(PreferKey.showAddToShelfAlert, v); update(); }
+  void setShowMangaUi(bool v) { showMangaUi = v; save(PreferKey.showMangaUi, v); update(); }
 
   // --- 主題與備份 Setter 補全 ---
-  void setTransparentStatusBar(bool v) { transparentStatusBar = v; save('transparent_status_bar', v); update(); }
-  void setImmNavigationBar(bool v) { immNavigationBar = v; save('imm_navigation_bar', v); update(); }
-  void setDayAccentColor(Color c) { dayAccentColor = c; save('day_accent_color', c.toARGB32()); update(); }
-  void setDayBackgroundColor(Color c) { dayBackgroundColor = c; save('day_background_color', c.toARGB32()); update(); }
-  void setDayBottomBackgroundColor(Color c) { dayBottomBackgroundColor = c; save('day_bottom_background_color', c.toARGB32()); update(); }
-  void setNightAccentColor(Color c) { nightAccentColor = c; save('night_accent_color', c.toARGB32()); update(); }
-  void setNightBackgroundColor(Color c) { nightBackgroundColor = c; save('night_background_color', c.toARGB32()); update(); }
-  void setNightBottomBackgroundColor(Color c) { nightBottomBackgroundColor = c; save('night_bottom_background_color', c.toARGB32()); update(); }
+  void setTransparentStatusBar(bool v) { transparentStatusBar = v; save(PreferKey.transparentStatusBar, v); update(); }
+  void setImmNavigationBar(bool v) { immNavigationBar = v; save(PreferKey.immNavigationBar, v); update(); }
+  void setDayAccentColor(Color c) { dayAccentColor = c; save(PreferKey.cAccent, c.toARGB32()); update(); }
+  void setDayBackgroundColor(Color c) { dayBackgroundColor = c; save(PreferKey.cBackground, c.toARGB32()); update(); }
+  void setDayBottomBackgroundColor(Color c) { dayBottomBackgroundColor = c; save(PreferKey.cBBackground, c.toARGB32()); update(); }
+  void setNightAccentColor(Color c) { nightAccentColor = c; save(PreferKey.cNAccent, c.toARGB32()); update(); }
+  void setNightBackgroundColor(Color c) { nightBackgroundColor = c; save(PreferKey.cNBackground, c.toARGB32()); update(); }
+  void setNightBottomBackgroundColor(Color c) { nightBottomBackgroundColor = c; save(PreferKey.cNBBackground, c.toARGB32()); update(); }
 
-  void setSyncBookProgress(bool v) { syncBookProgress = v; save('sync_book_progress', v); update(); }
-  void setSyncBookProgressPlus(bool v) { syncBookProgressPlus = v; save('sync_book_progress_plus', v); update(); }
-  void setOnlyLatestBackup(bool v) { onlyLatestBackup = v; save('only_latest_backup', v); update(); }
-  void setAutoCheckNewBackup(bool v) { autoCheckNewBackup = v; save('auto_check_new_backup', v); update(); }
+  void setSyncBookProgress(bool v) { syncBookProgress = v; save(PreferKey.syncBookProgress, v); update(); }
+  void setSyncBookProgressPlus(bool v) { syncBookProgressPlus = v; save(PreferKey.syncBookProgressPlus, v); update(); }
+  void setOnlyLatestBackup(bool v) { onlyLatestBackup = v; save(PreferKey.onlyLatestBackup, v); update(); }
+  void setAutoCheckNewBackup(bool v) { autoCheckNewBackup = v; save(PreferKey.autoCheckNewBackup, v); update(); }
   void setAutoBackup(bool v) { autoBackup = v; save('auto_backup', v); update(); }
 
-  void setReadBodyToLh(bool v) { readBodyToLh = v; save('read_body_to_lh', v); update(); }
-  void setPaddingDisplayCutouts(bool v) { paddingDisplayCutouts = v; save('padding_display_cutouts', v); update(); }
-  void setUseZhLayout(bool v) { useZhLayout = v; save('use_zh_layout', v); update(); }
-  void setTextFullJustify(bool v) { textFullJustify = v; save('text_full_justify', v); update(); }
-  void setTextBottomJustify(bool v) { textBottomJustify = v; save('text_bottom_justify', v); update(); }
-  void setMouseWheelPage(bool v) { mouseWheelPage = v; save('mouse_wheel_page', v); update(); }
-  void setVolumeKeyPageOnPlay(bool v) { volumeKeyPageOnPlay = v; save('volume_key_page_on_play', v); update(); }
-  void setKeyPageOnLongPress(bool v) { keyPageOnLongPress = v; save('key_page_on_long_press', v); update(); }
-  void setSelectText(bool v) { selectText = v; save('select_text', v); update(); }
-  void setShowBrightnessView(bool v) { showBrightnessView = v; save('show_brightness_view', v); update(); }
-  void setNoAnimScrollPage(bool v) { noAnimScrollPage = v; save('no_anim_scroll_page', v); update(); }
-  void setPreviewImageByClick(bool v) { previewImageByClick = v; save('preview_image_by_click', v); update(); }
+  void setReadBodyToLh(bool v) { readBodyToLh = v; save(PreferKey.readBodyToLh, v); update(); }
+  void setPaddingDisplayCutouts(bool v) { paddingDisplayCutouts = v; save(PreferKey.paddingDisplayCutouts, v); update(); }
+  void setUseZhLayout(bool v) { useZhLayout = v; save(PreferKey.useZhLayout, v); update(); }
+  void setTextFullJustify(bool v) { textFullJustify = v; save(PreferKey.textFullJustify, v); update(); }
+  void setTextBottomJustify(bool v) { textBottomJustify = v; save(PreferKey.textBottomJustify, v); update(); }
+  void setMouseWheelPage(bool v) { mouseWheelPage = v; save(PreferKey.mouseWheelPage, v); update(); }
+  void setVolumeKeyPageOnPlay(bool v) { volumeKeyPageOnPlay = v; save(PreferKey.volumeKeyPageOnPlay, v); update(); }
+  void setKeyPageOnLongPress(bool v) { keyPageOnLongPress = v; save(PreferKey.keyPageOnLongPress, v); update(); }
+  void setSelectText(bool v) { selectText = v; save(PreferKey.textSelectAble, v); update(); }
+  void setShowBrightnessView(bool v) { showBrightnessView = v; save(PreferKey.showBrightnessView, v); update(); }
+  void setNoAnimScrollPage(bool v) { noAnimScrollPage = v; save(PreferKey.noAnimScrollPage, v); update(); }
+  void setPreviewImageByClick(bool v) { previewImageByClick = v; save(PreferKey.previewImageByClick, v); update(); }
   void setDisableReturnKey(bool v) { disableReturnKey = v; save('disable_return_key', v); update(); }
-  void setExpandTextMenu(bool v) { expandTextMenu = v; save('expand_text_menu', v); update(); }
-  void setShowReadTitleAddition(bool v) { showReadTitleAddition = v; save('show_read_title_addition', v); update(); }
-  void setReadBarStyleFollowPage(bool v) { readBarStyleFollowPage = v; save('read_bar_style_follow_page', v); update(); }
+  void setExpandTextMenu(bool v) { expandTextMenu = v; save(PreferKey.expandTextMenu, v); update(); }
+  void setShowReadTitleAddition(bool v) { showReadTitleAddition = v; save(PreferKey.showReadTitleAddition, v); update(); }
+  void setReadBarStyleFollowPage(bool v) { readBarStyleFollowPage = v; save(PreferKey.readBarStyleFollowPage, v); update(); }
 
-  void setWelcomeShowIcon(bool v) { welcomeShowIcon = v; save('welcome_show_icon', v); update(); }
-  void setWelcomeImageDark(String v) { welcomeImageDark = v; save('welcome_image_dark', v); update(); }
-  void setWelcomeShowTextDark(bool v) { /* Placeholder */ }
-  void setWelcomeShowIconDark(bool v) { /* Placeholder */ }
-  bool get welcomeShowTextDark => true;
-  bool get welcomeShowIconDark => true;
+  void setWelcomeShowIcon(bool v) { welcomeShowIcon = v; save(PreferKey.welcomeShowIcon, v); update(); }
+  void setWelcomeImageDark(String v) { welcomeImageDark = v; save(PreferKey.welcomeImageDark, v); update(); }
+  void setWelcomeShowTextDark(bool v) { welcomeShowTextDark = v; save(PreferKey.welcomeShowTextDark, v); update(); }
+  void setWelcomeShowIconDark(bool v) { welcomeShowIconDark = v; save(PreferKey.welcomeShowIconDark, v); update(); }
+  bool welcomeShowTextDark = true;
+  bool welcomeShowIconDark = true;
 
-  void setLastVersionCode(int v) { lastVersionCode = v; save('last_version_code', v); update(); }
+  void setLastVersionCode(int v) { lastVersionCode = v; save(PreferKey.lastVersionCode, v); update(); }
 
   // --- 朗讀與 WebDAV Setter 補全 ---
   void setIgnoreAudioFocusAloud(bool v) { ignoreAudioFocusAloud = v; save('ignore_audio_focus_aloud', v); update(); }
-  void setPauseReadAloudWhilePhoneCalls(bool v) { pauseReadAloudWhilePhoneCalls = v; save('pause_read_aloud_while_calls', v); update(); }
-  void setReadAloudWakeLock(bool v) { readAloudWakeLock = v; save('read_aloud_wake_lock', v); update(); }
+  void setPauseReadAloudWhilePhoneCalls(bool v) { pauseReadAloudWhilePhoneCalls = v; save(PreferKey.pauseReadAloudWhilePhoneCalls, v); update(); }
+  void setReadAloudWakeLock(bool v) { readAloudWakeLock = v; save(PreferKey.readAloudWakeLock, v); update(); }
   void setSystemMediaControlCompatibilityChange(bool v) { systemMediaControlCompatibilityChange = v; save('system_media_control_compat', v); update(); }
   void setMediaButtonPerNext(bool v) { mediaButtonPerNext = v; save('media_button_per_next', v); update(); }
-  void setReadAloudByPage(bool v) { readAloudByPage = v; save('read_aloud_by_page', v); update(); }
-  void setStreamReadAloudAudio(bool v) { streamReadAloudAudio = v; save('stream_read_aloud_audio', v); update(); }
-  void setWebdavSubDir(String v) { webdavSubDir = v; save('webdav_sub_dir', v); update(); }
-  void setDeviceName(String v) { deviceName = v; save('device_name', v); update(); }
+  void setReadAloudByPage(bool v) { readAloudByPage = v; save(PreferKey.readAloudByPage, v); update(); }
+  void setStreamReadAloudAudio(bool v) { streamReadAloudAudio = v; save(PreferKey.streamReadAloudAudio, v); update(); }
+  void setWebdavSubDir(String v) { webdavSubDir = v; save(PreferKey.webDavDir, v); update(); }
+  void setDeviceName(String v) { deviceName = v; save(PreferKey.webDavDeviceName, v); update(); }
   void setLastBackup(int v) { lastBackup = v; save('last_backup', v); update(); }
 
   Future<String?> checkWebDavBackupSync() async {
@@ -219,40 +219,106 @@ class SettingsProvider extends SettingsProviderBase {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // --- 核心設定 ---
     final mode = prefs.getString(PreferKey.themeMode) ?? 'system';
     themeMode = parseThemeMode(mode);
 
     final lang = prefs.getString(PreferKey.language) ?? 'system';
     locale = parseLocale(lang);
 
-    welcomeImage = prefs.getString(PreferKey.welcomeImage) ?? '';
-    welcomeShowText = prefs.getBool(PreferKey.welcomeShowText) ?? true;
-    launcherIcon = prefs.getString(PreferKey.launcherIcon) ?? '';
-    dayBackgroundImage = prefs.getString(PreferKey.bgImage) ?? '';
-    nightBackgroundImage = prefs.getString(PreferKey.bgImageN) ?? '';
+    userAgent = prefs.getString(PreferKey.userAgent) ?? '';
+    threadCount = prefs.getInt(PreferKey.threadCount) ?? 4;
+    recordLog = prefs.getBool(PreferKey.recordLog) ?? false;
+    appCrash = prefs.getBool(PreferKey.appCrash) ?? false;
+    lastVersionCode = prefs.getInt(PreferKey.lastVersionCode) ?? 0;
+    privacyAgreed = prefs.getBool('privacy_agreed') ?? false;
 
+    // --- 歡迎與介面 ---
+    welcomeImage = prefs.getString(PreferKey.welcomeImage) ?? '';
+    welcomeImageDark = prefs.getString(PreferKey.welcomeImageDark) ?? '';
+    welcomeShowText = prefs.getBool(PreferKey.welcomeShowText) ?? true;
+    welcomeShowTextDark = prefs.getBool(PreferKey.welcomeShowTextDark) ?? true;
+    welcomeShowIcon = prefs.getBool(PreferKey.welcomeShowIcon) ?? true;
+    welcomeShowIconDark = prefs.getBool(PreferKey.welcomeShowIconDark) ?? true;
+    launcherIcon = prefs.getString(PreferKey.launcherIcon) ?? '';
+    showDiscovery = prefs.getBool(PreferKey.showDiscovery) ?? true;
+    showRss = prefs.getBool(PreferKey.showRss) ?? true;
+    showAddToShelfAlert = prefs.getBool(PreferKey.showAddToShelfAlert) ?? true;
+
+    // --- WebDAV ---
     webdavUrl = prefs.getString(PreferKey.webDavUrl) ?? '';
     webdavUser = prefs.getString(PreferKey.webDavAccount) ?? '';
     webdavPassword = prefs.getString(PreferKey.webDavPassword) ?? '';
+    webdavSubDir = prefs.getString(PreferKey.webDavDir) ?? '';
+    deviceName = prefs.getString(PreferKey.webDavDeviceName) ?? '';
     webdavEnabled = webdavUrl.isNotEmpty && webdavUser.isNotEmpty;
-
     lastBackup = prefs.getInt('last_backup') ?? 0;
-    coverSearchPriority = prefs.getInt('cover_search_priority') ?? 0;
-    coverTimeout = prefs.getInt('cover_timeout') ?? 5000;
-    globalCoverRule = prefs.getString('global_cover_rule') ?? '';
 
-    hideStatusBar = prefs.getBool('hide_status_bar') ?? false;
-    hideNavigationBar = prefs.getBool('hide_navigation_bar') ?? false;
-    volumeKeyPage = prefs.getBool('volume_key_page') ?? true;
-    autoChangeSource = prefs.getBool('auto_change_source') ?? true;
-    optimizeRender = prefs.getBool('optimize_render') ?? false;
+    // --- 主題與顯示 ---
+    transparentStatusBar = prefs.getBool(PreferKey.transparentStatusBar) ?? true;
+    immNavigationBar = prefs.getBool(PreferKey.immNavigationBar) ?? true;
+    dayBackgroundImage = prefs.getString(PreferKey.bgImage) ?? '';
+    nightBackgroundImage = prefs.getString(PreferKey.bgImageN) ?? '';
+    
+    dayPrimaryColor = Color(prefs.getInt(PreferKey.cPrimary) ?? Colors.brown.toARGB32());
+    dayAccentColor = Color(prefs.getInt(PreferKey.cAccent) ?? Colors.red.toARGB32());
+    dayBackgroundColor = Color(prefs.getInt(PreferKey.cBackground) ?? Colors.grey.shade100.toARGB32());
+    dayBottomBackgroundColor = Color(prefs.getInt(PreferKey.cBBackground) ?? Colors.grey.shade200.toARGB32());
+    nightPrimaryColor = Color(prefs.getInt(PreferKey.cNPrimary) ?? Colors.blueGrey.shade600.toARGB32());
+    nightAccentColor = Color(prefs.getInt(PreferKey.cNAccent) ?? Colors.deepOrange.shade800.toARGB32());
+    nightBackgroundColor = Color(prefs.getInt(PreferKey.cNBackground) ?? Colors.grey.shade900.toARGB32());
+    nightBottomBackgroundColor = Color(prefs.getInt(PreferKey.cNBBackground) ?? Colors.grey.shade800.toARGB32());
 
+    // --- 閱讀設定 ---
+    hideStatusBar = prefs.getBool(PreferKey.hideStatusBar) ?? false;
+    hideNavigationBar = prefs.getBool(PreferKey.hideNavigationBar) ?? false;
+    readBodyToLh = prefs.getBool(PreferKey.readBodyToLh) ?? true;
+    paddingDisplayCutouts = prefs.getBool(PreferKey.paddingDisplayCutouts) ?? false;
+    useZhLayout = prefs.getBool(PreferKey.useZhLayout) ?? false;
+    textFullJustify = prefs.getBool(PreferKey.textFullJustify) ?? true;
+    textBottomJustify = prefs.getBool(PreferKey.textBottomJustify) ?? true;
+    mouseWheelPage = prefs.getBool(PreferKey.mouseWheelPage) ?? true;
+    volumeKeyPage = prefs.getBool(PreferKey.volumeKeyPage) ?? true;
+    volumeKeyPageOnPlay = prefs.getBool(PreferKey.volumeKeyPageOnPlay) ?? false;
+    keyPageOnLongPress = prefs.getBool(PreferKey.keyPageOnLongPress) ?? false;
+    autoChangeSource = prefs.getBool(PreferKey.autoChangeSource) ?? true;
+    selectText = prefs.getBool(PreferKey.textSelectAble) ?? true;
+    showBrightnessView = prefs.getBool(PreferKey.showBrightnessView) ?? true;
+    noAnimScrollPage = prefs.getBool(PreferKey.noAnimScrollPage) ?? false;
+    previewImageByClick = prefs.getBool(PreferKey.previewImageByClick) ?? false;
+    optimizeRender = prefs.getBool(PreferKey.optimizeRender) ?? false;
+    expandTextMenu = prefs.getBool(PreferKey.expandTextMenu) ?? false;
+    showReadTitleAddition = prefs.getBool(PreferKey.showReadTitleAddition) ?? true;
+    readBarStyleFollowPage = prefs.getBool(PreferKey.readBarStyleFollowPage) ?? false;
+    autoRefresh = prefs.getBool(PreferKey.autoRefresh) ?? true;
+    defaultToRead = prefs.getBool(PreferKey.defaultToRead) ?? false;
+    replaceEnableDefault = prefs.getBool(PreferKey.replaceEnableDefault) ?? true;
+    autoClearExpired = prefs.getBool(PreferKey.autoClearExpired) ?? true;
+    showMangaUi = prefs.getBool(PreferKey.showMangaUi) ?? true;
+    antiAlias = prefs.getBool(PreferKey.antiAlias) ?? true;
+
+    // --- 備份與同步 ---
+    syncBookProgress = prefs.getBool(PreferKey.syncBookProgress) ?? true;
+    syncBookProgressPlus = prefs.getBool(PreferKey.syncBookProgressPlus) ?? false;
+    onlyLatestBackup = prefs.getBool(PreferKey.onlyLatestBackup) ?? true;
+    autoCheckNewBackup = prefs.getBool(PreferKey.autoCheckNewBackup) ?? true;
+    autoBackup = prefs.getBool('auto_backup') ?? false;
+
+    // --- 朗讀設定 ---
+    ignoreAudioFocus = prefs.getBool(PreferKey.ignoreAudioFocus) ?? false;
+    ignoreAudioFocusAloud = prefs.getBool('ignore_audio_focus_aloud') ?? false;
+    pauseReadAloudWhilePhoneCalls = prefs.getBool(PreferKey.pauseReadAloudWhilePhoneCalls) ?? false;
+    readAloudWakeLock = prefs.getBool(PreferKey.readAloudWakeLock) ?? false;
+    readAloudByPage = prefs.getBool(PreferKey.readAloudByPage) ?? false;
+    streamReadAloudAudio = prefs.getBool(PreferKey.streamReadAloudAudio) ?? false;
+    readAloudByMediaButton = prefs.getBool(PreferKey.readAloudByMediaButton) ?? false;
     speechRate = prefs.getDouble(PreferKey.ttsSpeechRate) ?? 0.5;
     speechPitch = prefs.getDouble('speech_pitch') ?? 1.0;
     speechVolume = prefs.getDouble('speech_volume') ?? 1.0;
 
-    privacyAgreed = prefs.getBool('privacy_agreed') ?? false;
-    recordLog = prefs.getBool('record_log') ?? false;
+    // --- 服務 ---
+    webServiceWakeLock = prefs.getBool(PreferKey.webServiceWakeLock) ?? true;
 
     notifyListeners();
   }

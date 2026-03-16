@@ -1,10 +1,5 @@
-import 'package:isar/isar.dart';
-
-part 'source_subscription.g.dart';
-
-@collection
 class SourceSubscription {
-  Id id = Isar.autoIncrement;
+  int? id;
   
   String name = '';
   String url = '';

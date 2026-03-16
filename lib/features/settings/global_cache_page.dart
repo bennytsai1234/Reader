@@ -30,7 +30,7 @@ class _GlobalCachePageState extends State<GlobalCachePage> {
   Future<void> _loadStats() async {
     setState(() => _isLoading = true);
     
-    // 1. 統計正文快取 (目前估算，Isar 資料難以精確算磁碟)
+    // 1. 統計正文快取 (目前估算，資料難以精確算磁碟)
     // 這裡對位 Android：主要清理資料庫紀錄與 Text 緩存檔案
     _chapterCacheSize = '計算中...';
 

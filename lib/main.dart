@@ -38,7 +38,7 @@ final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<Scaffol
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. 初始化依賴注入與全域服務 (包含 CrashHandler, Isar, Network, TTS)
+  // 1. 初始化依賴注入與全域服務 (包含 CrashHandler, Network, TTS)
   await configureDependencies();
   
   // 2. 初始化背景任務

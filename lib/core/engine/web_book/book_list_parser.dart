@@ -1,6 +1,11 @@
+import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/search_book.dart';
 import 'package:legado_reader/core/engine/analyze_rule.dart';
+import 'package:legado_reader/core/engine/book/book_help.dart';
+import 'package:legado_reader/core/engine/web_book/book_info_parser.dart';
+import 'package:legado_reader/core/utils/string_utils.dart';
+import 'package:legado_reader/core/utils/html_formatter.dart';
 
 class BookListParser {
   static List<SearchBook> parse({
@@ -9,11 +14,14 @@ class BookListParser {
     required String baseUrl,
     required bool isSearch,
   }) {
-    // 1. 偵測 bookUrlPattern (原 Android 邏輯)
+    // 1. 偵測 bookUrlPattern (對標 Android BookList.analyzeBookList)
     if (isSearch && source.bookUrlPattern?.isNotEmpty == true) {
       try {
         if (RegExp(source.bookUrlPattern!).hasMatch(baseUrl)) {
-          // 這裡未來應實作直接按詳情頁解析並封裝
+          final searchBook = _getInfoItem(source: source, body: body, baseUrl: baseUrl);
+          if (searchBook != null) {
+            return [searchBook];
+          }
         }
       } catch (_) {}
     }
@@ -28,42 +36,78 @@ class BookListParser {
       isReverse = true;
       ruleList = ruleList.substring(1);
     }
+    if (ruleList.startsWith('+')) {
+      ruleList = ruleList.substring(1);
+    }
 
     final elements = rule.getElements(ruleList);
+    
+    // 2. 如果列表為空且未配置 bookUrlPattern，嘗試按詳情頁解析 (對標 Android 邏輯)
+    if (elements.isEmpty && (source.bookUrlPattern == null || source.bookUrlPattern!.isEmpty)) {
+      final searchBook = _getInfoItem(source: source, body: body, baseUrl: baseUrl);
+      if (searchBook != null) {
+        return [searchBook];
+      }
+      return [];
+    }
+
     final books = <SearchBook>[];
 
     for (final element in elements) {
-      final itemRule = AnalyzeRule(source: source).setContent(element, baseUrl: baseUrl);
-      final name = _format(itemRule.getString(listRule.name ?? ''));
-      if (name.isEmpty) continue;
-
-      books.add(SearchBook(
-        bookUrl: itemRule.getString(listRule.bookUrl ?? '', isUrl: true),
-        name: name,
-        author: _format(itemRule.getString(listRule.author ?? '')),
-        kind: itemRule.getStringList(listRule.kind ?? '').join(','),
-        coverUrl: itemRule.getString(listRule.coverUrl ?? '', isUrl: true),
-        intro: itemRule.getString(listRule.intro ?? ''),
-        latestChapterTitle: itemRule.getString(listRule.lastChapter ?? ''),
-        wordCount: _formatWordCount(itemRule.getString(listRule.wordCount ?? '')),
+      // 建立空的 SearchBook 作為 ruleData，以便儲存解析過程中產生的變數 (@put)
+      final searchBook = SearchBook(
+        bookUrl: '',
+        name: '',
         origin: source.bookSourceUrl,
         originName: source.bookSourceName,
-      ));
+        originOrder: source.customOrder,
+        type: source.bookSourceType,
+      );
+
+      final itemRule = AnalyzeRule(ruleData: searchBook, source: source)
+          .setContent(element, baseUrl: baseUrl);
+      
+      final name = BookHelp.formatBookName(itemRule.getString(listRule.name ?? ''));
+      if (name.isEmpty) continue;
+
+      searchBook.name = name;
+      searchBook.bookUrl = itemRule.getString(listRule.bookUrl ?? '', isUrl: true);
+      searchBook.author = BookHelp.formatBookAuthor(itemRule.getString(listRule.author ?? ''));
+      searchBook.kind = itemRule.getStringList(listRule.kind ?? '').join(',');
+      searchBook.coverUrl = itemRule.getString(listRule.coverUrl ?? '', isUrl: true);
+      searchBook.intro = HtmlFormatter.format(itemRule.getString(listRule.intro ?? ''));
+      searchBook.latestChapterTitle = itemRule.getString(listRule.lastChapter ?? '');
+      searchBook.wordCount = StringUtils.wordCountFormat(itemRule.getString(listRule.wordCount ?? ''));
+      
+      books.add(searchBook);
     }
 
     return isReverse ? books.reversed.toList() : books;
   }
 
-  static String _format(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
+  static SearchBook? _getInfoItem({
+    required BookSource source,
+    required String body,
+    required String baseUrl,
+  }) {
+    var book = Book(
+      bookUrl: baseUrl,
+      origin: source.bookSourceUrl,
+      originName: source.bookSourceName,
+      originOrder: source.customOrder,
+      type: source.bookSourceType,
+    );
 
-  static String _formatWordCount(String count) {
-    if (count.isEmpty) return '';
-    final numStr = count.replaceAll(RegExp(r'[^0-9.]'), '');
-    final val = double.tryParse(numStr);
-    if (val == null) return count;
-    if (count.contains('萬')) return '${val.toStringAsFixed(1)}萬字';
-    if (val > 10000) return '${(val / 10000).toStringAsFixed(1)}萬字';
-    return '${val.toInt()}字';
+    book = BookInfoParser.parse(
+      source: source,
+      book: book,
+      body: body,
+      baseUrl: baseUrl,
+    );
+
+    if (book.name.isNotEmpty) {
+      return book.toSearchBook();
+    }
+    return null;
   }
 }
-

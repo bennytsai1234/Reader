@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'book.dart';
+import 'package:legado_reader/core/models/rule_data_interface.dart';
+import 'package:legado_reader/core/engine/book/book_help.dart';
 
 /// SearchBook - 搜尋結果模型
 /// (原 Android data/entities/SearchBook.kt)
-class SearchBook {
+class SearchBook implements RuleDataInterface {
   String bookUrl; // 書籍 URL
   String name; // 書名
   String? author; // 作者
@@ -27,8 +30,34 @@ class SearchBook {
   }
 
   // 核心業務方法
-  String getRealAuthor() => (author ?? '').replaceAll(RegExp(r'\(.*?\)|\[.*?\]|（.*?）|【.*?】'), '').trim();
+  String getRealAuthor() => BookHelp.formatBookAuthor(author ?? '');
   String get latestChapter => latestChapterTitle ?? '無最新章節';
+
+  @override
+  Map<String, String> get variableMap {
+    if (variable == null || variable!.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(variable!);
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  @override
+  void putVariable(String key, String? value) {
+    final map = variableMap;
+    if (value == null) {
+      map.remove(key);
+    } else {
+      map[key] = value;
+    }
+    variable = map.isEmpty ? null : jsonEncode(map);
+  }
+
+  @override
+  String getVariable(String key) => variableMap[key] ?? '';
 
   SearchBook({
     required this.bookUrl,

@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:legado_reader/core/constant/book_type.dart';
+import 'package:legado_reader/core/models/search_book.dart';
+import 'package:legado_reader/core/engine/book/book_help.dart';
 import 'book_base.dart';
 
 /// Book 擴展 - 類型感知與業務屬性
@@ -27,9 +29,29 @@ extension BookExtensions on BookBase {
   bool get isUpdate => lastCheckCount > 0;
 
   // --- 顯示輔助 ---
-  String getRealAuthor() => author.replaceAll(RegExp(r'\s+作\s*者.*|\s+\S+\s+著'), '').trim();
+  String getRealAuthor() => BookHelp.formatBookAuthor(author);
   String? getDisplayCover() => (customCoverUrl == null || customCoverUrl!.isEmpty) ? coverUrl : customCoverUrl;
   String? getDisplayIntro() => (customIntro == null || customIntro!.isEmpty) ? intro : customIntro;
+
+  /// 轉換為 SearchBook (對標 Android Book.toSearchBook)
+  SearchBook toSearchBook() {
+    return SearchBook(
+      bookUrl: bookUrl,
+      name: name,
+      author: author,
+      kind: kind,
+      coverUrl: coverUrl,
+      intro: intro,
+      latestChapterTitle: latestChapterTitle,
+      tocUrl: tocUrl,
+      origin: origin,
+      originName: originName,
+      originOrder: originOrder,
+      type: type,
+      variable: variable,
+      wordCount: wordCount,
+    );
+  }
 
   /// 是否使用淨化替換規則
   bool getUseReplaceRule() {
