@@ -33,7 +33,9 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   String content = '';
   List<TextPage> pages = [];
   Size? viewSize;
-  bool isLoading = false;
+  final Set<int> loadingChapters = {};
+  bool get isLoading => loadingChapters.isNotEmpty;
+
   bool showControls = false;
   int scrubbingChapterIndex = -1;
 

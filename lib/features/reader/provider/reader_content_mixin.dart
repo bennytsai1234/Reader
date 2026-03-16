@@ -26,7 +26,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     if (_isPaginating) return;
     _isPaginating = true;
     
-    isLoading = true;
+    loadingChapters.add(currentChapterIndex);
     notifyListeners();
 
     try {
@@ -62,92 +62,162 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     } catch (e, stack) {
       debugPrint('Reader: Paginate fatal error: $e\n$stack');
     } finally {
-      isLoading = false;
+      loadingChapters.remove(currentChapterIndex);
       _isPaginating = false;
-      notifyListeners();
     }
 
   }
-
-  bool _isPaginating = false;
-
 
   Future<void> loadChapter(int i, {bool fromEnd = false}) async {
     if (i < 0 || i >= chapters.length) return;
     
+    // 如果已經在載入中或已在緩存，直接處理
+    if (loadingChapters.contains(i)) return;
+
+    final bool isScrollMode = (pageTurnMode == 2);
+    final bool isNeighbor = (i == currentChapterIndex + 1 || i == currentChapterIndex - 1);
+    final bool shouldMerge = isScrollMode && isNeighbor && pages.isNotEmpty;
+
     if (chapterCache.containsKey(i)) {
-      currentChapterIndex = i;
-      pages = chapterCache[i]!;
-      content = chapterContentCache[i]!;
-      currentPageIndex = fromEnd ? (pages.length - 1).clamp(0, 999) : 0;
-      notifyListeners();
-      Future.delayed(const Duration(milliseconds: 50), () {
-        jumpPageController.add(currentPageIndex);
-        scrollOffsetController.add(fromEnd ? 999999.0 : 0.0);
-      });
+      _performChapterTransition(i, fromEnd, shouldMerge);
       return;
-
     }
 
-    isLoading = true; 
-    pages = []; // 清空舊頁面以顯示載入中
-    notifyListeners();
-
-    
-    try {
-      final res = await fetchChapterData(i);
-      content = res.content;
-      currentChapterIndex = i;
-      chapterContentCache[i] = content;
-      
-      // 清除目前章節的快取，確保重新分頁
-      chapterCache.remove(i);
-      
-      await doPaginate(fromEnd: fromEnd);
-      
-      chapterCache[i] = pages;
-
-      // 更新進度
-      final title = chapters[i].title;
-      unawaited(bookDao.updateProgress(book.bookUrl, i, title, currentPageIndex));
-
-      // 預加載下一章 (對標 Android ReadBookViewModel.preLoadNext)
-      if (i < chapters.length - 1) {
-        unawaited(_preloadChapter(i + 1));
-      }
-    } catch (e) {
-      content = '加載失敗: $e'; 
-    } finally {
-      isLoading = false; 
+    loadingChapters.add(i);
+    // 只有在非無縫合併且當前頁面為空時，才立即通知 UI 顯示轉圈
+    if (!shouldMerge || pages.isEmpty) {
       notifyListeners();
-      // 分頁完成後，如果是捲動模式，通知 UI 跳轉到對應位置
-      scrollOffsetController.add(fromEnd ? 999999.0 : 0.0);
     }
 
-  }
-
-  void onPageChanged(int i) {
-    if (currentPageIndex != i) {
-      currentPageIndex = i;
-      notifyListeners();
-      // 非同步更新進度到資料庫 (章節索引 + 標題 + 頁碼)
-      final title = chapters.isNotEmpty ? chapters[currentChapterIndex].title : '';
-      unawaited(bookDao.updateProgress(book.bookUrl, currentChapterIndex, title, i));
-    }
-  }
-
-
-  Future<void> _preloadChapter(int i) async {
-    if (chapterCache.containsKey(i) || isPreloading) return;
-    isPreloading = true;
     try {
       final res = await fetchChapterData(i);
       chapterContentCache[i] = res.content;
-      // 在後台執行分頁 (這裡可以進一步優化為 compute)
-      // 但為了簡單先緩存內容
-    } catch (_) {}
-    finally { isPreloading = false; }
+      chapterCache.remove(i);
+      
+      final newPages = await _paginateInternal(i);
+      chapterCache[i] = newPages;
+
+      _performChapterTransition(i, fromEnd, shouldMerge);
+
+      final title = chapters[i].title;
+      unawaited(bookDao.updateProgress(book.bookUrl, i, title, currentPageIndex));
+
+      // 載入完成後，如果還有其他鄰章沒加載，背景加載之
+      if (isScrollMode) {
+        _checkAndPreloadNeighbor();
+      }
+    } catch (e) {
+      debugPrint('Reader: Load chapter $i failed: $e');
+    } finally {
+      loadingChapters.remove(i);
+      notifyListeners();
+    }
   }
+
+  void _checkAndPreloadNeighbor() {
+    // 檢查目前 pages 列表開頭和結尾的章節索引
+    final firstIdx = pages.firstOrNull?.chapterIndex;
+    final lastIdx = pages.lastOrNull?.chapterIndex;
+    
+    if (firstIdx != null && firstIdx > 0 && !chapterCache.containsKey(firstIdx - 1)) {
+      unawaited(loadChapter(firstIdx - 1, fromEnd: true));
+    }
+    if (lastIdx != null && lastIdx < chapters.length - 1 && !chapterCache.containsKey(lastIdx + 1)) {
+      unawaited(loadChapter(lastIdx + 1));
+    }
+  }
+
+  void _performChapterTransition(int targetIndex, bool fromEnd, bool shouldMerge) {
+    if (!chapterCache.containsKey(targetIndex)) return;
+    final newPages = chapterCache[targetIndex]!;
+    
+    if (shouldMerge) {
+      final bool alreadyExists = pages.any((p) => p.chapterIndex == targetIndex);
+      if (!alreadyExists) {
+         if (targetIndex > currentChapterIndex) {
+           pages = [...pages, ...newPages];
+         } else {
+           final double addedHeight = _calculatePagesHeight(newPages);
+           pages = [...newPages, ...pages];
+           scrollOffsetController.add(-addedHeight);
+         }
+         _trimPagesWindow();
+      }
+      
+      if (targetIndex > currentChapterIndex) {
+         currentPageIndex = pages.indexWhere((p) => p.chapterIndex == targetIndex);
+      } else {
+         currentPageIndex = pages.lastIndexWhere((p) => p.chapterIndex == targetIndex);
+      }
+      currentChapterIndex = targetIndex;
+    } else {
+      pages = newPages;
+      currentChapterIndex = targetIndex;
+      currentPageIndex = fromEnd ? (pages.length - 1).clamp(0, 9999) : 0;
+      scrollOffsetController.add(fromEnd ? 999999.0 : 0.0);
+    }
+    notifyListeners();
+  }
+
+  double _calculatePagesHeight(List<TextPage> pageList) {
+    double total = 0;
+    for (final page in pageList) {
+      final double h = page.lines.isEmpty ? 0 : page.lines.last.lineBottom + 40.0;
+      total += h + 24.0;
+    }
+    return total;
+  }
+
+  void _trimPagesWindow() {
+    final chapterIndexes = pages.map((p) => p.chapterIndex).toSet().toList()..sort();
+    if (chapterIndexes.length > 5) {
+      if (currentChapterIndex == chapterIndexes.last) {
+        final firstChapter = chapterIndexes.first;
+        pages.removeWhere((p) => p.chapterIndex == firstChapter);
+      } else if (currentChapterIndex == chapterIndexes.first) {
+        final lastChapter = chapterIndexes.last;
+        pages.removeWhere((p) => p.chapterIndex == lastChapter);
+      }
+    }
+  }
+
+  Future<List<TextPage>> _paginateInternal(int i) async {
+    final currentTheme = AppTheme.readingThemes[themeIndex.clamp(0, AppTheme.readingThemes.length - 1)];
+    final ts = TextStyle(fontSize: fontSize + 4, fontWeight: FontWeight.bold, color: currentTheme.textColor, letterSpacing: letterSpacing);
+    final cs = TextStyle(fontSize: fontSize, height: lineHeight, color: currentTheme.textColor, letterSpacing: letterSpacing);
+    
+    return ChapterProvider.paginate(
+      content: chapterContentCache[i]!,
+      chapter: chapters[i],
+      chapterIndex: i,
+      chapterSize: chapters.length,
+      viewSize: viewSize!,
+      titleStyle: ts,
+      contentStyle: cs,
+      paragraphSpacing: paragraphSpacing,
+      textIndent: textIndent,
+      textFullJustify: textFullJustify,
+    );
+  }
+
+  void onPageChanged(int i) {
+    if (i < 0 || i >= pages.length) return;
+    final page = pages[i];
+    
+    if (currentChapterIndex != page.chapterIndex) {
+      currentChapterIndex = page.chapterIndex;
+      notifyListeners();
+    }
+
+    if (currentPageIndex != i) {
+      currentPageIndex = i;
+      notifyListeners();
+      
+      final title = chapters.isNotEmpty ? chapters[currentChapterIndex].title : '';
+      unawaited(bookDao.updateProgress(book.bookUrl, page.chapterIndex, title, page.index));
+    }
+  }
+
 
   Future<({String content, List<dynamic> pages})> fetchChapterData(int i) async {
     final chapter = chapters[i];
@@ -211,9 +281,19 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     }
   }
 
-  Future<void> nextChapter() async { if (currentChapterIndex < chapters.length - 1) await loadChapter(currentChapterIndex + 1); }
-  Future<void> prevChapter() async { if (currentChapterIndex > 0) await loadChapter(currentChapterIndex - 1, fromEnd: true); }
+  Future<void> nextChapter() async { 
+    final lastPage = pages.lastOrNull;
+    final int target = (lastPage?.chapterIndex ?? currentChapterIndex) + 1;
+    if (target < chapters.length) await loadChapter(target); 
+  }
+  
+  Future<void> prevChapter() async { 
+    final firstPage = pages.firstOrNull;
+    final int target = (firstPage?.chapterIndex ?? currentChapterIndex) - 1;
+    if (target >= 0) await loadChapter(target, fromEnd: true); 
+  }
 }
+
 
 
 

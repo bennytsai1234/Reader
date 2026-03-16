@@ -28,20 +28,24 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
     
     // 監聽並跳轉捲動位置 (處理切換章節後的初始位置)
     widget.provider.scrollOffsetController.stream.listen((offset) {
-      if (_scrollController.hasClients) {
-        if (offset >= 999999) {
-          // 跳到末尾 (載入前一章時)
-          Future.delayed(const Duration(milliseconds: 100), () {
-             if (_scrollController.hasClients) {
-               _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-             }
-          });
-        } else {
-          // 跳到頂部 (載入下一章時)
-          _scrollController.jumpTo(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          if (offset >= 999999) {
+            // 跳過閃爍，精準定位到末尾
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          } else if (offset < 0) {
+            // 相對位移補償 (當在頂部插入上一章時)
+            final double targetScroll = _scrollController.offset + offset.abs();
+            _scrollController.jumpTo(targetScroll);
+          } else {
+            // 跳到頂部 (載入下一章時，如果是 Replace 模式)
+            _scrollController.jumpTo(0);
+          }
         }
-      }
+      });
     });
+
+
   }
 
 
@@ -56,9 +60,11 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
       if (_scrollController.hasClients) {
         final double maxScroll = _scrollController.position.maxScrollExtent;
         final double currentScroll = _scrollController.position.pixels;
-        
-        // 向上滾動到頂部載入上一章
-        if (currentScroll <= 10 && !widget.provider.isLoading && widget.provider.currentChapterIndex > 0) {
+        final firstPage = widget.provider.pages.firstOrNull;
+        final lastPage = widget.provider.pages.lastOrNull;
+
+        // 向上滾動到頂部載入上一章 (檢查列表中最頂部的章節是否非第一章)
+        if (currentScroll <= 50 && !widget.provider.isLoading && firstPage != null && firstPage.chapterIndex > 0) {
            _isUserScrolling = true; // 暫時鎖定防止連續觸發
            widget.provider.prevChapter().then((_) {
              if (mounted) setState(() => _isUserScrolling = false);
@@ -66,8 +72,8 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
            return;
         }
 
-        // 向下滾動到底部載入下一章
-        if (currentScroll >= maxScroll - 50 && !widget.provider.isLoading && widget.provider.currentChapterIndex < widget.provider.chapters.length - 1) {
+        // 向下滾動到底部載入下一章 (檢查列表中最末尾的章節是否非最後一章)
+        if (currentScroll >= maxScroll - 100 && !widget.provider.isLoading && lastPage != null && lastPage.chapterIndex < widget.provider.chapters.length - 1) {
           _isUserScrolling = true;
           widget.provider.nextChapter().then((_) {
             if (mounted) setState(() => _isUserScrolling = false);
@@ -76,6 +82,7 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
       }
     }
   }
+
 
 
 
@@ -198,7 +205,11 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
 
 
   Widget _buildScrollReader() {
-    final hasPrev = widget.provider.currentChapterIndex > 0;
+    final firstPage = widget.provider.pages.firstOrNull;
+    final lastPage = widget.provider.pages.lastOrNull;
+    final showHead = firstPage != null && firstPage.chapterIndex > 0;
+    final showTail = lastPage != null && lastPage.chapterIndex < widget.provider.chapters.length - 1;
+
     return Listener(
       onPointerDown: (_) => setState(() => _isUserScrolling = true),
       onPointerUp: (_) => Future.delayed(const Duration(seconds: 1), () {
@@ -214,20 +225,24 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
         child: ListView.separated(
           controller: _scrollController,
           padding: EdgeInsets.zero,
-          itemCount: widget.provider.pages.length + (hasPrev ? 1 : 0) + 1,
+          itemCount: widget.provider.pages.length + (showHead ? 1 : 0) + (showTail ? 1 : 0),
           separatorBuilder: (ctx, i) => const SizedBox(height: 24),
           itemBuilder: (ctx, i) {
-            if (hasPrev && i == 0) {
+            if (showHead && i == 0) {
               return _buildScrollLoadingHead();
             }
             
-            final actualIndex = hasPrev ? i - 1 : i;
+            final actualIndex = showHead ? i - 1 : i;
 
-            if (actualIndex == widget.provider.pages.length) {
+            if (showTail && actualIndex == widget.provider.pages.length) {
               return _buildScrollLoadingTail();
             }
-            final page = widget.provider.pages[actualIndex];
+            
+            if (actualIndex < 0 || actualIndex >= widget.provider.pages.length) {
+              return const SizedBox.shrink();
+            }
 
+            final page = widget.provider.pages[actualIndex];
             final double pageHeight = page.lines.isEmpty ? 0 : page.lines.last.lineBottom + 40.0;
             
             return SizedBox(
@@ -244,6 +259,7 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
       ),
     );
   }
+
 
 
   TextStyle _getContentStyle() {
