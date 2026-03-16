@@ -137,10 +137,16 @@ class _RssReadPageState extends State<RssReadPage> {
 
   void _handleMenuAction(String value) async {
     final link = widget.article.link;
+    final box = context.findRenderObject() as RenderBox?;
+    final rect = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+
     switch (value) {
       case 'share':
-        // ignore: deprecated_member_use
-        await Share.share(link, subject: '分享文章: ${widget.article.title}');
+        await SharePlus.instance.share(ShareParams(
+          text: link,
+          subject: '分享文章: ${widget.article.title}',
+          sharePositionOrigin: rect,
+        ));
         break;
       case 'copy':
         await Clipboard.setData(ClipboardData(text: link));

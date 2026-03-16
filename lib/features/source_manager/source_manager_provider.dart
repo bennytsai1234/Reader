@@ -142,8 +142,11 @@ class SourceManagerProvider with ChangeNotifier {
     final file = File(p.join(tempDir.path, fileName.endsWith('.legado') ? fileName : '$fileName.legado'));
     await file.writeAsString(jsonStr);
 
-    // ignore: deprecated_member_use
-    await Share.shareXFiles([XFile(file.path)], text: '分享 Legado 書源 ($fileName)');
+    // 使用 SharePlus.instance.share
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
+      text: '分享 Legado 書源 ($fileName)',
+    ));
   }
 
   /// 批量分享目前選中的書源

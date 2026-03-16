@@ -7,6 +7,8 @@
   - [x] `Book` 模型核心屬性與業務邏輯對齊 (`migrateTo`, `toSearchBook`, `getRealAuthor`, etc.)
   - [x] `ReadConfig` 內嵌模型對齊
   - [x] `AppPattern` 全域正則對齊
+  - [x] `BookSource` 與所有子規則 (`SearchRule`, `TocRule`, etc.) 對齊 Android Legado rule/ 類別
+  - [x] `BookSourceSerialization` 補全 `concurrentRate`
   - [x] 所有相關 linter 警告與已廢棄 `Share` 調用修正
 
 ---

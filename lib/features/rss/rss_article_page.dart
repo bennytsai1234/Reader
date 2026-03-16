@@ -202,8 +202,14 @@ class RssArticlePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.share_outlined),
               title: const Text('分享'),
-              // ignore: deprecated_member_use
-              onTap: () { Share.share(article.link); Navigator.pop(ctx); },
+              onTap: () {
+                final box = context.findRenderObject() as RenderBox?;
+                SharePlus.instance.share(ShareParams(
+                  text: article.link,
+                  sharePositionOrigin: box != null ? box.localToGlobal(Offset.zero) & box.size : null,
+                ));
+                Navigator.pop(ctx);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.open_in_browser),
