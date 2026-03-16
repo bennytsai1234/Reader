@@ -17,21 +17,29 @@ subprojects {
     afterEvaluate {
         val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
         android?.apply {
+            // 針對 inappwebview 的特殊修正
+            if (project.name.contains("flutter_inappwebview")) {
+                compileSdkVersion(34)
+                tasks.withType<JavaCompile>().configureEach {
+                    val sdkPath = android.sdkDirectory.absolutePath
+                    val androidJar = file("$sdkPath/platforms/android-34/android.jar")
+                    if (androidJar.exists()) {
+                        println("Fixing inappwebview: injecting bootstrapClasspath from $androidJar")
+                        options.bootstrapClasspath = project.files(androidJar)
+                    }
+                }
+            } else {
+                // 其他插件維持 SDK 35/36
+                if (compileSdkVersion == null || (compileSdkVersion?.startsWith("android-") == true && compileSdkVersion!!.substringAfter("android-").toInt() < 36)) {
+                    compileSdkVersion(36)
+                }
+            }
+            
             // 自動修復缺失的 namespace
             if (namespace == null) {
                 namespace = "io.legado.reader.${project.name.replace("-", ".")}"
             }
             
-            // 強制注入 Android SDK 核心庫 Classpath，修復 "package android.content does not exist" 等錯誤
-            tasks.withType<JavaCompile>().configureEach {
-                val sdkPath = android.sdkDirectory.absolutePath
-                val compileSdkVer = android.compileSdkVersion ?: "android-35"
-                val androidJar = file("$sdkPath/platforms/$compileSdkVer/android.jar")
-                if (androidJar.exists()) {
-                    options.bootstrapClasspath = files(androidJar)
-                }
-            }
-
             // 專門修復 isar_flutter_libs 3.1.0+1 在 AGP 8.0+ 下的 Manifest 衝突
             if (project.name == "isar_flutter_libs") {
                 namespace = "dev.isar.isar_flutter_libs"
@@ -50,15 +58,6 @@ subprojects {
 
 subprojects {
     project.evaluationDependsOn(":app")
-}
-
-// 強制所有 Android 模組 (包括 plugins) 使用 JVM 17
-allprojects {
-    configurations.all {
-        resolutionStrategy {
-            // ...
-        }
-    }
 }
 
 gradle.projectsEvaluated {
