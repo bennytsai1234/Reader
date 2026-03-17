@@ -160,7 +160,9 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
       ListTile(leading: const Icon(Icons.edit), title: const Text('編輯書源'), onTap: () async { 
         Navigator.pop(ctx); 
         final full = await p.getFullSource(s.bookSourceUrl);
-        if (full != null && mounted) nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: full))); 
+        if (full != null && mounted) {
+          nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: full))); 
+        }
       }),
       ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text('刪除書源', style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(ctx); p.deleteSource(s); }),
     ])));

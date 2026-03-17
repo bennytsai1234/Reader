@@ -1,9 +1,9 @@
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/replace_rule.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// ReplaceRuleDao - SQLite 實作 (對標 Android ReplaceRuleDao.kt)
-class ReplaceRuleDao extends BaseDao<ReplaceRule> {
+class ReplaceRuleDao extends DriftCompatDao<ReplaceRule> {
   ReplaceRuleDao(AppDatabase appDatabase) : super(appDatabase, 'replace_rules');
 
   /// 獲取所有替換規則 (對標 Android: all)
@@ -145,7 +145,7 @@ class ReplaceRuleDao extends BaseDao<ReplaceRule> {
 
   /// 根據 ID 刪除
   Future<void> deleteById(int id) async {
-    await delete('id = ?', [id]);
+    await deleteRows('id = ?', [id]);
   }
 
   /// 更新排序

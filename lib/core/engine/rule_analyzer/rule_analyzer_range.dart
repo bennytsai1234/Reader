@@ -37,7 +37,7 @@ mixin RuleAnalyzerRange on RuleAnalyzerBase, RuleAnalyzerMatch {
         final content = queue.substring(posPre, pos);
         final frv = fr(content);
         st.write(queue.substring(startX, posPre - startStr.length));
-        st.write(frv ?? "");
+        st.write(frv ?? '');
         pos += endStr.length;
         startX = pos;
       }

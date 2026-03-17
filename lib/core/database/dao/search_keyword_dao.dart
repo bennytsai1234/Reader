@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:legado_reader/core/models/search_keyword.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// SearchKeywordDao - 搜尋關鍵字操作 (對標 Android SearchKeywordDao.kt)
-class SearchKeywordDao extends BaseDao<SearchKeyword> {
+class SearchKeywordDao extends DriftCompatDao<SearchKeyword> {
   SearchKeywordDao(AppDatabase appDatabase) : super(appDatabase, 'search_keywords');
 
   /// 獲取所有關鍵字 (對標 Android: all)
@@ -68,16 +69,13 @@ class SearchKeywordDao extends BaseDao<SearchKeyword> {
   /// 插入別名，兼容舊代碼
   Future<void> insert(SearchKeyword keyword) => upsert(keyword);
 
-  /// 更新別名
-  Future<void> update(SearchKeyword keyword) => upsert(keyword);
-
   /// 刪除指定關鍵字
   Future<void> deleteKeyword(SearchKeyword keyword) async {
-    await delete('word = ?', [keyword.word]);
+    await deleteRows('word = ?', [keyword.word]);
   }
 
   /// 清空所有關鍵字
   Future<void> deleteAll() async {
-    await clear();
+    await clearAll();
   }
 }

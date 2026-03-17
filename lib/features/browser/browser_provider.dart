@@ -76,7 +76,7 @@ class BrowserProvider extends BaseProvider {
       final source = await getIt<BookSourceDao>().getByUrl(params.sourceOrigin!);
       if (source != null) {
         source.enabled = false;
-        await getIt<BookSourceDao>().update(source);
+        await getIt<BookSourceDao>().upsert(source);
       }
     });
   }
@@ -84,7 +84,7 @@ class BrowserProvider extends BaseProvider {
   Future<void> deleteSource() async {
     if (params.sourceOrigin == null) return;
     await runTask(() async {
-      await getIt<BookSourceDao>().delete(params.sourceOrigin!);
+      await getIt<BookSourceDao>().deleteByUrl(params.sourceOrigin!);
     });
   }
 }

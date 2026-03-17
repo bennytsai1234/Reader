@@ -14,10 +14,6 @@ import '../database/dao/download_dao.dart';
 import '../database/dao/http_tts_dao.dart';
 import '../database/dao/read_record_dao.dart';
 import '../database/dao/replace_rule_dao.dart';
-import '../database/dao/rss_article_dao.dart';
-import '../database/dao/rss_read_record_dao.dart';
-import '../database/dao/rss_source_dao.dart';
-import '../database/dao/rss_star_dao.dart';
 import '../database/dao/rule_sub_dao.dart';
 import '../database/dao/search_book_dao.dart';
 import '../database/dao/search_history_dao.dart';
@@ -65,10 +61,6 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<HttpTtsDao>(() => HttpTtsDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<ReadRecordDao>(() => ReadRecordDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<ReplaceRuleDao>(() => ReplaceRuleDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<RssArticleDao>(() => RssArticleDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<RssReadRecordDao>(() => RssReadRecordDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<RssSourceDao>(() => RssSourceDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<RssStarDao>(() => RssStarDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<RuleSubDao>(() => RuleSubDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<SearchBookDao>(() => SearchBookDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<SearchHistoryDao>(() => SearchHistoryDao(getIt<AppDatabase>()));
@@ -85,7 +77,6 @@ Future<void> configureDependencies() async {
   // 5. 初始化所有服務
   await Future.wait([
     CrashHandler.init(),
-    getIt<AppDatabase>().database, // 確保資料庫已開啟
     getIt<NetworkService>().init(),
     getIt<TTSService>().init(),
   ]);

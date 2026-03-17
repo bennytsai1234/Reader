@@ -124,7 +124,7 @@ class TtsDialog extends StatelessWidget {
             label: '音調',
             options: const [0.5, 0.75, 1.0, 1.25, 1.5],
             current: tts.pitch,
-            format: (v) => '${v}',
+            format: (v) => '$v',
             onSelected: (v) => provider.setTtsPitch(v),
             theme: theme,
           ),

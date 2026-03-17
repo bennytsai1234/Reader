@@ -6,17 +6,14 @@ import 'package:synchronized/synchronized.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
 import 'package:legado_reader/core/database/dao/txt_toc_rule_dao.dart';
 import 'package:legado_reader/core/database/dao/http_tts_dao.dart';
-import 'package:legado_reader/core/database/dao/rss_source_dao.dart';
 import 'package:legado_reader/core/database/dao/dict_rule_dao.dart';
 import 'package:legado_reader/core/database/dao/search_history_dao.dart';
 import 'package:legado_reader/core/database/dao/cache_dao.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/txt_toc_rule.dart';
 import 'package:legado_reader/core/models/http_tts.dart';
-import 'package:legado_reader/core/models/rss_source.dart';
 import 'package:legado_reader/core/models/dict_rule.dart';
 import 'chinese_utils.dart';
-import 'webdav_service.dart';
 import 'package:legado_reader/shared/theme/app_theme.dart';
 import 'package:legado_reader/core/di/injection.dart';
 
@@ -43,7 +40,6 @@ class DefaultData {
       await _loadDefaultTocRules();
       await _loadDefaultHttpTts();
       await _loadDefaultSources();
-      await _loadDefaultRssSources();
       await _loadDefaultDictRules();
       await prefs.setInt('default_data_version', currentDataVersion);
     }
@@ -78,14 +74,6 @@ class DefaultData {
   static void _startBackgroundTasks(SharedPreferences prefs) {
     // A. 預熱簡繁轉換 (原 Android ChineseUtils.preLoad)
     ChineseUtils.s2t('');
-
-    // B. 自動 WebDAV 同步 (原 Android AppWebDav.downloadAllBookProgress)
-    final webdavEnabled = prefs.getBool('webdav_enabled') ?? false;
-    if (webdavEnabled) {
-      WebDavService().isConfigured().then((configured) {
-        if (configured) WebDavService().restore();
-      });
-    }
   }
 
   /// 載入預設目錄規則 (對標 importDefaultTocRules)
@@ -131,18 +119,6 @@ class DefaultData {
       await getIt<BookSourceDao>().insertOrUpdateAll(sources);
     } catch (e) {
       debugPrint('Error loading default sources: $e');
-    }
-  }
-
-  /// 載入預設 RSS 源 (對標 importDefaultRssSources)
-  static Future<void> _loadDefaultRssSources() async {
-    try {
-      final jsonStr = await rootBundle.loadString('assets/default_sources/rssSources.json');
-      final List<dynamic> list = jsonDecode(jsonStr);
-      final sources = list.map((e) => RssSource.fromJson(e)).toList();
-      await getIt<RssSourceDao>().insertOrUpdateAll(sources);
-    } catch (e) {
-      debugPrint('Default RssSources Asset Not Found');
     }
   }
 

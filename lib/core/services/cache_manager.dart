@@ -157,7 +157,7 @@ class CacheManager {
   /// 刪除快取 (記憶體 + 資料庫 + 檔案)
   Future<void> delete(String key) async {
     deleteMemory(key);
-    await _cacheDao.delete(key);
+    await _cacheDao.deleteByKey(key);
     final path = await getCachePath(key);
     final file = File(path);
     if (await file.exists()) {

@@ -1,8 +1,9 @@
 import 'package:legado_reader/core/models/download_task.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// DownloadDao - 下載任務資料存取對象 (對標 Android DownloadDao.kt)
-class DownloadDao extends BaseDao<DownloadTask> {
+class DownloadDao extends DriftCompatDao<DownloadTask> {
   DownloadDao(AppDatabase appDatabase) : super(appDatabase, 'download_tasks');
 
   /// 獲取所有未完成的任務
@@ -50,11 +51,11 @@ class DownloadDao extends BaseDao<DownloadTask> {
 
   /// 根據 URL 刪除任務
   Future<void> deleteByUrl(String bookUrl) async {
-    await delete('bookUrl = ?', [bookUrl]);
+    await deleteRows('bookUrl = ?', [bookUrl]);
   }
 
   /// 清空已完成任務
   Future<void> clearFinished() async {
-    await delete('status = 3'); // 假設 3 代表完成
+    await deleteRows('status = 3'); // 假設 3 代表完成
   }
 }

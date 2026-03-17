@@ -9,7 +9,7 @@ void main() {
   test('Local TXT Parsing and Reading Test', () async {
     // 1. 建立測試檔案
     final testFile = File('test_book.txt');
-    final content = '''
+    const content = '''
 前言內容在此。
 第1章 起始
 這是第一章的內容。包含中文和符號！
@@ -25,11 +25,6 @@ void main() {
       final result = await parser.splitChapters();
       final chaptersData = result.chapters;
 
-      
-      print('Chapters found: ${chaptersData.length}');
-      for (var ch in chaptersData) {
-        print('  - ${ch['title']} (Offset: ${ch['start']} to ${ch['end']})');
-      }
       
       expect(chaptersData.length, greaterThanOrEqualTo(3)); 
       expect(chaptersData[0]['title'], equals('前言'));
@@ -58,7 +53,6 @@ void main() {
       final readContent2 = await service.getContent(book, ch2);
       expect(readContent2.trim(), equals('第2章 發展\n這是第二章的內容。\n更加詳細的描述。'));
 
-      print('Local TXT Test Passed!');
     } finally {
       // 4. 清理
       if (await testFile.exists()) await testFile.delete();

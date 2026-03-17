@@ -1,8 +1,9 @@
 import 'package:legado_reader/core/models/source_subscription.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// SourceSubscriptionDao - 書源訂閱操作 (對標 Android SourceSubscriptionDao.kt)
-class SourceSubscriptionDao extends BaseDao<SourceSubscription> {
+class SourceSubscriptionDao extends DriftCompatDao<SourceSubscription> {
   SourceSubscriptionDao(AppDatabase appDatabase) : super(appDatabase, 'source_subscriptions');
 
   /// 獲取所有訂閱 (對標 Android: all)
@@ -25,7 +26,7 @@ class SourceSubscriptionDao extends BaseDao<SourceSubscription> {
 
   /// 根據 URL 刪除
   Future<void> deleteByUrl(String url) async {
-    await delete('url = ?', [url]);
+    await deleteRows('url = ?', [url]);
   }
 
   /// 批量更新排序

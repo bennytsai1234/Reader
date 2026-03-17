@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import '../services/encoding_detect.dart';
 
 /// TxtParser - 高性能 TXT 解析器

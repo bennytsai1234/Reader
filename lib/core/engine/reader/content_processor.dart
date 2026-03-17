@@ -54,7 +54,7 @@ class ContentProcessor {
         replaceRules: rules,
         chineseConvertType: chineseConvertType,
       );
-      content = processedTitle + '\n' + content;
+      content = '$processedTitle\n$content';
     }
 
 

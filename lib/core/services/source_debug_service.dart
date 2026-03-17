@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'book_source_service.dart';
-import 'web_service.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
@@ -49,12 +48,6 @@ class SourceDebugService {
     
     final debugLog = DebugLog(state, printMsg, DateTime.now());
     _logController.add(debugLog);
-
-    // 透過 WebSocket 同步至 Web 端 (原 Android WebSocketServer)
-    WebService().broadcastLog({
-      'type': 'sourceDebug',
-      'data': debugLog.toJson(),
-    });
   }
 
   void _logHttp(AnalyzeUrl analyzeUrl, String? responseBody) {

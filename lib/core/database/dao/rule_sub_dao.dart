@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:legado_reader/core/models/rule_sub.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// RuleSubDao - 訂閱規則操作 (對標 Android RuleSubDao.kt)
-class RuleSubDao extends BaseDao<RuleSub> {
+class RuleSubDao extends DriftCompatDao<RuleSub> {
   RuleSubDao(AppDatabase appDatabase) : super(appDatabase, 'rule_subs');
 
   /// 獲取所有訂閱規則 (對標 Android: all)
@@ -47,11 +48,8 @@ class RuleSubDao extends BaseDao<RuleSub> {
     await insertOrUpdate(sub.toJson());
   }
 
-  /// 插入別名，兼容舊代碼
-  Future<void> update(RuleSub sub) => upsert(sub);
-
   /// 刪除訂閱
   Future<void> deleteSub(RuleSub sub) async {
-    await delete('url = ?', [sub.url]);
+    await deleteRows('url = ?', [sub.url]);
   }
 }

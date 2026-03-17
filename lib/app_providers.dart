@@ -9,7 +9,6 @@ import 'features/search/search_provider.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/settings/font_provider.dart';
 import 'features/dict/dict_provider.dart';
-import 'features/rss/rss_source_provider.dart';
 import 'features/book_detail/change_cover_provider.dart';
 
 /// AppProviders - 集中管理全域 Provider
@@ -19,7 +18,6 @@ class AppProviders {
     ChangeNotifierProvider(create: (_) => SearchProvider()),
     ChangeNotifierProvider(create: (_) => BookshelfProvider()),
     ChangeNotifierProvider(create: (_) => ExploreProvider()),
-    ChangeNotifierProvider(create: (_) => RssSourceProvider()),
     ChangeNotifierProvider(create: (_) => SettingsProvider()),
     ChangeNotifierProvider(create: (_) => FontProvider()),
     ChangeNotifierProvider(create: (_) => ChangeCoverProvider()),

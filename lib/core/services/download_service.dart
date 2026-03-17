@@ -42,7 +42,7 @@ class DownloadService extends DownloadBase with DownloadScheduler, DownloadExecu
 
   void removeTask(String bookUrl) {
     tasks.removeWhere((t) => t.bookUrl == bookUrl);
-    downloadDao.delete(bookUrl);
+    downloadDao.deleteByUrl(bookUrl);
     update();
   }
 

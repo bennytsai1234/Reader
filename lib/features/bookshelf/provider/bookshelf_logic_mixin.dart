@@ -85,7 +85,7 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
 
   Future<void> updateGroupVisibility(int groupId, bool visible) async {
     final group = groups.cast<BookGroup?>().firstWhere((g) => g?.id == groupId, orElse: () => null);
-    if (group != null) { group.show = visible; await groupDao.update(group); notifyListeners(); }
+    if (group != null) { group.show = visible; await groupDao.upsert(group); notifyListeners(); }
   }
 
   Future<void> createGroup(String name) async {
@@ -95,7 +95,7 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
 
   Future<void> renameGroup(int id, String name) async {
     final group = groups.cast<BookGroup?>().firstWhere((g) => g?.id == id, orElse: () => null);
-    if (group != null) { group.name = name; await groupDao.update(group); notifyListeners(); }
+    if (group != null) { group.name = name; await groupDao.upsert(group); notifyListeners(); }
   }
 
   Future<void> deleteGroup(int id) async {

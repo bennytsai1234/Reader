@@ -1,10 +1,10 @@
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/book_source_part.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// BookSourceDao - SQLite 實作 (對標 Android BookSourceDao.kt)
-class BookSourceDao extends BaseDao<BookSource> {
+class BookSourceDao extends DriftCompatDao<BookSource> {
   BookSourceDao(AppDatabase appDatabase) : super(appDatabase, 'book_sources');
 
   // --- 局部查詢 (Part) ---
@@ -298,8 +298,7 @@ class BookSourceDao extends BaseDao<BookSource> {
   // --- 別名與相容性 ---
   Future<List<BookSource>> getAllFull() => getAll();
   Future<void> insertOrUpdateAll(List<BookSource> sources) => upsertAll(sources);
-  Future<void> update(BookSource source) => upsert(source);
-  
+
   /// 批量更新排序 (支持 BookSource 與 BookSourcePart)
   Future<void> updateCustomOrder(List<dynamic> sources) async {
     final client = await db;

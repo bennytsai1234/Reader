@@ -4,7 +4,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/database/dao/chapter_dao.dart';
-import 'package:legado_reader/core/services/webdav_service.dart';
 import 'package:legado_reader/core/di/injection.dart';
 
 class ExportBookService {
@@ -33,10 +32,6 @@ class ExportBookService {
     final fileName = '${book.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')}.txt';
     final file = File('${tempDir.path}/$fileName');
     await file.writeAsString(buffer.toString());
-
-    try {
-      await WebDavService().uploadFile(file.path, fileName);
-    } catch (_) {}
 
     // 使用 SharePlus.instance.share
     await SharePlus.instance.share(ShareParams(

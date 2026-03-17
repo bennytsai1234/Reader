@@ -1,9 +1,10 @@
 import 'package:legado_reader/core/models/bookmark.dart';
 import 'package:legado_reader/core/services/event_bus.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// BookmarkDao - SQLite 實作 (對標 Android BookmarkDao.kt)
-class BookmarkDao extends BaseDao<Bookmark> {
+class BookmarkDao extends DriftCompatDao<Bookmark> {
   BookmarkDao(AppDatabase appDatabase) : super(appDatabase, 'bookmarks');
 
   /// 獲取所有書籤並依照書名、作者、章節與位置排序 (對標 Android: all)
@@ -49,7 +50,7 @@ class BookmarkDao extends BaseDao<Bookmark> {
   /// 刪除單個書籤 (對標 Android: delete)
   Future<void> deleteBookmark(Bookmark bookmark) async {
     if (bookmark.id != null) {
-      await delete('id = ?', [bookmark.id]);
+      await deleteRows('id = ?', [bookmark.id]);
       AppEventBus().fire(AppEvent('up_bookmark'));
     }
   }
@@ -71,10 +72,11 @@ class BookmarkDao extends BaseDao<Bookmark> {
   }
 
   /// 清除所有書籤
-  Future<void> clearAll() async {
+  Future<int> clearAll() async {
     final client = await db;
-    await client.delete(tableName);
+    final count = await client.delete(tableName);
     AppEventBus().fire(AppEvent('up_bookmark'));
+    return count;
   }
 
 

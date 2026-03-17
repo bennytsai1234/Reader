@@ -81,7 +81,7 @@ class CookieStore {
   Future<void> removeCookie(String url) async {
     final domain = getSubDomain(url);
     _memoryCache.remove(domain);
-    await _cookieDao.delete(domain);
+    await _cookieDao.deleteByUrl(domain);
   }
 
   /// 將 Cookie 字串轉換為 Map

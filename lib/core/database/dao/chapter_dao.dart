@@ -1,9 +1,9 @@
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/chapter.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// ChapterDao - SQLite 實作 (對標 Android BookChapterDao.kt)
-class ChapterDao extends BaseDao<BookChapter> {
+class ChapterDao extends DriftCompatDao<BookChapter> {
   ChapterDao(AppDatabase appDatabase) : super(appDatabase, 'chapters');
 
   /// 搜尋章節標題 (對標 Android: search)
@@ -99,7 +99,7 @@ class ChapterDao extends BaseDao<BookChapter> {
       'SELECT COUNT(*) as count FROM $tableName WHERE bookUrl = ?',
       [bookUrl]
     );
-    return Sqflite.firstIntValue(maps) ?? 0;
+    return driftFirstIntValue(maps) ?? 0;
   }
 
   /// 根據 URL 獲取單一章節 (對標 Android: getChapter by url)
@@ -175,7 +175,7 @@ class ChapterDao extends BaseDao<BookChapter> {
 
   /// 刪除書籍的所有章節 (對標 Android: delByBook)
   Future<void> deleteByBookUrl(String bookUrl) async {
-    await delete('bookUrl = ?', [bookUrl]);
+    await deleteRows('bookUrl = ?', [bookUrl]);
   }
 
   /// 檢查章節內容是否已存在

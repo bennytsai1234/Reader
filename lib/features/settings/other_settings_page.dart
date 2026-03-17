@@ -46,7 +46,7 @@ class OtherSettingsPage extends StatelessWidget {
               const Divider(),
               SettingsGroupAdvanced(settings: settings, showComingSoon: _showComingSoon),
               const Divider(),
-              SettingsGroupSystem(settings: settings, showComingSoon: _showComingSoon, showThreadCountDialog: _showThreadCountDialog),
+              SettingsGroupSystem(settings: settings, showComingSoon: _showComingSoon),
             ],
           );
         },

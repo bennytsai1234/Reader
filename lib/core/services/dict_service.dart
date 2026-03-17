@@ -45,7 +45,7 @@ class DictService {
   }
 
   Future<void> deleteRule(String name) async {
-    await _dao.delete(name);
+    await _dao.deleteByName(name);
   }
 }
 

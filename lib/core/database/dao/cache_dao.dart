@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/cache.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// CacheDao - 快取資料表操作 (對標 Android CacheDao.kt)
-class CacheDao extends BaseDao<Cache> {
+class CacheDao extends DriftCompatDao<Cache> {
   CacheDao(AppDatabase appDatabase) : super(appDatabase, 'cache');
 
   /// 根據 Key 獲取快取
@@ -49,7 +49,7 @@ class CacheDao extends BaseDao<Cache> {
 
   /// 刪除指定快取
   Future<void> deleteByKey(String key) async {
-    await delete('`key` = ?', [key]);
+    await deleteRows('`key` = ?', [key]);
   }
 
   /// 刪除書源相關變量 (對標 Android: deleteSourceVariables)

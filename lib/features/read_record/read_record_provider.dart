@@ -50,7 +50,7 @@ class ReadRecordProvider extends ChangeNotifier {
   }
 
   Future<void> clearAll() async {
-    await _dao.clear();
+    await _dao.clearAll();
     await loadRecords();
   }
 

@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:legado_reader/core/models/cookie.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// CookieDao - SQLite 實作 (對標 Android CookieDao.kt)
-class CookieDao extends BaseDao<Cookie> {
+class CookieDao extends DriftCompatDao<Cookie> {
   CookieDao(AppDatabase appDatabase) : super(appDatabase, 'cookies');
 
   /// 根據 URL 獲取 Cookie (對標 Android: getCookie)
@@ -39,16 +40,16 @@ class CookieDao extends BaseDao<Cookie> {
 
   /// 根據 URL 刪除 Cookie
   Future<void> deleteByUrl(String url) async {
-    await delete('url = ?', [url]);
+    await deleteRows('url = ?', [url]);
   }
 
   /// 刪除所有包含 '|' 的 OkHttp Cookies
   Future<void> deleteOkHttp() async {
-    await delete("url LIKE '%|%'");
+    await deleteRows("url LIKE '%|%'");
   }
 
   /// 清空所有 Cookie
   Future<void> deleteAll() async {
-    await clear();
+    await clearAll();
   }
 }

@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/book_group.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// BookGroupDao - 書籍群組資料表操作 (對標 Android BookGroupDao.kt)
-class BookGroupDao extends BaseDao<BookGroup> {
+class BookGroupDao extends DriftCompatDao<BookGroup> {
   BookGroupDao(AppDatabase appDatabase) : super(appDatabase, 'book_groups');
 
   /// 根據 ID 獲取分組
@@ -70,7 +70,7 @@ class BookGroupDao extends BaseDao<BookGroup> {
   /// 是否可以新增分組 (限制 64 個，因為 64 位整數限制)
   Future<bool> getCanAddGroup() async {
     final client = await db;
-    final count = Sqflite.firstIntValue(await client.rawQuery('SELECT COUNT(*) FROM $tableName WHERE groupId > 0')) ?? 0;
+    final count = driftFirstIntValue(await client.rawQuery('SELECT COUNT(*) FROM $tableName WHERE groupId > 0')) ?? 0;
     return count < 64;
   }
 
@@ -109,9 +109,6 @@ class BookGroupDao extends BaseDao<BookGroup> {
   /// 插入別名，兼容舊代碼
   Future<void> insert(BookGroup bookGroup) => upsert(bookGroup);
 
-  /// 更新別名
-  Future<void> update(BookGroup bookGroup) => upsert(bookGroup);
-
   /// 批量更新排序
   Future<void> updateOrder(List<BookGroup> list) async {
     final client = await db;
@@ -131,7 +128,7 @@ class BookGroupDao extends BaseDao<BookGroup> {
 
   /// 刪除分組
   Future<void> deleteById(int id) async {
-    await delete('groupId = ?', [id]);
+    await deleteRows('groupId = ?', [id]);
   }
 
   /// 刪除分組實體別名

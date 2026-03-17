@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:legado_reader/core/models/server.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// ServerDao - 伺服器資料存取對象 (對標 Android ServerDao.kt)
-class ServerDao extends BaseDao<Server> {
+class ServerDao extends DriftCompatDao<Server> {
   ServerDao(AppDatabase appDatabase) : super(appDatabase, 'servers');
 
   /// 獲取所有伺服器 (對標 Android: all)
@@ -37,16 +38,13 @@ class ServerDao extends BaseDao<Server> {
   /// 插入別名，兼容舊代碼
   Future<void> insert(Server server) => upsert(server);
 
-  /// 更新別名
-  Future<void> update(Server server) => upsert(server);
-
   /// 根據 ID 刪除
   Future<void> deleteById(int id) async {
-    await delete('id = ?', [id]);
+    await deleteRows('id = ?', [id]);
   }
 
   /// 刪除預設伺服器
   Future<void> deleteDefault() async {
-    await delete('id < 0');
+    await deleteRows('id < 0');
   }
 }

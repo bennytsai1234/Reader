@@ -1,9 +1,9 @@
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/txt_toc_rule.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// TxtTocRuleDao - SQLite 實作 (對標 Android TxtTocRuleDao.kt)
-class TxtTocRuleDao extends BaseDao<TxtTocRule> {
+class TxtTocRuleDao extends DriftCompatDao<TxtTocRule> {
   TxtTocRuleDao(AppDatabase appDatabase) : super(appDatabase, 'txt_toc_rules');
 
   /// 獲取所有目錄規則 (對標 Android: all)
@@ -51,7 +51,7 @@ class TxtTocRuleDao extends BaseDao<TxtTocRule> {
 
   /// 根據 ID 刪除
   Future<void> deleteById(int id) async {
-    await delete('id = ?', [id]);
+    await deleteRows('id = ?', [id]);
   }
 
   /// 刪除規則別名，兼容舊代碼

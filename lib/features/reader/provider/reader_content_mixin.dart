@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'reader_provider_base.dart';
 import 'reader_settings_mixin.dart';
@@ -7,9 +6,7 @@ import 'package:legado_reader/features/reader/engine/chapter_provider.dart';
 import 'package:legado_reader/core/services/local_book_service.dart';
 import 'package:legado_reader/core/engine/reader/content_processor.dart' as engine;
 import 'package:legado_reader/shared/theme/app_theme.dart';
-import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/book/book_content.dart';
-import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/features/reader/engine/text_page.dart';
 
 
@@ -293,33 +290,26 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
         debugPrint('Reader: Loading from local file: ${book.bookUrl}');
         raw = await LocalBookService().getContent(book, chapter);
       } else {
-        if (source == null) {
-          source = await sourceDao.getByUrl(book.origin);
-        }
-        if (source != null) {
-          try {
-            raw = await service.getContent(source!, book, chapter);
-            if (raw != null && raw.isNotEmpty) {
-              await chapterDao.saveContent(chapter.url, raw);
-            } else {
-              raw = '章節內容為空 (可能解析規則有誤)';
-            }
-          } catch (e) {
-            raw = '加載章節失敗: $e';
+        source ??= await sourceDao.getByUrl(book.origin);
+        try {
+          raw = await service.getContent(source!, book, chapter);
+          if (raw.isNotEmpty) {
+            await chapterDao.saveContent(chapter.url, raw);
+          } else {
+            raw = '章節內容為空 (可能解析規則有誤)';
           }
-        } else {
-          raw = '找不到對應書源: ${book.origin} (請檢查書源是否已被刪除)';
+        } catch (e) {
+          raw = '加載章節失敗: $e';
         }
-
       }
     }
-    debugPrint('Reader: Raw content loaded, length: ${raw?.length}');
+    debugPrint('Reader: Raw content loaded, length: ${raw.length}');
     // 替換規則在閱讀會話中不變，快取第一次查詢結果
     _cachedRulesJson ??= (await replaceDao.getEnabled()).map((r) => r.toJson()).toList().cast<Map<String, dynamic>>();
     final rulesJson = _cachedRulesJson!;
     
     final BookContent bookContent = await engine.ContentProcessor.process(
-      book: book, chapter: chapter, rawContent: raw ?? '無內容', 
+      book: book, chapter: chapter, rawContent: raw, 
       rulesJson: rulesJson,
       chineseConvertType: chineseConvert, reSegmentEnabled: true,
     );

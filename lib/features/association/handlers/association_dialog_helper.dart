@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'association_base.dart';
 import 'package:legado_reader/features/source_manager/source_manager_provider.dart';
-import 'package:legado_reader/features/rss/rss_source_provider.dart';
 import 'package:legado_reader/features/replace_rule/replace_rule_provider.dart';
 import 'package:legado_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:legado_reader/core/database/dao/http_tts_dao.dart';
@@ -20,7 +19,6 @@ mixin AssociationDialogHelper on AssociationBase {
         content: Text('偵測到外部內容：\n${isFile ? src.split('/').last : src}\n\n辨識類型：$type'),
         actions: [
           _btn(ctx, '書源', () => isFile ? context.read<SourceManagerProvider>().importFromJson(jsonData!) : context.read<SourceManagerProvider>().importFromUrl(src)),
-          _btn(ctx, 'RSS', () => isFile ? context.read<RssSourceProvider>().importFromJson(jsonData!) : context.read<RssSourceProvider>().importFromUrl(src)),
           if (type == 'book' || type == 'auto') _btn(ctx, '書籍', () => context.read<BookshelfProvider>().importBookshelfFromUrl(src)),
           if (type == 'replaceRule' || type == 'auto') _btn(ctx, '替換規則', () { if (isFile) context.read<ReplaceRuleProvider>().importFromText(jsonData!); }),
           if (type == 'httpTts' || type == 'auto') _btn(ctx, 'TTS', () { if (isFile) _importTts(context, jsonData!); }),

@@ -61,8 +61,6 @@ mixin FileAssociationHandler on AssociationBase {
       if (first is Map) {
         if (first.containsKey('bookSourceUrl')) {
           type = 'bookSource';
-        } else if (first.containsKey('sourceUrl')) {
-          type = 'rssSource';
         } else if (first.containsKey('pattern')) {
           type = 'replaceRule';
         } else if (first.containsKey('loginUrl')) {

@@ -29,11 +29,6 @@ class SettingsGroupInterface extends StatelessWidget {
           value: settings.showDiscovery,
           onChanged: (v) => settings.setShowDiscovery(v),
         ),
-        SwitchListTile(
-          title: const Text('顯示 RSS'),
-          value: settings.showRss,
-          onChanged: (v) => settings.setShowRss(v),
-        ),
         ListTile(
           title: const Text('預設首頁'),
           subtitle: const Text('啟動 App 時預設顯示的頁面'),

@@ -1,3 +1,4 @@
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// SearchHistory - 搜尋歷史模型 (對標 Android SearchKeyword)
@@ -22,7 +23,7 @@ class SearchHistory {
 }
 
 /// SearchHistoryDao - SQLite 實作 (對標 Android SearchKeywordDao.kt)
-class SearchHistoryDao extends BaseDao<SearchHistory> {
+class SearchHistoryDao extends DriftCompatDao<SearchHistory> {
   SearchHistoryDao(AppDatabase appDatabase) : super(appDatabase, 'search_history');
 
   /// 獲取所有搜尋紀錄 (對標 Android: getRecent)
@@ -53,19 +54,19 @@ class SearchHistoryDao extends BaseDao<SearchHistory> {
 
   /// 刪除指定紀錄
   Future<void> deleteKeyword(String keyword) async {
-    await delete('keyword = ?', [keyword]);
+    await deleteRows('keyword = ?', [keyword]);
   }
 
   /// 清空所有紀錄 (對標 Android: deleteAll)
   Future<void> deleteAll() async {
-    await clear();
+    await clearAll();
   }
 
   /// 刪除過期紀錄 (對標 Android: deleteOld)
   Future<void> clearOld(int timeLimit) async {
-    await delete('searchTime < ?', [timeLimit]);
+    await deleteRows('searchTime < ?', [timeLimit]);
   }
 
   /// 清空別名
-  Future<void> clearAll() => deleteAll();
+  Future<int> clearAll() => super.clearAll();
 }

@@ -216,11 +216,11 @@ class _FontManagerPageState extends State<FontManagerPage> {
               final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(context);
               final success = await provider.downloadFont(url, name);
-              if (mounted) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text(success ? '下載並安裝成功' : '下載失敗，請檢查 URL')),
-                );
-              }
+              if (!mounted) return;
+              
+              messenger.showSnackBar(
+                SnackBar(content: Text(success ? '下載並安裝成功' : '下載失敗，請檢查 URL')),
+              );
             },
             child: const Text('下載'),
           ),

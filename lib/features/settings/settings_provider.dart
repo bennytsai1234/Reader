@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:legado_reader/core/config/app_config.dart';
 import 'package:legado_reader/core/constant/prefer_key.dart';
-import 'package:legado_reader/core/services/web_service.dart';
-import 'package:legado_reader/core/services/webdav_service.dart';
 import 'provider/settings_base.dart';
 
 export 'provider/settings_base.dart';
@@ -15,17 +13,6 @@ export 'provider/settings_advanced.dart';
 /// SettingsProvider - 設置提供者 (重構後)
 /// (原 Android help/config/AppConfig.kt)
 class SettingsProvider extends SettingsProviderBase {
-  // Web 服務
-  bool webServiceEnabled = false;
-
-  // WebDAV
-  String webdavUrl = '';
-  String webdavUser = '';
-  String webdavPassword = '';
-  String webdavSubDir = '';
-  String deviceName = '';
-  bool webdavEnabled = false;
-
   bool appCrash = false;
   bool enableReadRecord = true;
   String localPassword = '';
@@ -76,8 +63,6 @@ class SettingsProvider extends SettingsProviderBase {
   bool readBarStyleFollowPage = false;
 
   // --- 備份設定 ---
-  bool syncBookProgress = true;
-  bool syncBookProgressPlus = false;
   bool onlyLatestBackup = true;
   bool autoCheckNewBackup = true;
   bool autoBackup = false;
@@ -108,13 +93,11 @@ class SettingsProvider extends SettingsProviderBase {
   bool autoRefresh = true;
   bool defaultToRead = false;
   bool showDiscovery = true;
-  bool showRss = true;
   int threadCount = 4;
   String userAgent = '';
   bool antiAlias = true;
   bool replaceEnableDefault = true;
   bool enableCronet = false;
-  bool webServiceWakeLock = true;
   String bookStorageDir = '';
   bool ignoreAudioFocus = false;
   bool autoClearExpired = true;
@@ -123,27 +106,14 @@ class SettingsProvider extends SettingsProviderBase {
   bool showAddToShelfAlert = true;
   bool showMangaUi = true;
 
-  // --- Setter 補全 ---
-  void setWebServiceEnabled(bool v) async {
-    webServiceEnabled = v;
-    if (v) {
-      await WebService().start();
-    } else {
-      await WebService().stop();
-    }
-    notifyListeners();
-  }
-
   void setAutoRefresh(bool v) { autoRefresh = v; save(PreferKey.autoRefresh, v); update(); }
   void setDefaultToRead(bool v) { defaultToRead = v; save(PreferKey.defaultToRead, v); update(); }
   void setShowDiscovery(bool v) { showDiscovery = v; save(PreferKey.showDiscovery, v); update(); }
-  void setShowRss(bool v) { showRss = v; save(PreferKey.showRss, v); update(); }
   void setThreadCount(int v) { threadCount = v; save(PreferKey.threadCount, v); update(); }
   void setUserAgent(String v) { userAgent = v; save(PreferKey.userAgent, v); update(); }
   void setAntiAlias(bool v) { antiAlias = v; save(PreferKey.antiAlias, v); update(); }
   void setReplaceEnableDefault(bool v) { replaceEnableDefault = v; AppConfig.replaceEnableDefault = v; save(PreferKey.replaceEnableDefault, v); update(); }
   void setEnableCronet(bool v) { enableCronet = v; save(PreferKey.cronet, v); update(); }
-  void setWebServiceWakeLock(bool v) { webServiceWakeLock = v; save(PreferKey.webServiceWakeLock, v); update(); }
   void setBookStorageDir(String v) { bookStorageDir = v; save('book_storage_dir', v); update(); }
   void setIgnoreAudioFocus(bool v) { ignoreAudioFocus = v; save(PreferKey.ignoreAudioFocus, v); update(); }
   void setAutoClearExpired(bool v) { autoClearExpired = v; save(PreferKey.autoClearExpired, v); update(); }
@@ -162,8 +132,6 @@ class SettingsProvider extends SettingsProviderBase {
   void setNightBackgroundColor(Color c) { nightBackgroundColor = c; save(PreferKey.cNBackground, c.toARGB32()); update(); }
   void setNightBottomBackgroundColor(Color c) { nightBottomBackgroundColor = c; save(PreferKey.cNBBackground, c.toARGB32()); update(); }
 
-  void setSyncBookProgress(bool v) { syncBookProgress = v; save(PreferKey.syncBookProgress, v); update(); }
-  void setSyncBookProgressPlus(bool v) { syncBookProgressPlus = v; save(PreferKey.syncBookProgressPlus, v); update(); }
   void setOnlyLatestBackup(bool v) { onlyLatestBackup = v; save(PreferKey.onlyLatestBackup, v); update(); }
   void setAutoCheckNewBackup(bool v) { autoCheckNewBackup = v; save(PreferKey.autoCheckNewBackup, v); update(); }
   void setAutoBackup(bool v) { autoBackup = v; save('auto_backup', v); update(); }
@@ -194,7 +162,7 @@ class SettingsProvider extends SettingsProviderBase {
 
   void setLastVersionCode(int v) { lastVersionCode = v; save(PreferKey.lastVersionCode, v); update(); }
 
-  // --- 朗讀與 WebDAV Setter 補全 ---
+  // --- 朗讀 Setter 補全 ---
   void setIgnoreAudioFocusAloud(bool v) { ignoreAudioFocusAloud = v; save('ignore_audio_focus_aloud', v); update(); }
   void setPauseReadAloudWhilePhoneCalls(bool v) { pauseReadAloudWhilePhoneCalls = v; save(PreferKey.pauseReadAloudWhilePhoneCalls, v); update(); }
   void setReadAloudWakeLock(bool v) { readAloudWakeLock = v; save(PreferKey.readAloudWakeLock, v); update(); }
@@ -202,17 +170,7 @@ class SettingsProvider extends SettingsProviderBase {
   void setMediaButtonPerNext(bool v) { mediaButtonPerNext = v; save('media_button_per_next', v); update(); }
   void setReadAloudByPage(bool v) { readAloudByPage = v; save(PreferKey.readAloudByPage, v); update(); }
   void setStreamReadAloudAudio(bool v) { streamReadAloudAudio = v; save(PreferKey.streamReadAloudAudio, v); update(); }
-  void setWebdavSubDir(String v) { webdavSubDir = v; save(PreferKey.webDavDir, v); update(); }
-  void setDeviceName(String v) { deviceName = v; save(PreferKey.webDavDeviceName, v); update(); }
   void setLastBackup(int v) { lastBackup = v; save('last_backup', v); update(); }
-
-  Future<String?> checkWebDavBackupSync() async {
-    final backups = await WebDavService().listBackups();
-    if (backups.isNotEmpty) {
-      return backups.first.name;
-    }
-    return null;
-  }
 
   SettingsProvider() {
     _loadSettings();
@@ -244,16 +202,8 @@ class SettingsProvider extends SettingsProviderBase {
     welcomeShowIconDark = prefs.getBool(PreferKey.welcomeShowIconDark) ?? true;
     launcherIcon = prefs.getString(PreferKey.launcherIcon) ?? '';
     showDiscovery = prefs.getBool(PreferKey.showDiscovery) ?? true;
-    showRss = prefs.getBool(PreferKey.showRss) ?? true;
     showAddToShelfAlert = prefs.getBool(PreferKey.showAddToShelfAlert) ?? true;
 
-    // --- WebDAV ---
-    webdavUrl = prefs.getString(PreferKey.webDavUrl) ?? '';
-    webdavUser = prefs.getString(PreferKey.webDavAccount) ?? '';
-    webdavPassword = prefs.getString(PreferKey.webDavPassword) ?? '';
-    webdavSubDir = prefs.getString(PreferKey.webDavDir) ?? '';
-    deviceName = prefs.getString(PreferKey.webDavDeviceName) ?? '';
-    webdavEnabled = webdavUrl.isNotEmpty && webdavUser.isNotEmpty;
     lastBackup = prefs.getInt('last_backup') ?? 0;
 
     // --- 主題與顯示 ---
@@ -301,8 +251,6 @@ class SettingsProvider extends SettingsProviderBase {
     antiAlias = prefs.getBool(PreferKey.antiAlias) ?? true;
 
     // --- 備份與同步 ---
-    syncBookProgress = prefs.getBool(PreferKey.syncBookProgress) ?? true;
-    syncBookProgressPlus = prefs.getBool(PreferKey.syncBookProgressPlus) ?? false;
     onlyLatestBackup = prefs.getBool(PreferKey.onlyLatestBackup) ?? true;
     autoCheckNewBackup = prefs.getBool(PreferKey.autoCheckNewBackup) ?? true;
     autoBackup = prefs.getBool('auto_backup') ?? false;
@@ -319,9 +267,6 @@ class SettingsProvider extends SettingsProviderBase {
     speechPitch = prefs.getDouble('speech_pitch') ?? 1.0;
     speechVolume = prefs.getDouble('speech_volume') ?? 1.0;
 
-    // --- 服務 ---
-    webServiceWakeLock = prefs.getBool(PreferKey.webServiceWakeLock) ?? true;
-
     notifyListeners();
   }
 
@@ -337,4 +282,5 @@ class SettingsProvider extends SettingsProviderBase {
     notifyListeners();
   }
 }
+
 

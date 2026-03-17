@@ -1,10 +1,6 @@
 import 'dart:async';
 import 'dart:io' as io;
 import 'package:webview_flutter/webview_flutter.dart';
-// Import for Android features if needed
-import 'package:webview_flutter_android/webview_flutter_android.dart';
-// Import for iOS features if needed
-import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'network_service.dart';
 
 /// WebViewManager - 處理網頁挑戰與 Cookie 同步

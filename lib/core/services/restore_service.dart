@@ -9,24 +9,18 @@ import 'package:legado_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:legado_reader/core/database/dao/book_group_dao.dart';
 import 'package:legado_reader/core/database/dao/bookmark_dao.dart';
 import 'package:legado_reader/core/database/dao/read_record_dao.dart';
-import 'package:legado_reader/core/database/dao/rss_source_dao.dart';
-import 'package:legado_reader/core/database/dao/rss_star_dao.dart';
 import 'package:legado_reader/core/database/dao/dict_rule_dao.dart';
 import 'package:legado_reader/core/database/dao/http_tts_dao.dart';
 import 'package:legado_reader/core/database/dao/txt_toc_rule_dao.dart';
 import 'package:legado_reader/core/models/book.dart';
-import 'package:legado_reader/core/models/rss_source.dart';
-import 'package:legado_reader/core/models/rss_star.dart';
 import 'package:legado_reader/core/models/dict_rule.dart';
-import 'package:legado_reader/core/models/http_tts.dart';
-import 'package:legado_reader/core/models/txt_toc_rule.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/replace_rule.dart';
 import 'package:legado_reader/core/models/bookmark.dart';
 import 'package:legado_reader/core/models/read_record.dart';
 import 'package:legado_reader/core/models/book_group.dart';
-import 'package:legado_reader/core/constant/prefer_key.dart';
-import 'backup_aes_service.dart';
+import 'package:legado_reader/core/models/http_tts.dart';
+import 'package:legado_reader/core/models/txt_toc_rule.dart';
 import 'package:legado_reader/core/di/injection.dart';
 
 /// RestoreService - 統一恢復調度器
@@ -42,12 +36,9 @@ class RestoreService {
   final BookGroupDao _groupDao = getIt<BookGroupDao>();
   final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final ReadRecordDao _recordDao = getIt<ReadRecordDao>();
-  final RssSourceDao _rssSourceDao = getIt<RssSourceDao>();
-  final RssStarDao _rssStarDao = getIt<RssStarDao>();
   final DictRuleDao _dictRuleDao = getIt<DictRuleDao>();
   final HttpTtsDao _httpTtsDao = getIt<HttpTtsDao>();
   final TxtTocRuleDao _txtTocRuleDao = getIt<TxtTocRuleDao>();
-  final BackupAESService _aesService = BackupAESService();
 
   /// 從備份包 (ZIP) 恢復所有數據
   Future<bool> restoreFromZip(File zipFile) async {
@@ -102,13 +93,6 @@ class RestoreService {
           case 'readRecord.json':
             await _recordDao.upsert(ReadRecord.fromJson(item));
             break;
-          case 'rssSource.json':
-          case 'rssSources.json':
-            await _rssSourceDao.upsert(RssSource.fromJson(item));
-            break;
-          case 'rssStar.json':
-            await _rssStarDao.upsert(RssStar.fromJson(item));
-            break;
           case 'dictRule.json':
             await _dictRuleDao.upsert(DictRule.fromJson(item));
             break;
@@ -122,11 +106,6 @@ class RestoreService {
             final prefs = await SharedPreferences.getInstance();
             for (final key in item.keys) {
               dynamic val = item[key];
-              if (key == PreferKey.webDavPassword && val != null) {
-                try {
-                  val = await _aesService.decrypt(val.toString());
-                } catch (_) {}
-              }
               if (val is String) {
                 await prefs.setString(key, val);
               } else if (val is int) {

@@ -6,7 +6,6 @@ import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:legado_reader/features/reader/provider/reader_settings_mixin.dart';
 import 'package:legado_reader/features/reader/provider/reader_content_mixin.dart';
-import 'package:legado_reader/core/services/webdav_service.dart';
 import 'package:legado_reader/shared/theme/app_theme.dart';
 import 'package:legado_reader/core/models/bookmark.dart';
 import 'package:legado_reader/core/services/tts_service.dart';
@@ -34,11 +33,6 @@ class ReaderProvider extends ReaderProviderBase with ReaderSettingsMixin, Reader
     await _loadSource();
 
     if (isDisposed) return;
-
-    // 背景同步 WebDAV (不阻塞主 UI)
-    unawaited(WebDavService().isConfigured().then((configured) {
-      if (configured) WebDavService().syncAllBookProgress();
-    }));
 
     await loadChapter(savedChapterIndex);
 
@@ -593,13 +587,6 @@ class ReaderProvider extends ReaderProviderBase with ReaderSettingsMixin, Reader
     TTSService().setLanguage(lang);
     saveSetting('tts_language', lang);
     notifyListeners();
-  }
-
-  Future<void> syncWebDAV() async {
-    final configured = await WebDavService().isConfigured();
-    if (configured) {
-      await WebDavService().syncAllBookProgress();
-    }
   }
 
   // --- TTS 跳轉與功能核心 ---

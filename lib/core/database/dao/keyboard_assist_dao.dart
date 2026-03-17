@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:legado_reader/core/models/keyboard_assist.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// KeyboardAssistDao - 鍵盤輔助操作 (對標 Android KeyboardAssistsDao.kt)
-class KeyboardAssistDao extends BaseDao<KeyboardAssist> {
+class KeyboardAssistDao extends DriftCompatDao<KeyboardAssist> {
   KeyboardAssistDao(AppDatabase appDatabase) : super(appDatabase, 'keyboard_assists');
 
   /// 獲取所有鍵盤輔助 (對標 Android: all)
@@ -46,11 +47,8 @@ class KeyboardAssistDao extends BaseDao<KeyboardAssist> {
     await insertOrUpdate(assist.toJson());
   }
 
-  /// 插入別名，兼容舊代碼
-  Future<void> update(KeyboardAssist assist) => upsert(assist);
-
   /// 刪除指定輔助
   Future<void> deleteAssist(KeyboardAssist assist) async {
-    await delete('`key` = ?', [assist.key]);
+    await deleteRows('`key` = ?', [assist.key]);
   }
 }

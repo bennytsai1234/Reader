@@ -7,7 +7,6 @@ import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/local_book/txt_parser.dart';
 import 'package:legado_reader/core/services/epub_service.dart';
 import 'package:legado_reader/core/services/resource_service.dart';
-import 'package:legado_reader/core/services/encoding_detect.dart';
 
 /// BookshelfProvider 的本地書籍匯入邏輯擴展
 mixin BookshelfImportMixin on BookshelfProviderBase {

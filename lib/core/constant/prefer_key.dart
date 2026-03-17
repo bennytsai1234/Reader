@@ -14,7 +14,6 @@ class PreferKey {
   static const String coverShowAuthor = 'coverShowAuthor';
   static const String coverShowNameN = 'coverShowNameN';
   static const String coverShowAuthorN = 'coverShowAuthorN';
-  static const String remoteServerId = 'remoteServerId';
   static const String hideStatusBar = 'hideStatusBar';
   
   static const String clickActionTL = 'clickActionTopLeft';
@@ -37,7 +36,6 @@ class PreferKey {
   static const String nextKeys = 'nextKeyCodes';
   static const String showDiscovery = 'showDiscovery';
   static const String enableReview = 'enableReview';
-  static const String showRss = 'showRss';
   static const String bookshelfLayout = 'bookshelfLayout';
   static const String bookshelfSort = 'bookshelfSort';
   
@@ -52,16 +50,9 @@ class PreferKey {
   static const String backupPath = 'backupUri';
   static const String restoreIgnore = 'restoreIgnore';
   static const String threadCount = 'threadCount';
-  static const String webPort = 'webPort';
   static const String keepLight = 'keep_light';
-  static const String webService = 'webService';
   
-  static const String webDavUrl = 'web_dav_url';
-  static const String webDavAccount = 'web_dav_account';
-  static const String webDavPassword = 'web_dav_password';
-  static const String webDavDir = 'webDavDir';
   static const String enableCustomExport = 'enableCustomExport';
-  static const String exportToWebDav = 'webDavCacheBackup';
   static const String exportNoChapterName = 'exportNoChapterName';
   static const String exportType = 'exportType';
   static const String exportPictureFile = 'exportPictureFile';
@@ -146,8 +137,6 @@ class PreferKey {
   static const String sourceEditMaxLine = 'sourceEditMaxLine';
   static const String ttsTimer = 'ttsTimer';
   static const String noAnimScrollPage = 'noAnimScrollPage';
-  static const String webDavDeviceName = 'webDavDeviceName';
-  static const String webServiceWakeLock = 'webServiceWakeLock';
   static const String audioPlayWakeLock = 'audioPlayWakeLock';
   static const String readAloudWakeLock = 'readAloudWakeLock';
   static const String showLastUpdateTime = 'showLastUpdateTime';

@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/search_book.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// SearchBookDao - 搜尋書籍快取操作 (對標 Android SearchBookDao.kt)
-class SearchBookDao extends BaseDao<SearchBook> {
+class SearchBookDao extends DriftCompatDao<SearchBook> {
   SearchBookDao(AppDatabase appDatabase) : super(appDatabase, 'search_books');
 
   /// 根據 URL 獲取搜尋書籍 (對標 Android: getSearchBook)
@@ -108,16 +108,14 @@ class SearchBookDao extends BaseDao<SearchBook> {
 
   /// 清除特定書籍的搜尋快取 (對標 Android: clear)
   Future<void> clearCache(String name, String author) async {
-    await delete('name = ? AND author = ?', [name, author]);
+    await deleteRows('name = ? AND author = ?', [name, author]);
   }
 
   /// 清除過期快取 (對標 Android: clearExpired)
   Future<void> clearExpired(int time) async {
-    await delete('addTime < ?', [time]);
+    await deleteRows('addTime < ?', [time]);
   }
 
   /// 清空所有
-  Future<void> clearAll() async {
-    await clear();
-  }
+  Future<int> clearAll() => super.clearAll();
 }

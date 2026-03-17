@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/dict_rule.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// DictRuleDao - SQLite 實作 (對標 Android DictRuleDao.kt)
-class DictRuleDao extends BaseDao<DictRule> {
+class DictRuleDao extends DriftCompatDao<DictRule> {
   DictRuleDao(AppDatabase appDatabase) : super(appDatabase, 'dict_rules');
 
   /// 獲取所有字典規則 (對標 Android: all)
@@ -67,6 +67,6 @@ class DictRuleDao extends BaseDao<DictRule> {
 
   /// 根據名稱刪除
   Future<void> deleteByName(String name) async {
-    await delete('name = ?', [name]);
+    await deleteRows('name = ?', [name]);
   }
 }

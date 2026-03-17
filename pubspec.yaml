@@ -21,7 +21,9 @@ dependencies:
   convert: ^3.1.1
 
   # === Database ===
-  sqflite: ^2.4.1
+  drift: ^2.22.0
+  drift_flutter: ^0.2.4
+  sqlite3_flutter_libs: ^0.5.0
   path: ^1.9.0
   path_provider: ^2.1.5
 
@@ -119,6 +121,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 
   build_runner: ^2.4.13
+  drift_dev: ^2.22.0
 
 flutter:
   uses-material-design: true

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:legado_reader/features/reader/reader_provider.dart';
+import 'package:legado_reader/core/constant/page_anim.dart';
 import 'package:legado_reader/shared/theme/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'setting_components.dart';
@@ -82,10 +83,9 @@ class InterfaceSettingSheet extends StatelessWidget {
           Wrap(
             spacing: 8,
             children: [
-              SettingComponents.buildChoiceChip(label: '平移', value: 0, groupValue: provider.pageTurnMode, onSelected: provider.setPageTurnMode),
-              SettingComponents.buildChoiceChip(label: '覆蓋', value: 1, groupValue: provider.pageTurnMode, onSelected: provider.setPageTurnMode),
-              SettingComponents.buildChoiceChip(label: '滾動', value: 2, groupValue: provider.pageTurnMode, onSelected: provider.setPageTurnMode),
-              SettingComponents.buildChoiceChip(label: '無', value: 3, groupValue: provider.pageTurnMode, onSelected: provider.setPageTurnMode),
+              SettingComponents.buildChoiceChip(label: '平移', value: PageAnim.slide, groupValue: provider.pageTurnMode, onSelected: provider.setPageTurnMode),
+              SettingComponents.buildChoiceChip(label: '覆蓋', value: PageAnim.cover, groupValue: provider.pageTurnMode, onSelected: provider.setPageTurnMode),
+              SettingComponents.buildChoiceChip(label: '滾動', value: PageAnim.scroll, groupValue: provider.pageTurnMode, onSelected: provider.setPageTurnMode),
             ],
           ),
           const Divider(height: 32),

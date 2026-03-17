@@ -1,9 +1,9 @@
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/read_record.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// ReadRecordDao - SQLite 實作 (對標 Android ReadRecordDao.kt)
-class ReadRecordDao extends BaseDao<ReadRecord> {
+class ReadRecordDao extends DriftCompatDao<ReadRecord> {
   ReadRecordDao(AppDatabase appDatabase) : super(appDatabase, 'read_records');
 
   /// 獲取所有閱讀記錄 (對標 Android: allTime)
@@ -74,9 +74,9 @@ class ReadRecordDao extends BaseDao<ReadRecord> {
 
   /// 根據名稱刪除 (對標 Android: deleteByName)
   Future<void> deleteByName(String bookName) async {
-    await delete('bookName = ?', [bookName]);
+    await deleteRows('bookName = ?', [bookName]);
   }
 
   /// 清空別名
-  Future<void> clearAll() => clear();
+  Future<int> clearAll() => super.clearAll();
 }

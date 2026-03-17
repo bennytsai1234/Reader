@@ -60,14 +60,6 @@ class SettingsPage extends StatelessWidget {
               
               // --- 顯示與服務 ---
               _buildThemeModeTile(context, settings),
-              _buildSwitchTile(
-                context,
-                icon: Icons.wifi_tethering,
-                title: 'Web服務',
-                summary: '在同一區域網路下管理書源與書籍',
-                value: settings.webServiceEnabled,
-                onChanged: (val) => settings.setWebServiceEnabled(val),
-              ),
 
               // --- 設定分類 ---
               _buildCategoryHeader(context, '設定'),
@@ -158,16 +150,6 @@ class SettingsPage extends StatelessWidget {
       title: Text(title, style: const TextStyle(fontSize: 16)),
       subtitle: summary != null ? Text(summary, style: const TextStyle(fontSize: 13)) : null,
       onTap: onTap,
-    );
-  }
-
-  Widget _buildSwitchTile(BuildContext context, {required IconData icon, required String title, required String summary, required bool value, required ValueChanged<bool> onChanged}) {
-    return SwitchListTile(
-      secondary: Icon(icon, color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7)),
-      title: Text(title, style: const TextStyle(fontSize: 16)),
-      subtitle: Text(summary, style: const TextStyle(fontSize: 13)),
-      value: value,
-      onChanged: onChanged,
     );
   }
 

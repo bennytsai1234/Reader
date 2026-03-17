@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/http_tts.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// HttpTtsDao - SQLite 實作 (對標 Android HttpTTSDao.kt)
-class HttpTtsDao extends BaseDao<HttpTTS> {
+class HttpTtsDao extends DriftCompatDao<HttpTTS> {
   HttpTtsDao(AppDatabase appDatabase) : super(appDatabase, 'http_tts');
 
   /// 獲取所有 TTS 規則 (對標 Android: all)
@@ -20,7 +20,7 @@ class HttpTtsDao extends BaseDao<HttpTTS> {
   /// 獲取總數
   Future<int> getCount() async {
     final client = await db;
-    return Sqflite.firstIntValue(await client.rawQuery('SELECT COUNT(*) FROM $tableName')) ?? 0;
+    return driftFirstIntValue(await client.rawQuery('SELECT COUNT(*) FROM $tableName')) ?? 0;
   }
 
   /// 根據 ID 獲取
@@ -76,11 +76,11 @@ class HttpTtsDao extends BaseDao<HttpTTS> {
 
   /// 根據 ID 刪除
   Future<void> deleteById(int id) async {
-    await delete('id = ?', [id]);
+    await deleteRows('id = ?', [id]);
   }
 
   /// 刪除預設規則
   Future<void> deleteDefault() async {
-    await delete('id < 0');
+    await deleteRows('id < 0');
   }
 }

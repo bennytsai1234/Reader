@@ -1,11 +1,11 @@
-import 'package:sqflite/sqflite.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/book_group.dart';
 import 'package:legado_reader/core/constant/book_type.dart';
+import 'drift_compat_dao.dart';
 import '../app_database.dart';
 
 /// BookDao - SQLite 實作 (對標 Android BookDao.kt)
-class BookDao extends BaseDao<Book> {
+class BookDao extends DriftCompatDao<Book> {
   BookDao(AppDatabase appDatabase) : super(appDatabase, 'books');
 
   /// 獲取所有書籍 (對標 Android: all)
