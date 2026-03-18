@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:legado_reader/core/constant/page_anim.dart';
 import '../reader_provider.dart';
 import '../engine/page_view_widget.dart';
@@ -19,10 +20,11 @@ class ReaderViewBuilder extends StatefulWidget {
   State<ReaderViewBuilder> createState() => _ReaderViewBuilderState();
 }
 
-class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
+class _ReaderViewBuilderState extends State<ReaderViewBuilder> with SingleTickerProviderStateMixin {
   late ScrollController _scrollController;
   bool _isUserScrolling = false;
-  Timer? _autoScrollTimer;
+  Ticker? _autoScrollTicker;
+  Duration _lastTickTime = Duration.zero;
   Timer? _userScrollResetTimer;
   int _lastTtsScrolledStart = -1;
   int _lastKnownPagesLength = 0;
@@ -116,8 +118,9 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
   }
 
   void _startScrollAutoPage() {
-    if (_autoScrollTimer != null) return;
-    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+    if (_autoScrollTicker != null) return;
+    _lastTickTime = Duration.zero;
+    _autoScrollTicker = createTicker((elapsed) {
       if (!mounted) {
         _stopScrollAutoPage();
         return;
@@ -131,8 +134,18 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
 
       final viewSize = p.viewSize;
       if (viewSize == null) return;
+      
+      if (_lastTickTime == Duration.zero) {
+        _lastTickTime = elapsed;
+        return;
+      }
+      
+      final dtSeconds = (elapsed.inMicroseconds - _lastTickTime.inMicroseconds) / 1000000.0;
+      _lastTickTime = elapsed;
 
-      final tickDelta = (viewSize.height / p.autoPageSpeed.clamp(1.0, 600.0)) * 0.016;
+      final velocity = viewSize.height / p.autoPageSpeed.clamp(1.0, 600.0);
+      final tickDelta = velocity * dtSeconds;
+      
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.offset;
 
@@ -144,11 +157,13 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
         p.nextChapter();
       }
     });
+    _autoScrollTicker!.start();
   }
 
   void _stopScrollAutoPage() {
-    _autoScrollTimer?.cancel();
-    _autoScrollTimer = null;
+    _autoScrollTicker?.stop();
+    _autoScrollTicker?.dispose();
+    _autoScrollTicker = null;
   }
 
   void _handleScroll() {
