@@ -26,6 +26,7 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
   Timer? _userScrollResetTimer;
   int _lastTtsScrolledStart = -1;
   int _lastKnownPagesLength = 0;
+  final Key _centerKey = const ValueKey('center_sliver');
 
   @override
   void initState() {
@@ -34,21 +35,11 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
     _scrollController.addListener(_handleScroll);
     widget.provider.addListener(_onProviderStateChanged);
 
-    widget.provider.scrollTrimAdjustController.stream.listen((upBy) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scrollController.hasClients) {
-          final target = (_scrollController.offset - upBy)
-              .clamp(0.0, _scrollController.position.maxScrollExtent);
-          _scrollController.jumpTo(target);
-        }
-      });
-    });
-
     widget.provider.scrollOffsetController.stream.listen((offset) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
+          final double pastExtent = _getPastExtent();
           if (offset >= 999999) {
-            // 程式性跳至章節末：暫時抑制 _handleScroll 的邊界觸發
             _isUserScrolling = true;
             _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
             Future.microtask(() {
@@ -57,24 +48,10 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
                  widget.provider.isRestoring = false;
                }
             });
-          } else if (offset < 0) {
-            // 合併章節後的捲動補償（使用者觸發的邊界載入），不抑制
-            final double targetScroll = _scrollController.offset + offset.abs();
-            _scrollController.jumpTo(targetScroll);
-          } else if (offset > 0) {
-            // 程式性恢復位置（_applyPendingRestore）：暫時抑制
-            _isUserScrolling = true;
-            _scrollController.jumpTo(offset.clamp(0.0, _scrollController.position.maxScrollExtent));
-            Future.microtask(() {
-               if (mounted) {
-                 _isUserScrolling = false;
-                 widget.provider.isRestoring = false;
-               }
-            });
           } else {
-            // offset == 0：非合併章節跳轉至起始，暫時抑制（否則立刻觸發 prevChapter）
+            final double sliverY = offset - pastExtent;
             _isUserScrolling = true;
-            _scrollController.jumpTo(0);
+            _scrollController.jumpTo(sliverY.clamp(_scrollController.position.minScrollExtent, _scrollController.position.maxScrollExtent + 100)); // allow beyond slightly
             Future.microtask(() {
                if (mounted) {
                  _isUserScrolling = false;
@@ -96,6 +73,18 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
     super.dispose();
   }
 
+  double _getPastExtent() {
+    final p = widget.provider;
+    if (p.pages.isEmpty || p.pivotChapterIndex < 0) return 0.0;
+    
+    double pastHeight = 0;
+    for (int i = 0; i < p.pages.length; i++) {
+      if (p.pages[i].chapterIndex >= p.pivotChapterIndex) break;
+      pastHeight += p.pages[i].lines.isEmpty ? 0 : p.pages[i].lines.last.lineBottom;
+    }
+    return pastHeight;
+  }
+
   void _onProviderStateChanged() {
     if (!mounted) return;
     final p = widget.provider;
@@ -113,6 +102,7 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
 
     if (p.pageTurnMode == PageAnim.scroll) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // In case layout changed extent, we want to immediately check bounds
         if (mounted) _handleScroll();
       });
     }
@@ -165,16 +155,21 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
     if (widget.provider.pageTurnMode == PageAnim.scroll) {
       if (_scrollController.hasClients) {
         final double maxScroll = _scrollController.position.maxScrollExtent;
+        final double minScroll = _scrollController.position.minScrollExtent;
         final double currentScroll = _scrollController.position.pixels;
-        widget.provider.updateScrollOffset(currentScroll);
+        
+        final double pastExtent = _getPastExtent();
+        final double virtualY = currentScroll + pastExtent;
+        
+        widget.provider.updateScrollOffset(virtualY);
 
         if (_isUserScrolling || widget.provider.isRestoring) return;
 
         final firstPage = widget.provider.pages.firstOrNull;
         final lastPage = widget.provider.pages.lastOrNull;
-        _updateScrollPageIndex(currentScroll);
+        _updateScrollPageIndex(virtualY);
 
-        if (currentScroll <= 50 && !widget.provider.isLoading && firstPage != null && firstPage.chapterIndex > 0) {
+        if (currentScroll <= minScroll + 50 && !widget.provider.isLoading && firstPage != null && firstPage.chapterIndex > 0) {
            _isUserScrolling = true;
            widget.provider.prevChapter().then((_) {
              if (mounted) _isUserScrolling = false;
@@ -192,7 +187,7 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
     }
   }
 
-  void _updateScrollPageIndex(double currentScroll) {
+  void _updateScrollPageIndex(double virtualY) {
     final provider = widget.provider;
     if (provider.pages.isEmpty) return;
     final firstPage = provider.pages.firstOrNull;
@@ -202,7 +197,7 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
       final page = provider.pages[i];
       final double pageHeight = page.lines.isEmpty ? 0 : page.lines.last.lineBottom;
       cumHeight += pageHeight;
-      if (currentScroll < cumHeight) {
+      if (virtualY < cumHeight) {
         provider.updateScrollPageIndex(i);
         return;
       }
@@ -225,12 +220,15 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
         if (line.image != null) continue;
         final lEnd = line.chapterPosition + line.text.length;
         if (provider.ttsStart >= line.chapterPosition && provider.ttsStart < lEnd) {
-          final lineTop = headOffset + cumHeight + line.lineTop;
+          final virtualLineTop = headOffset + cumHeight + line.lineTop;
+          final pastExtent = _getPastExtent();
+          final sliverLineTop = virtualLineTop - pastExtent;
+          
           final viewportH = _scrollController.position.viewportDimension;
           final currentOffset = _scrollController.offset;
           final comfortZoneBottom = currentOffset + viewportH * 0.65;
-          if (lineTop < currentOffset || lineTop > comfortZoneBottom) {
-            final target = (lineTop - viewportH * 0.25).clamp(0.0, _scrollController.position.maxScrollExtent);
+          if (sliverLineTop < currentOffset || sliverLineTop > comfortZoneBottom) {
+            final target = (sliverLineTop - viewportH * 0.25).clamp(_scrollController.position.minScrollExtent, _scrollController.position.maxScrollExtent);
             final distance = (target - currentOffset).abs();
             if (distance > viewportH * 0.5) {
               _scrollController.animateTo(target, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
@@ -263,7 +261,6 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
           return Container(color: provider.currentTheme.backgroundColor, child: Center(child: Text('暫無內容', style: TextStyle(color: provider.currentTheme.textColor.withAlpha(128)))));
         }
 
-        // 關鍵：如果正在恢復進度且頁面已載入，確保跳轉到正確位置
         if (provider.isRestoring && provider.pages.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (provider.pageTurnMode != PageAnim.scroll && widget.pageController.hasClients) {
@@ -310,14 +307,12 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
         
         p.onPageChanged(i);
 
-        // 邊界觸發：距離末尾剩 1 頁時預載/合併下一章
         if (i >= itemCount - 1) {
           final lastPage = p.pages.lastOrNull;
           if (lastPage != null && lastPage.chapterIndex < p.chapters.length - 1) {
             p.nextChapter();
           }
         }
-        // 邊界觸發：在第一頁時預載/合併上一章
         if (i <= 0) {
           final firstPage = p.pages.firstOrNull;
           if (firstPage != null && firstPage.chapterIndex > 0) {
@@ -361,10 +356,15 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
   }
 
   Widget _buildScrollReader() {
-    final firstPage = widget.provider.pages.firstOrNull;
-    final lastPage = widget.provider.pages.lastOrNull;
-    final showHead = firstPage != null && firstPage.chapterIndex > 0;
-    final showTail = lastPage != null && lastPage.chapterIndex < widget.provider.chapters.length - 1;
+    final p = widget.provider;
+    final int splitIndex = p.pivotChapterIndex < 0 ? 0 : p.pages.indexWhere((page) => page.chapterIndex >= p.pivotChapterIndex);
+    final int safeSplitIndex = splitIndex < 0 ? 0 : splitIndex;
+    
+    final pastPages = p.pages.sublist(0, safeSplitIndex);
+    final futurePages = p.pages.sublist(safeSplitIndex);
+
+    final showHead = pastPages.isNotEmpty ? pastPages.first.chapterIndex > 0 : (futurePages.isNotEmpty && futurePages.first.chapterIndex > 0);
+    final showTail = p.pages.isNotEmpty && p.pages.last.chapterIndex < p.chapters.length - 1;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -379,33 +379,68 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
         }
         return false;
       },
-      child: ListView.separated(
+      child: CustomScrollView(
         controller: _scrollController,
-        padding: EdgeInsets.zero,
-        itemCount: widget.provider.pages.length + (showHead ? 1 : 0) + (showTail ? 1 : 0),
-        separatorBuilder: (ctx, i) => const SizedBox.shrink(),
-        itemBuilder: (ctx, i) {
-          if (showHead && i == 0) return _buildScrollLoadingHead();
-          final actualIndex = showHead ? i - 1 : i;
-          if (showTail && actualIndex == widget.provider.pages.length) return _buildScrollLoadingTail();
-          if (actualIndex < 0 || actualIndex >= widget.provider.pages.length) return const SizedBox.shrink();
-
-          final page = widget.provider.pages[actualIndex];
-          return SizedBox(
-            height: page.lines.isEmpty ? 0 : page.lines.last.lineBottom,
-            child: PageViewWidget(
-              page: page,
-              contentStyle: _getContentStyle(),
-              titleStyle: _getTitleStyle(),
-              isScrollMode: true,
-              paddingTop: 0,
-              paddingBottom: 0,
-              ttsStart: widget.provider.ttsStart,
-              ttsEnd: widget.provider.ttsEnd,
-              ttsChapterIndex: widget.provider.ttsChapterIndex,
+        center: _centerKey,
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          if (pastPages.isNotEmpty || showHead)
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (ctx, i) {
+                  if (showHead && i == pastPages.length) return _buildScrollLoadingHead();
+                  if (i >= pastPages.length) return const SizedBox.shrink();
+                  
+                  final actualIndex = pastPages.length - 1 - i;
+                  final page = pastPages[actualIndex];
+                  return SizedBox(
+                    height: page.lines.isEmpty ? 0 : page.lines.last.lineBottom,
+                    child: PageViewWidget(
+                      page: page,
+                      contentStyle: _getContentStyle(),
+                      titleStyle: _getTitleStyle(),
+                      isScrollMode: true,
+                      paddingTop: 0,
+                      paddingBottom: 0,
+                      ttsStart: widget.provider.ttsStart,
+                      ttsEnd: widget.provider.ttsEnd,
+                      ttsChapterIndex: widget.provider.ttsChapterIndex,
+                    ),
+                  );
+                },
+                childCount: pastPages.length + (showHead ? 1 : 0),
+              ),
             ),
-          );
-        },
+          SliverList(
+            key: _centerKey,
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) {
+                if (showHead && pastPages.isEmpty && i == 0) return _buildScrollLoadingHead();
+                
+                final actualIndex = (showHead && pastPages.isEmpty) ? i - 1 : i;
+                if (showTail && actualIndex == futurePages.length) return _buildScrollLoadingTail();
+                if (actualIndex < 0 || actualIndex >= futurePages.length) return const SizedBox.shrink();
+
+                final page = futurePages[actualIndex];
+                return SizedBox(
+                  height: page.lines.isEmpty ? 0 : page.lines.last.lineBottom,
+                  child: PageViewWidget(
+                    page: page,
+                    contentStyle: _getContentStyle(),
+                    titleStyle: _getTitleStyle(),
+                    isScrollMode: true,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    ttsStart: widget.provider.ttsStart,
+                    ttsEnd: widget.provider.ttsEnd,
+                    ttsChapterIndex: widget.provider.ttsChapterIndex,
+                  ),
+                );
+              },
+              childCount: futurePages.length + (showTail ? 1 : 0) + ((showHead && pastPages.isEmpty) ? 1 : 0),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -424,8 +459,6 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> {
   }
 
   Widget _buildScrollLoadingHead() {
-    // 高度固定為 2px，配合 _scrollHeadOffset = 2.0 的位置計算
-    // 作為一條細線視覺指示器，不佔用大量空間以免干擾位置精度
     return SizedBox(
       height: 2,
       child: Container(
