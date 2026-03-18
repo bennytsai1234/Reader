@@ -19,6 +19,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   /// 替換規則快取：閱讀會話中規則不變，避免每章重複查詢資料庫
   List<Map<String, dynamic>>? _cachedRulesJson;
 
+  /// 靜默預載排序 Queue 與執行狀態
+  final List<int> _preloadQueue = [];
+  bool _isPreloadingQueueActive = false;
+
   /// 章節加載 Completer：協調主加載與靜默預載入，避免同一章節並發重複請求
   final Map<int, Completer<void>> _loadCompleters = {};
 
@@ -132,10 +136,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     try {
       final res = await fetchChapterData(i);
       if (isDisposed) return;
-      chapterContentCache[i] = res.content;
+      _saveContentCache(i, res.content);
       chapterCache.remove(i);
 
-      final newPages = await _paginateInternal(i);
+      final newPages = _paginateInternal(i);
       if (isDisposed) return;
 
       if (newPages.isEmpty) {
@@ -146,16 +150,6 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       chapterCache[i] = newPages;
 
       _performChapterTransition(i, fromEnd, shouldMerge);
-
-      // 更新 DB 與 in-memory book 物件，確保書架下次開書時使用最新章節位置
-      // 如果正在恢復進度，不要覆蓋原本的 durChapterPos 為 0
-      if (!isRestoring) {
-        book.durChapterIndex = currentChapterIndex;
-        book.durChapterPos = 0;
-        book.durChapterTitle = chapters[i].title;
-        unawaited(bookDao.updateProgress(book.bookUrl, currentChapterIndex, chapters[i].title, 0));
-      }
-
       _preloadNeighborChaptersSilently();
     } catch (e) {
       debugPrint('Reader: Load chapter $i failed: $e');
@@ -169,12 +163,40 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     final firstIdx = pages.firstOrNull?.chapterIndex;
     final lastIdx = pages.lastOrNull?.chapterIndex;
 
+    // 清空舊列隊，準備根據最新方向與視窗範圍重建
+    _preloadQueue.clear();
+
+    if (lastIdx != null && lastIdx < chapters.length - 1) {
+      if (!chapterCache.containsKey(lastIdx + 1)) _preloadQueue.add(lastIdx + 1);
+      if (lastIdx + 1 < chapters.length - 1 && !chapterCache.containsKey(lastIdx + 2)) {
+        _preloadQueue.add(lastIdx + 2);
+      }
+    }
     if (firstIdx != null && firstIdx > 0 && !chapterCache.containsKey(firstIdx - 1)) {
-      unawaited(_preloadChapterSilently(firstIdx - 1));
+      _preloadQueue.add(firstIdx - 1);
     }
-    if (lastIdx != null && lastIdx < chapters.length - 1 && !chapterCache.containsKey(lastIdx + 1)) {
-      unawaited(_preloadChapterSilently(lastIdx + 1));
+
+    // 依照距離 currentChapterIndex 從近到遠排序，自動體現閱讀方向優先權
+    _preloadQueue.sort((a, b) => (a - currentChapterIndex).abs().compareTo((b - currentChapterIndex).abs()));
+
+    _processPreloadQueue();
+  }
+
+  Future<void> _processPreloadQueue() async {
+    if (_isPreloadingQueueActive || _preloadQueue.isEmpty) return;
+    _isPreloadingQueueActive = true;
+
+    while (_preloadQueue.isNotEmpty) {
+      if (isDisposed) break;
+      final target = _preloadQueue.removeAt(0);
+
+      // 如果已因為其他動作（如使用者手動點擊）被載入則跳過
+      if (chapterCache.containsKey(target) || loadingChapters.contains(target)) continue;
+      
+      await _preloadChapterSilently(target);
     }
+
+    _isPreloadingQueueActive = false;
   }
 
   Future<void> _preloadChapterSilently(int i) async {
@@ -187,8 +209,8 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     try {
       final res = await fetchChapterData(i);
       if (isDisposed) return;
-      chapterContentCache[i] = res.content;
-      final newPages = await _paginateInternal(i);
+      _saveContentCache(i, res.content);
+      final newPages = _paginateInternal(i);
       if (isDisposed) return;
       chapterCache[i] = newPages;
     } catch (e) {
@@ -242,49 +264,41 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     }
   }
 
-  double _calculatePagesHeight(List<TextPage> pageList) {
-    double total = 0;
-    final bool isScrollMode = (pageTurnMode == PageAnim.scroll);
-    for (int i = 0; i < pageList.length; i++) {
-      final page = pageList[i];
-      // 捲動模式下，頁面高度即為最後一行底部；分頁模式則維持原樣（含 padding）
-      final double h = page.lines.isEmpty ? 0 : (isScrollMode ? page.lines.last.lineBottom : page.lines.last.lineBottom + 40.0);
-      total += h;
-    }
-    return total;
-  }
-
-  /// 修剪頁面視窗至最多 5 個章節，回傳從頂部移除的總像素高度（供捲動補償）
-  /// 【修復】只清除 chapterCache（分頁結果），保留 chapterContentCache（原始內容），回翻時不需重新下載
-  double _trimPagesWindow() {
+  /// 修剪頁面視窗至最多 5 個章節
+  /// 只清除 chapterCache（分頁結果），保留 chapterContentCache（原始內容），回翻時不需重新下載
+  void _trimPagesWindow() {
     final chapterIndexes = pages.map((p) => p.chapterIndex).toSet().toList()..sort();
-    double removedTopHeight = 0;
-    
+
     while (chapterIndexes.length > 5) {
       final first = chapterIndexes.first;
       final last = chapterIndexes.last;
       final removeFirst = (currentChapterIndex - first).abs() >= (last - currentChapterIndex).abs();
       final toRemove = removeFirst ? first : last;
 
-      if (removeFirst) {
-        // 計算即將移除的頂部頁面高度
-        final removedPages = pages.where((p) => p.chapterIndex == toRemove).toList();
-        removedTopHeight += _calculatePagesHeight(removedPages);
-      }
-
       pages.removeWhere((p) => p.chapterIndex == toRemove);
       chapterCache.remove(toRemove);
-      // 【修復】不再清除 chapterContentCache，保留原始內容方便回翻時快速重新分頁
       if (removeFirst) {
         chapterIndexes.removeAt(0);
       } else {
         chapterIndexes.removeLast();
       }
     }
-    return removedTopHeight;
   }
 
-  Future<List<TextPage>> _paginateInternal(int i) async {
+  /// 距離驅逐法的最高容量：防堵歷史記憶體洩漏
+  void _saveContentCache(int index, String content) {
+    chapterContentCache[index] = content;
+    const maxSize = 15; // 限制至多保留 15 個章節的原始字串
+    if (chapterContentCache.length > maxSize) {
+      // 找出離 currentChapterIndex 最遠的章節移除
+      final farthest = chapterContentCache.keys.reduce((a, b) => 
+        (a - currentChapterIndex).abs() > (b - currentChapterIndex).abs() ? a : b
+      );
+      chapterContentCache.remove(farthest);
+    }
+  }
+
+  List<TextPage> _paginateInternal(int i) {
     if (viewSize == null || viewSize!.width <= 0 || viewSize!.height <= 0) return [];
     final (ts, cs) = _buildTextStyles();
     return ChapterProvider.paginate(
