@@ -42,6 +42,7 @@ abstract class ReaderProviderBase extends ChangeNotifier {
 
   bool showControls = false;
   int scrubbingChapterIndex = -1;
+  int pivotChapterIndex = -1; // 捲動模式的雙向 SliverList 中心錨點章節
 
   /// 新增：是否正在恢復閱讀進度（跳轉中）
   bool isRestoring = false;
