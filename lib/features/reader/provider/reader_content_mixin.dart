@@ -22,12 +22,22 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   /// 章節加載 Completer：協調主加載與靜默預載入，避免同一章節並發重複請求
   final Map<int, Completer<void>> _loadCompleters = {};
 
+  /// 重新分頁時的進度恢復回調
+  /// 由 ReaderProgressMixin 注入，避免 (this as dynamic) 呼叫
+  int Function(double scrollY)? getCharOffsetForScrollYFn;
+  void Function({int? charOffset, int? pageIndex, bool isRestoringJump})? jumpToPositionFn;
+  void Function()? applyPendingRestoreFn;
+
   (TextStyle, TextStyle) _buildTextStyles() {
     final currentTheme = AppTheme.readingThemes[themeIndex.clamp(0, AppTheme.readingThemes.length - 1)];
     final ts = TextStyle(fontSize: fontSize + 4, fontWeight: FontWeight.bold, color: currentTheme.textColor, letterSpacing: letterSpacing);
     final cs = TextStyle(fontSize: fontSize, height: lineHeight, color: currentTheme.textColor, letterSpacing: letterSpacing);
     return (ts, cs);
   }
+
+  /// 最後一次已知的滾動位置（由 ReaderProgressMixin 的 lastScrollY 同步）
+  double _lastKnownScrollY = 0.0;
+  set lastKnownScrollY(double v) => _lastKnownScrollY = v;
 
   Future<void> doPaginate({bool fromEnd = false}) async {
     final chapterContent = chapterContentCache[currentChapterIndex];
@@ -43,7 +53,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
 
     try {
       // 關鍵修復：在重新分頁前，記住當前看到的字元位置
-      final int oldCharOffset = (this as dynamic)._getCharOffsetForScrollY((this as dynamic)._lastScrollY);
+      final int oldCharOffset = getCharOffsetForScrollYFn?.call(_lastKnownScrollY) ?? 0;
 
       final (ts, cs) = _buildTextStyles();
       pages = ChapterProvider.paginate(
@@ -63,10 +73,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
 
       if (fromEnd) {
         currentPageIndex = (pages.length - 1).clamp(0, 999);
-        (this as dynamic)._jumpToPosition(pageIndex: currentPageIndex);
+        jumpToPositionFn?.call(pageIndex: currentPageIndex);
       } else {
         // 重新分頁後，嘗試尋回剛才看到的那個字元，而不是直接跳回第 0 頁
-        (this as dynamic)._jumpToPosition(charOffset: oldCharOffset);
+        jumpToPositionFn?.call(charOffset: oldCharOffset);
       }
     } catch (e, stack) {
       debugPrint('Reader: Paginate fatal error: $e\n$stack');
@@ -200,19 +210,13 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       if (!alreadyExists) {
          if (targetIndex > currentChapterIndex) {
            pages = [...pages, ...newPages];
-           final double topTrimHeight = _trimPagesWindow();
-           // 從頂部移除章節頁面後，需向上偏移等量像素才能維持視覺位置
-           if (isScrollMode && topTrimHeight > 0) scrollTrimAdjustController.add(topTrimHeight);
+           _trimPagesWindow();
          } else {
-           final double addedHeight = _calculatePagesHeight(newPages);
            final int addedPageCount = newPages.length;
            pages = [...newPages, ...pages];
-           final double topTrimHeight = _trimPagesWindow();
+           _trimPagesWindow();
            
-           if (isScrollMode) {
-             // 預付頂部增加高度，再扣掉因 trim 從頂部移除的高度
-             scrollOffsetController.add(-(addedHeight - topTrimHeight));
-           } else {
+           if (!isScrollMode) {
              // 分頁模式：頂部插入了頁面，需要同步 jump 到新的索引位置以保持視覺連貫
              currentPageIndex += addedPageCount;
              jumpPageController.add(currentPageIndex);
@@ -229,11 +233,11 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     } else {
       pages = newPages;
       currentChapterIndex = targetIndex;
-      // 正在恢復進度時，交由 _applyPendingRestore 處理定位
+      pivotChapterIndex = targetIndex; // 重置錨點章節
+      // 正在恢復進度時，交由 applyPendingRestore 處理定位
       if (!isRestoring) {
         final targetPage = fromEnd ? (pages.length - 1).clamp(0, 9999) : 0;
-        // 調用 ReaderProvider 中統一的跳轉定位邏輯
-        (this as dynamic)._jumpToPosition(pageIndex: targetPage);
+        jumpToPositionFn?.call(pageIndex: targetPage);
       }
     }
   }
@@ -251,6 +255,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   }
 
   /// 修剪頁面視窗至最多 5 個章節，回傳從頂部移除的總像素高度（供捲動補償）
+  /// 【修復】只清除 chapterCache（分頁結果），保留 chapterContentCache（原始內容），回翻時不需重新下載
   double _trimPagesWindow() {
     final chapterIndexes = pages.map((p) => p.chapterIndex).toSet().toList()..sort();
     double removedTopHeight = 0;
@@ -269,7 +274,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
 
       pages.removeWhere((p) => p.chapterIndex == toRemove);
       chapterCache.remove(toRemove);
-      chapterContentCache.remove(toRemove);
+      // 【修復】不再清除 chapterContentCache，保留原始內容方便回翻時快速重新分頁
       if (removeFirst) {
         chapterIndexes.removeAt(0);
       } else {
@@ -383,9 +388,3 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     if (target >= 0) await loadChapter(target, fromEnd: true); 
   }
 }
-
-
-
-
-
-
