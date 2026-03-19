@@ -149,21 +149,25 @@ class ReaderProvider extends ReaderProviderBase
         saveProgress(currentChapterIndex, i);
       }
 
-      // 積極預載入：剩餘 2 頁時即開始加載下一章
+      // Fix6: 使用靜默路徑預載（不加入 loadingChapters，不顯示轉圈）
       if (i >= pages.length - 2 && !isLoading) {
         final lastPage = pages.lastOrNull;
         if (lastPage != null && lastPage.chapterIndex < chapters.length - 1) {
-          unawaited(_preloadChapterSilently(lastPage.chapterIndex + 1));
+          unawaited(_triggerSlidePreload(lastPage.chapterIndex + 1));
         }
       }
     }
   }
 
-  /// 靜默預載入章節
-  Future<void> _preloadChapterSilently(int chapterIndex) async {
+  /// Fix6: 用正確的靜默路徑預載 slide 模式中接近尾端的下一章
+  /// 之前的實作呼叫 loadChapter()（主加載路徑），會加入 loadingChapters 並顯示轉圈，
+  /// 且繞過 ReaderContentMixin 的 silentLoadingChapters / Completer 保護機制。
+  /// 現在改為展開 _preloadNeighborChaptersSilently 的佇列安排，統一由靜默路徑處理。
+  Future<void> _triggerSlidePreload(int chapterIndex) async {
     if (chapterIndex < 0 || chapterIndex >= chapters.length) return;
-    if (chapterCache.containsKey(chapterIndex) || silentLoadingChapters.contains(chapterIndex)) return;
-    await (this as ReaderContentMixin).loadChapter(chapterIndex);
+    if (chapterCache.containsKey(chapterIndex) || silentLoadingChapters.contains(chapterIndex) || loadingChapters.contains(chapterIndex)) return;
+    // 使用 ReaderContentMixin 的公開入口（統一靜默路徑，不顯示轉圈）
+    triggerSilentPreload();
   }
 
   @override

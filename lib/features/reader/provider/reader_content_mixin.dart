@@ -119,7 +119,11 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
         loadingChapters.remove(i);
         if (isDisposed) return;
         if (chapterCache.containsKey(i)) {
-          _performChapterTransition(i, fromEnd, shouldMerge);
+          // Fix7: await 後重新計算 shouldMerge——靜默合併可能在等待期間改變了 pages 邊界
+          final int firstNow = pages.firstOrNull?.chapterIndex ?? currentChapterIndex;
+          final int lastNow  = pages.lastOrNull?.chapterIndex  ?? currentChapterIndex;
+          final bool mergeNow = pages.isNotEmpty && (i == lastNow + 1 || i == firstNow - 1);
+          _performChapterTransition(i, fromEnd, mergeNow);
           _preloadNeighborChaptersSilently();
           if (!isDisposed) notifyListeners();
           return;
@@ -149,7 +153,12 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       }
       chapterCache[i] = newPages;
 
-      _performChapterTransition(i, fromEnd, shouldMerge);
+      // Fix7: await _paginateInternal 後重新計算 shouldMerge，
+      // 靜默合併可能在等待期間改變了 pages 邊界（尤其 Fix1 移除 isLoading 後更容易觸發）
+      final int firstAfter = pages.firstOrNull?.chapterIndex ?? currentChapterIndex;
+      final int lastAfter  = pages.lastOrNull?.chapterIndex  ?? currentChapterIndex;
+      final bool shouldMergeAfter = pages.isNotEmpty && (i == lastAfter + 1 || i == firstAfter - 1);
+      _performChapterTransition(i, fromEnd, shouldMergeAfter);
       _preloadNeighborChaptersSilently();
     } catch (e) {
       debugPrint('Reader: Load chapter $i failed: $e');
@@ -242,6 +251,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       if (!completer.isCompleted) completer.complete();
     }
   }
+
+  /// 外部（如 ReaderProvider）觸發靜默預載的公開入口，
+  /// 會更新鄰居列表並啟動佇列，統一走靜默路徑（不加入 loadingChapters，不顯示轉圈）。
+  void triggerSilentPreload() => _preloadNeighborChaptersSilently();
 
   /// 判斷預載章節是否應靜默合併
   /// 條件：滾動模式 + 直接鄰居 + 尚未合併 + 非恢復中 + 未達窗口上限
@@ -385,19 +398,32 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     chapterContentCache[index] = content;
     const maxSize = 15; // 限制至多保留 15 個章節的原始字串
     if (chapterContentCache.length > maxSize) {
-      // 找出離 currentChapterIndex 最遠的章節移除
-      final farthest = chapterContentCache.keys.reduce((a, b) => 
-        (a - currentChapterIndex).abs() > (b - currentChapterIndex).abs() ? a : b
-      );
-      chapterContentCache.remove(farthest);
+      // Fix4: 找最遠章節時必須排除 index 本身，防止「存入即驅逐」的自毀式競速：
+      // 若 index 是距 currentChapterIndex 最遠的章節（如在第 133 章時存入第 1 章），
+      // 不排除 index 會使 chapterContentCache[index] 剛存入就被移除，
+      // 緊接著 _paginateInternal(index) 的 chapterContentCache[index]! 拋 Null。
+      final candidates = chapterContentCache.keys.where((k) => k != index);
+      if (candidates.isNotEmpty) {
+        final farthest = candidates.reduce((a, b) =>
+          (a - currentChapterIndex).abs() > (b - currentChapterIndex).abs() ? a : b
+        );
+        chapterContentCache.remove(farthest);
+      }
     }
   }
 
   Future<List<TextPage>> _paginateInternal(int i) async {
     if (viewSize == null || viewSize!.width <= 0 || viewSize!.height <= 0) return [];
+    // Fix5: 防範 _saveContentCache 驅逐競速：若內容已被移除就安全返回空列表，
+    // 而非用 ! 拋出 Null check operator 崩潰。
+    final content = chapterContentCache[i];
+    if (content == null) {
+      debugPrint('Reader: _paginateInternal($i) skipped — content evicted from cache');
+      return [];
+    }
     final (ts, cs) = _buildTextStyles();
     return await ChapterProvider.paginate(
-      content: chapterContentCache[i]!,
+      content: content,
       chapter: chapters[i],
       chapterIndex: i,
       chapterSize: chapters.length,
