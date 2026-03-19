@@ -483,6 +483,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     
     if (currentChapterIndex != page.chapterIndex) {
       currentChapterIndex = page.chapterIndex;
+      updateChapterWindow(currentChapterIndex);
       notifyListeners();
     }
 
