@@ -14,7 +14,6 @@ import 'shared/theme/app_theme.dart';
 import 'features/settings/settings_provider.dart';
 import 'features/welcome/splash_page.dart';
 import 'core/services/app_log_service.dart';
-import 'features/about/app_log_page.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -122,46 +121,19 @@ class LegadoReaderApp extends StatefulWidget {
 }
 
 class _LegadoReaderAppState extends State<LegadoReaderApp> {
-  int _debugTapCount = 0;
-  int _lastTapTime = 0;
-
-  void _handleDebugTap() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastTapTime > 1000) {
-      _debugTapCount = 1;
-    } else {
-      _debugTapCount++;
-    }
-    _lastTapTime = now;
-
-    if (_debugTapCount >= 5) {
-      _debugTapCount = 0;
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        const SnackBar(content: Text('Opening Debug Log...'), duration: Duration(seconds: 1)),
-      );
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AppLogPage()),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<SettingsProvider>(
       builder: (context, settings, child) {
-        return GestureDetector(
-          onTap: _handleDebugTap,
-          behavior: HitTestBehavior.translucent,
-          child: MaterialApp(
-            title: 'Legado Reader',
-            scaffoldMessengerKey: scaffoldMessengerKey,
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: settings.themeMode,
-            locale: settings.locale,
-            home: const SplashPage(),
-          ),
+        return MaterialApp(
+          title: 'Legado Reader',
+          scaffoldMessengerKey: scaffoldMessengerKey,
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: settings.themeMode,
+          locale: settings.locale,
+          home: const SplashPage(),
         );
       },
     );
