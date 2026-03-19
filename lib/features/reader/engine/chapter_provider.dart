@@ -8,7 +8,7 @@ class ChapterProvider {
   // 避尾點：不能出現在行尾的符號
   static const String _lineEndForbidden = '（《「『〈【〖([{<';
 
-  static List<TextPage> paginate({
+  static Future<List<TextPage>> paginate({
     required String content,
     required BookChapter chapter,
     required int chapterIndex,
@@ -22,9 +22,9 @@ class ChapterProvider {
     double titleBottomSpacing = 10.0,
     bool textFullJustify = true,
     double padding = 16.0,
-  }) {
+  }) async {
     final width = viewSize.width - (padding * 2);
-    final height = viewSize.height - 80; // 預留上下邊距 40
+    final height = viewSize.height - 80;
 
     final pages = <TextPage>[];
     var currentLines = <TextLine>[];
@@ -80,6 +80,11 @@ class ChapterProvider {
     final tp = TextPainter(textDirection: TextDirection.ltr);
 
     for (var pIdx = 0; pIdx < paragraphs.length; pIdx++) {
+      // 效能優化：每處理 10 個段落就讓出主執行緒 (Yield)，防止 UI 卡頓掉幀
+      if (pIdx > 0 && pIdx % 10 == 0) {
+        await Future.delayed(Duration.zero);
+      }
+
       final p = paragraphs[pIdx].trim();
       if (p.isEmpty) {
         chapterPos += 1;
@@ -92,16 +97,13 @@ class ChapterProvider {
       var isFirstLineOfParagraph = true;
 
       while (start < text.length) {
-        // 重用 tp 實例
         tp.text = TextSpan(text: text.substring(start), style: contentStyle);
         tp.layout(maxWidth: width);
         
-        // 改用 getLineBoundary 取得受 Flutter 引擎 Word-wrap 保護的真實行尾（解決原本 getPositionForOffset 切斷英文字的 Bug）
         final boundary = tp.getLineBoundary(const TextPosition(offset: 0));
         var end = boundary.end;
         if (end <= 0) break;
 
-        // 避頭尾處理（加固：end 至少為 1，防止零寬行無限迴圈）
         if (start + end < text.length) {
           final nextChar = text.substring(start + end, start + end + 1);
           if (_lineStartForbidden.contains(nextChar) && end > 1) {
@@ -114,7 +116,6 @@ class ChapterProvider {
             end--;
           }
         }
-        // 最終保護：end 至少為 1
         if (end <= 0) end = 1;
 
         final lineText = text.substring(start, start + end);
@@ -137,8 +138,6 @@ class ChapterProvider {
         ));
 
         start += end;
-        // chapterPos 只計算原始內容字元，不含縮排
-        // 這一行實際消耗的原始字元數 = end 減去落在縮排區間的部分
         final int charsInIndent = (contentStart > 0)
             ? (end > contentStart ? contentStart : end)
             : 0;

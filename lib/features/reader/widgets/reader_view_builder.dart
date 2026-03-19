@@ -28,6 +28,10 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> with SingleTicker
   int _lastTtsScrolledStart = -1;
   int _lastKnownPagesLength = 0;
   final Key _centerKey = const ValueKey('center_sliver');
+  
+  bool _hasInitializedScrollController = false;
+  bool _isFetchingNext = false;
+  bool _isFetchingPrev = false;
 
   @override
   void initState() {
@@ -183,15 +187,25 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> with SingleTicker
         final firstPage = widget.provider.pages.firstOrNull;
         final lastPage = widget.provider.pages.lastOrNull;
 
-        // 觸發載入上一章 (邊距 50)
-        if (currentScroll <= minScroll + 50 && !widget.provider.isLoading && firstPage != null && firstPage.chapterIndex > 0) {
-           widget.provider.prevChapter();
+        // 觸發載入上一章 (邊距 500)
+        if (currentScroll <= minScroll + 500 && !widget.provider.isLoading && firstPage != null && firstPage.chapterIndex > 0) {
+           if (!_isFetchingPrev) {
+             _isFetchingPrev = true;
+             widget.provider.prevChapter().whenComplete(() {
+               if (mounted) _isFetchingPrev = false;
+             });
+           }
            return;
         }
 
-        // 觸發載入下一章 (邊距 250，增加預留空間)
-        if (currentScroll >= maxScroll - 250 && !widget.provider.isLoading && lastPage != null && lastPage.chapterIndex < widget.provider.chapters.length - 1) {
-           widget.provider.nextChapter();
+        // 觸發載入下一章 (邊距 1500，激進預載，消除等待時間)
+        if (currentScroll >= maxScroll - 1500 && !widget.provider.isLoading && lastPage != null && lastPage.chapterIndex < widget.provider.chapters.length - 1) {
+           if (!_isFetchingNext) {
+             _isFetchingNext = true;
+             widget.provider.nextChapter().whenComplete(() {
+               if (mounted) _isFetchingNext = false;
+             });
+           }
         }
       }
     }
@@ -285,6 +299,13 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> with SingleTicker
 
         if (provider.pages.isEmpty && !provider.isLoading) {
           return Container(color: provider.currentTheme.backgroundColor, child: Center(child: Text('暫無內容', style: TextStyle(color: provider.currentTheme.textColor.withAlpha(128)))));
+        }
+
+        if (provider.pages.isNotEmpty && !_hasInitializedScrollController && provider.pageTurnMode == PageAnim.scroll) {
+          _scrollController.dispose();
+          _scrollController = ScrollController(initialScrollOffset: provider.initialTargetY);
+          _scrollController.addListener(_handleScroll);
+          _hasInitializedScrollController = true;
         }
 
         if (provider.isRestoring && provider.pages.isNotEmpty) {

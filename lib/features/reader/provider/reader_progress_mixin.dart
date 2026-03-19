@@ -11,6 +11,9 @@ mixin ReaderProgressMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
 
   /// 延遲恢復的閱讀位置（charOffset）：_init 時 viewSize 尚未就緒，需等 doPaginate 後再恢復
   int? pendingRestorePos;
+  
+  /// 首屏渲染的絕對 Y 軸座標 (Zero-Jump 核心)
+  double initialTargetY = 0.0;
 
   // --- 捲動模式：追蹤精確滾動位置（供 dispose 時精確儲存進度）---
   double lastScrollY = 0.0;
@@ -118,7 +121,12 @@ mixin ReaderProgressMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
     final pos = pendingRestorePos!;
     pendingRestorePos = null;
 
-    jumpToPosition(charOffset: pos, isRestoringJump: true);
+    if (pageTurnMode == PageAnim.scroll) {
+      initialTargetY = calcScrollOffsetForCharOffset(pos);
+      isRestoring = false; // Zero-Jump: 已經算出初始坐標，解除恢復狀態
+    } else {
+      jumpToPosition(charOffset: pos, isRestoringJump: true);
+    }
   }
 
   /// 統一進度儲存：同時更新 DB 與 in-memory book 物件

@@ -60,7 +60,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       final int oldCharOffset = getCharOffsetForScrollYFn?.call(_lastKnownScrollY) ?? 0;
 
       final (ts, cs) = _buildTextStyles();
-      pages = ChapterProvider.paginate(
+      pages = await ChapterProvider.paginate(
         content: chapterContent,
         chapter: chapters[currentChapterIndex],
         chapterIndex: currentChapterIndex,
@@ -139,7 +139,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       _saveContentCache(i, res.content);
       chapterCache.remove(i);
 
-      final newPages = _paginateInternal(i);
+      final newPages = await _paginateInternal(i);
       if (isDisposed) return;
 
       if (newPages.isEmpty) {
@@ -210,7 +210,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       final res = await fetchChapterData(i);
       if (isDisposed) return;
       _saveContentCache(i, res.content);
-      final newPages = _paginateInternal(i);
+      final newPages = await _paginateInternal(i);
       if (isDisposed) return;
       chapterCache[i] = newPages;
     } catch (e) {
@@ -308,10 +308,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     }
   }
 
-  List<TextPage> _paginateInternal(int i) {
+  Future<List<TextPage>> _paginateInternal(int i) async {
     if (viewSize == null || viewSize!.width <= 0 || viewSize!.height <= 0) return [];
     final (ts, cs) = _buildTextStyles();
-    return ChapterProvider.paginate(
+    return await ChapterProvider.paginate(
       content: chapterContentCache[i]!,
       chapter: chapters[i],
       chapterIndex: i,
