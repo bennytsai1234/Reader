@@ -163,21 +163,35 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     final firstIdx = pages.firstOrNull?.chapterIndex;
     final lastIdx = pages.lastOrNull?.chapterIndex;
 
-    // 清空舊列隊，準備根據最新方向與視窗範圍重建
-    _preloadQueue.clear();
+    // Fix3: 佇列活躍時不清空整個佇列（避免 worker 的下一個 target 被腰斬），
+    // 只替換 pending 部分（index 1 之後），保留正在執行的第一項。
+    if (!_isPreloadingQueueActive) {
+      _preloadQueue.clear();
+    } else if (_preloadQueue.length > 1) {
+      _preloadQueue.removeRange(1, _preloadQueue.length);
+    }
 
+    final List<int> candidates = [];
     if (lastIdx != null && lastIdx < chapters.length - 1) {
-      if (!chapterCache.containsKey(lastIdx + 1)) _preloadQueue.add(lastIdx + 1);
+      if (!chapterCache.containsKey(lastIdx + 1)) candidates.add(lastIdx + 1);
       if (lastIdx + 1 < chapters.length - 1 && !chapterCache.containsKey(lastIdx + 2)) {
-        _preloadQueue.add(lastIdx + 2);
+        candidates.add(lastIdx + 2);
       }
     }
     if (firstIdx != null && firstIdx > 0 && !chapterCache.containsKey(firstIdx - 1)) {
-      _preloadQueue.add(firstIdx - 1);
+      candidates.add(firstIdx - 1);
+    }
+    if (firstIdx != null && firstIdx > 1 && !chapterCache.containsKey(firstIdx - 2)) {
+      candidates.add(firstIdx - 2);
     }
 
     // 依照距離 currentChapterIndex 從近到遠排序，自動體現閱讀方向優先權
-    _preloadQueue.sort((a, b) => (a - currentChapterIndex).abs().compareTo((b - currentChapterIndex).abs()));
+    candidates.sort((a, b) => (a - currentChapterIndex).abs().compareTo((b - currentChapterIndex).abs()));
+
+    // 只把不重複的 candidate 加入佇列（避免與正在執行的項目重複）
+    for (final c in candidates) {
+      if (!_preloadQueue.contains(c)) _preloadQueue.add(c);
+    }
 
     _processPreloadQueue();
   }
@@ -213,6 +227,13 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       final newPages = await _paginateInternal(i);
       if (isDisposed) return;
       chapterCache[i] = newPages;
+
+      // 靜默預合併：滾動模式下，直接鄰居章節預載完成後自動合併到 pages，
+      // 使用者滾到邊界時內容已就位，無需等待載入。
+      if (_shouldSilentMerge(i)) {
+        _performChapterTransition(i, false, true);
+        if (!isDisposed) notifyListeners();
+      }
     } catch (e) {
       debugPrint('Reader: Preload chapter $i failed: $e');
     } finally {
@@ -220,6 +241,27 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       _loadCompleters.remove(i);
       if (!completer.isCompleted) completer.complete();
     }
+  }
+
+  /// 判斷預載章節是否應靜默合併
+  /// 條件：滾動模式 + 直接鄰居 + 尚未合併 + 非恢復中 + 未達窗口上限
+  bool _shouldSilentMerge(int i) {
+    if (pageTurnMode != PageAnim.scroll) return false;
+    if (pages.isEmpty) return false;
+    // Fix1: 移除 isLoading 條件。
+    // isLoading 代表「有章節待主加載」，與靜默合併的安全性無關，
+    // 保留此條件會導致：N+1 主加載中時，N+2 預載完後靜默合併被誤攔截，
+    // 使 chapterCache 有資料但未合併到 pages，第三次邊界滑動時觸發異常 trim。
+    if (isRestoring) return false;
+    // 不要在已載入章節數達上限時合併（避免 trim 頻繁觸發）
+    final chapterIndexes = pages.map((p) => p.chapterIndex).toSet();
+    if (chapterIndexes.length >= 5) return false;
+    // 已存在則不需合併
+    if (pages.any((p) => p.chapterIndex == i)) return false;
+
+    final firstIdx = pages.first.chapterIndex;
+    final lastIdx = pages.last.chapterIndex;
+    return (i == firstIdx - 1) || (i == lastIdx + 1);
   }
 
   void _performChapterTransition(int targetIndex, bool fromEnd, bool shouldMerge) {
@@ -230,16 +272,26 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     if (shouldMerge) {
       final bool alreadyExists = pages.any((p) => p.chapterIndex == targetIndex);
       final bool isMovingDown = targetIndex > currentChapterIndex;
-      
+
       if (!alreadyExists) {
-         currentChapterIndex = targetIndex; // 提前更新，讓 _trimPagesWindow 能計算出正確距離
+         final int originalChapterIndex = currentChapterIndex;
+         currentChapterIndex = targetIndex; // 暫時更新，讓後續邏輯可取得 targetIndex
          if (isMovingDown) {
            pages = [...pages, ...newPages];
-           _trimPagesWindow();
+           // Fix2: 傳入 originalChapterIndex 作為 trim 的距離計算基準，
+           // 避免使用「暫時目標值」導致驅逐掉用戶正在閱讀的章節。
+           _trimPagesWindow(pivotHint: originalChapterIndex);
          } else {
            final int addedPageCount = newPages.length;
            pages = [...newPages, ...pages];
-           _trimPagesWindow();
+           // Fix2: 同上，向上合併也使用 originalChapterIndex 作為基準
+           _trimPagesWindow(pivotHint: originalChapterIndex);
+
+           // 關鍵修復：滾動模式下，viewport 未移動，使用者仍在看原本章節。
+           // 恢復 currentChapterIndex，讓 _updateScrollPageIndex 在後續滾動事件中自然更新。
+           if (isScrollMode) {
+             currentChapterIndex = originalChapterIndex;
+           }
 
            if (!isScrollMode) {
              if (fromEnd) {
@@ -256,12 +308,21 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
          currentChapterIndex = targetIndex;
       }
 
-      if (!isScrollMode && !alreadyExists) {
-        // slide 模式 + 新章節：currentPageIndex 已在 !alreadyExists 區塊設定並觸發 jump，不再覆蓋
-      } else if (fromEnd || (!isMovingDown && alreadyExists)) {
-         currentPageIndex = pages.lastIndexWhere((p) => p.chapterIndex == targetIndex);
+      if (isScrollMode) {
+        // 滾動模式：不主動設定 currentPageIndex。
+        // viewport 位置由 ScrollController 控制，currentPageIndex 由
+        // _updateScrollPageIndex() 在下次滾動事件中根據 virtualY 自然更新。
+        // 這避免了合併後的短暫不一致窗口（currentChapterIndex 指向原章節，
+        // 但 currentPageIndex 卻指向新合併章節的首/末頁）。
+      } else if (!alreadyExists) {
+        // slide 模式 + 新章節：currentPageIndex 已在上方 !alreadyExists 區塊設定並觸發 jump，不再覆蓋
       } else {
-         currentPageIndex = pages.indexWhere((p) => p.chapterIndex == targetIndex);
+        // slide 模式 + alreadyExists
+        if (fromEnd || !isMovingDown) {
+          currentPageIndex = pages.lastIndexWhere((p) => p.chapterIndex == targetIndex);
+        } else {
+          currentPageIndex = pages.indexWhere((p) => p.chapterIndex == targetIndex);
+        }
       }
     } else {
       pages = newPages;
@@ -277,13 +338,17 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
 
   /// 修剪頁面視窗至最多 5 個章節
   /// 只清除 chapterCache（分頁結果），保留 chapterContentCache（原始內容），回翻時不需重新下載
-  void _trimPagesWindow() {
+  /// [pivotHint]：驅逐距離的計算基準章節（預設為 currentChapterIndex）。
+  /// 在 _performChapterTransition 中 currentChapterIndex 已被暫設為 targetIndex，
+  /// 應傳入 originalChapterIndex（用戶實際可見章節）以確保驅逐方向正確。
+  void _trimPagesWindow({int? pivotHint}) {
+    final int pivot = pivotHint ?? currentChapterIndex;
     final chapterIndexes = pages.map((p) => p.chapterIndex).toSet().toList()..sort();
 
     while (chapterIndexes.length > 5) {
       final first = chapterIndexes.first;
       final last = chapterIndexes.last;
-      bool removeFirst = (currentChapterIndex - first).abs() >= (last - currentChapterIndex).abs();
+      bool removeFirst = (pivot - first).abs() >= (last - pivot).abs();
       int toRemove = removeFirst ? first : last;
 
       // 只在「確實存在負向 pastPages 空間」時才保護 pivotChapterIndex。
