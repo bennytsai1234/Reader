@@ -300,7 +300,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   bool _shouldSilentMerge(int i) {
     if (pageTurnMode != PageAnim.scroll) return false;
     if (pages.isEmpty) return false;
-    if (isRestoring || isPaginating) return false;
+    if (isRestoring || _isPaginating) return false;
     
     // 只合併在目標視窗內的章節
     if (!_targetWindowIndices.contains(i)) return false;
