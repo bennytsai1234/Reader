@@ -4,7 +4,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:legado_reader/core/constant/page_anim.dart';
 import '../reader_provider.dart';
 import '../engine/page_view_widget.dart';
-import '../engine/cover_page_view.dart';
 
 class ReaderViewBuilder extends StatefulWidget {
   final ReaderProvider provider;
@@ -310,8 +309,6 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> with SingleTicker
     switch (provider.pageTurnMode) {
       case PageAnim.scroll:
         return _buildScrollReader();
-      case PageAnim.cover:
-        return _buildCoverReader();
       case PageAnim.slide:
       default:
         return _buildHorizontalReader();
@@ -339,19 +336,6 @@ class _ReaderViewBuilderState extends State<ReaderViewBuilder> with SingleTicker
         if (i < 0 || i >= p.pages.length) return const SizedBox.shrink();
         return _buildPageViewWidget(i);
       },
-    );
-  }
-
-  Widget _buildCoverReader() {
-    final p = widget.provider;
-    final idx = p.currentPageIndex;
-    final nextChild = (idx < p.pages.length - 1) ? _buildPageViewWidget(idx + 1) : null;
-    
-    return CoverPageView(
-      currentChild: _buildPageViewWidget(idx),
-      nextChild: nextChild,
-      onTurnNext: () => p.currentPageIndex < p.pages.length - 1 ? p.onPageChanged(p.currentPageIndex + 1) : p.nextChapter(),
-      onTurnPrev: () => p.currentPageIndex > 0 ? p.onPageChanged(p.currentPageIndex - 1) : p.prevChapter(),
     );
   }
 
