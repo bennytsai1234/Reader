@@ -22,6 +22,7 @@ import 'package:legado_reader/features/reader/runtime/reader_page_factory.dart';
 import 'package:legado_reader/features/reader/runtime/reader_progress_store.dart';
 import 'package:legado_reader/features/reader/runtime/reader_restore_coordinator.dart';
 import 'package:legado_reader/features/reader/runtime/reader_scroll_visibility_coordinator.dart';
+import 'package:legado_reader/features/reader/runtime/reader_tts_follow_coordinator.dart';
 import 'package:legado_reader/shared/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,6 +41,7 @@ class ReadBookController extends ReaderProviderBase
   final ReaderProgressStore _progressStore = ReaderProgressStore();
   final ReaderScrollVisibilityCoordinator _scrollVisibility =
       ReaderScrollVisibilityCoordinator();
+  final ReaderTtsFollowCoordinator _ttsFollow = const ReaderTtsFollowCoordinator();
   late final ReadAloudController _readAloudController;
   int _ttsMode = 0;
   bool _initialSessionPrimed = false;
@@ -286,6 +288,33 @@ class ReadBookController extends ReaderProviderBase
     if (preloadCenterChapter != null) {
       updateScrollPreloadForVisibleChapter(preloadCenterChapter);
     }
+  }
+
+  ReaderTtsFollowTarget? evaluateTtsFollowTarget({
+    required double viewportHeight,
+  }) {
+    final chapterIndex =
+        ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex;
+    final runtimeChapter = chapterAt(chapterIndex);
+    final pages = pagesForChapter(chapterIndex);
+    if (((runtimeChapter == null && pages.isEmpty) ||
+            (runtimeChapter != null && runtimeChapter.isEmpty)) ||
+        ttsStart < 0) {
+      return null;
+    }
+    final targetLocalOffset = runtimeChapter != null
+        ? runtimeChapter.resolveScrollAnchor(ttsStart).localOffset
+        : ChapterPositionResolver.charOffsetToLocalOffset(
+            pages,
+            ttsStart,
+          );
+    return _ttsFollow.evaluate(
+      chapterIndex: chapterIndex,
+      visibleChapterIndex: visibleChapterIndex,
+      targetLocalOffset: targetLocalOffset,
+      visibleChapterLocalOffset: visibleChapterLocalOffset,
+      viewportHeight: viewportHeight,
+    );
   }
 
   ReaderCommandReason consumePendingSlideJumpReason() {

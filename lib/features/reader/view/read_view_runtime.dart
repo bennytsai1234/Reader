@@ -296,50 +296,25 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
 
   void _scrollToTtsHighlight() {
     final provider = widget.provider;
-    final chapterIndex = provider.ttsChapterIndex >= 0
-        ? provider.ttsChapterIndex
-        : provider.currentChapterIndex;
-    final runtimeChapter = provider.chapterAt(chapterIndex);
-    final pages = provider.pagesForChapter(chapterIndex);
-    if (((runtimeChapter == null && pages.isEmpty) ||
-            (runtimeChapter != null && runtimeChapter.isEmpty)) ||
-        provider.ttsStart < 0) {
+    final viewportHeight = context.size?.height ?? 0.0;
+    final target = provider.evaluateTtsFollowTarget(
+      viewportHeight: viewportHeight,
+    );
+    if (target == null) {
       return;
     }
-    final targetLocalOffset = runtimeChapter != null
-        ? runtimeChapter.resolveScrollAnchor(
-            provider.ttsStart,
-          ).localOffset
-        : ChapterPositionResolver.charOffsetToLocalOffset(
-            pages,
-            provider.ttsStart,
-          );
-    final viewportHeight = context.size?.height ?? 0.0;
-    final anchorPadding = viewportHeight * 0.12;
-    if (chapterIndex == provider.visibleChapterIndex && viewportHeight > 0) {
-      final visibleTop = provider.visibleChapterLocalOffset;
-      final visibleBottom = visibleTop + viewportHeight;
-      if (targetLocalOffset <= anchorPadding && visibleTop <= 2.0) {
-        return;
-      }
-      final safeTop = visibleTop + anchorPadding;
-      final safeBottom = visibleBottom - (viewportHeight * 0.22);
-      if (targetLocalOffset >= safeTop && targetLocalOffset <= safeBottom) {
-        return;
-      }
-    }
     _itemScrollController.scrollTo(
-      index: chapterIndex,
+      index: target.chapterIndex,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToChapterLocalOffset(
-        chapterIndex: chapterIndex,
-        localOffset: targetLocalOffset,
+        chapterIndex: target.chapterIndex,
+        localOffset: target.localOffset,
         animate: true,
         duration: const Duration(milliseconds: 160),
-        topPadding: targetLocalOffset < anchorPadding ? 0.0 : anchorPadding,
+        topPadding: target.topPadding,
       );
     });
   }

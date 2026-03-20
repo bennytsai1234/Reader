@@ -2,504 +2,185 @@
 
 更新日期：2026-03-20
 
-目標：在目前閱讀器主鏈已完成第一輪收口後，進一步把閱讀 runtime 固化成穩定內核，降低後續功能擴展與維護成本。
+本文不是舊版重構計畫的延續，而是以目前已完成的大重構結果為起點，重新整理接下來仍值得做的事情。
 
-## 1. 背景判斷
+## 1. 目前已完成的重構基線
 
-目前閱讀器已完成的核心收斂：
+目前已落地的核心變更：
 
 - `ReadBookController` 已成為閱讀器主控入口
-- `scroll / slide` 已共享主要命令語義
-- restore / progress / TTS / auto page 已開始走統一 command path
-- `ReaderChapter` 已開始承接章內 runtime 能力
-- `ReaderCommandGuard`、`ReaderAutoPageCoordinator` 已有第一版
+- command path 已統一：
+  - `jumpToSlidePage(...)`
+  - `jumpToChapterLocalOffset(...)`
+  - `jumpToChapterCharOffset(...)`
+  - `persistCurrentProgress(...)`
+- 已拆出 controller 子域：
+  - `ReaderNavigationController`
+  - `ReaderRestoreCoordinator`
+  - `ReaderProgressStore`
+  - `ReaderScrollVisibilityCoordinator`
+  - `ReaderTtsFollowCoordinator`
+- `ReaderChapter` 已成為共用 chapter runtime
+- `ReadViewRuntime` 已抽出：
+  - `ScrollExecutionAdapter`
+  - `ScrollRestoreRunner`
+- `ChapterContentManager` 已具備第一版 lifecycle-oriented API
+- runtime helper / coordinator / integration-style tests 已建立第一版
+- 性能 trace 已接到首章預熱、restore、TTS handoff 等主鏈
 
-目前仍然存在的核心問題：
+也就是說，閱讀器目前的問題已經不再是「主鏈不存在」，而是「內核已形成，但還可以更穩、更薄、更可測」。
 
-- `ReadBookController` 職責仍然偏大
-- `ReadViewRuntime` 仍持有較多 scroll execution 與 retry 細節
-- `ReaderChapter` 還未達到 `TextChapter` 級別的 runtime 密度
-- `ChapterContentManager` 仍偏 cache/preload manager，而不是 chapter lifecycle service
-- integration tests 仍不足以完全保護 runtime 行為
+## 2. 接下來的工作原則
 
-因此下一輪重構的核心原則是：
+後續不建議再做大面積推倒重來。原則應改成：
 
-1. 把 controller 再拆成明確子域
-2. 把 chapter runtime 再補厚
-3. 把 view runtime 再瘦身
-4. 把內容管理層語義升級
-5. 用 integration tests 鎖住主鏈
+1. 小步收斂 controller 邊界
+2. 用 integration tests 鎖住主鏈
+3. 用真機 trace 驗證性能瓶頸
+4. 只在高收益處再拆分
 
-## 2. 重構總順序
+## 3. 優先級排序
 
-下一輪建議依序完成：
+### P0. 補齊真正的 runtime integration tests
 
-1. `ReaderNavigationController`
-2. `ReaderRestoreCoordinator`
-3. `ReaderProgressStore`
-4. `ReaderChapter` 強化
-5. `ReadViewRuntime` 瘦身
-6. `ChapterContentManager` 語義升級
-7. integration tests
-8. performance tracing
+這是現在最值得做的事。
 
----
+目前雖然已有 integration-style flow test，但對核心 controller / read aloud 還不夠深。
 
-## Phase A: 拆 Controller 子域
+應優先新增：
 
-### A1. 抽出 ReaderNavigationController
+- `ReadBookController` restore flow test
+  - scroll restore 到指定 `chapterIndex + localOffset`
+  - slide restore 到指定 `pageIndex`
+  - repaginate 後 progress 不漂移
 
-目標：
+- `ReadAloudController` runtime test
+  - highlight 不重複更新
+  - next/prev page or chapter 行為一致
+  - prefetched handoff 正常接續
 
-- 專門管理 jump / page change / chapter change / command dispatch
-- 把 `ReadBookController` 內與 navigation 相關的方法抽離
+- command interaction test
+  - `user` 打斷 `autoPage`
+  - `user` 打斷 `tts`
+  - `restore` 期間不寫 visible progress
 
-候選來源檔案：
+完成標準：
 
-- [read_book_controller.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/runtime/read_book_controller.dart)
-- [reader_progress_mixin.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/provider/reader_progress_mixin.dart)
+- 後面再改 controller / view runtime 時，不需要靠手測判斷主鏈有沒有壞
 
-建議新增檔案：
+### P1. 繼續縮小 ReadBookController
 
-- `lib/features/reader/runtime/reader_navigation_controller.dart`
+`ReadBookController` 雖然已經拆了幾個子域，但整體還是偏大。
 
-第一批要搬的方法：
+下一步不需要再引入大量新類，而是把剩下幾塊責任再切清楚：
 
-- `jumpToSlidePage(...)`
-- `jumpToChapterLocalOffset(...)`
-- `jumpToChapterCharOffset(...)`
-- `handleSlidePageChanged(...)`
-- `nextAutoScrollTarget(...)`
-- `evaluateScrollAutoPageStep(...)`
-- `shouldPersistForReason(...)`
+- 把更多 progress/restore 細節從 mixin 回收到明確 domain object
+- 把 `ReadBookController` 保持在 orchestration 層
+- 避免再新增橫切狀態到 controller 本體
 
-驗收標準：
+完成標準：
 
-- `ReadBookController` 不再直接承擔大部分 navigation orchestration
-- 所有跳轉語義仍只經過單一入口
+- controller 更像 assembler / orchestrator
+- 子域更像可單測的 runtime component
 
-目前進度：
+### P1. 弱化 ReaderContentMixin 的歷史責任
 
-- 已完成第一版落地
-- 已新增 `lib/features/reader/runtime/reader_navigation_controller.dart`
-- `ReadBookController` 已改為委派 jump reason / auto-scroll decision / progress-persist policy
-- 已補 `reader_navigation_controller_test.dart`
+`ReaderContentMixin` 現在仍保留很多早期時代的流程責任。
 
-### A2. 抽出 ReaderRestoreCoordinator
+後續應逐步讓它變成薄的 content facade，而不是同時承擔：
 
-目標：
+- fetch
+- cache
+- paginate
+- window sync
+- loadChapter orchestration
+- preload interaction
 
-- 專門管理 restore lifecycle、pending restore token、restore target
+方向：
 
-候選來源檔案：
+- 讓 `ChapterContentManager` 再承接更多 lifecycle 語義
+- 讓上層更少直接碰 `targetWindow`
 
-- [read_book_controller.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/runtime/read_book_controller.dart)
-- [read_view_runtime.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/view/read_view_runtime.dart)
+完成標準：
 
-建議新增檔案：
+- `ReaderContentMixin` 的重心回到「呼叫內容服務」，而不是自己掌握細節
 
-- `lib/features/reader/runtime/reader_restore_coordinator.dart`
+### P2. 繼續瘦身 ReadViewRuntime
 
-第一批要搬的方法/狀態：
+目前 `ReadViewRuntime` 已比重構前乾淨很多，但還不是純 execution layer。
 
-- `completeRestoreTransition()`
-- `registerPendingScrollRestore(...)`
-- `consumePendingScrollRestore()`
-- `matchesPendingScrollRestore(...)`
-- `_pendingScrollRestoreToken`
-- `_pendingScrollRestoreChapterIndex`
-- `_pendingScrollRestoreLocalOffset`
+仍可持續上收的點：
 
-驗收標準：
+- scroll auto-page ticker
+- 部分 restore orchestration
+- 少量 scroll follow / viewport interaction policy
 
-- controller 不直接持有 restore token 細節
-- view runtime 只拿 restore target 與執行命令
+這一步不急，但值得持續做。
 
-目前進度：
+完成標準：
 
-- 已完成第一版落地
-- 已新增 `lib/features/reader/runtime/reader_restore_coordinator.dart`
-- `ReadBookController` 已改為委派 restore token / target 狀態
-- 已補 `reader_restore_coordinator_test.dart`
+- `ReadViewRuntime` 更接近純執行層
+- 策略判斷盡量停在 controller/coordinator
 
-### A3. 抽出 ReaderProgressStore
+### P2. 把 performance trace 從 debug print 進一步產品化
 
-目標：
+現在的 trace 已能幫助開發期定位，但還偏 debug 工具。
 
-- 專門管理 durable progress、visible progress sync、save policy
+下一步可以做：
 
-候選來源檔案：
+- 統一 trace label 命名
+- 補更多關鍵點：
+  - visible preload ready
+  - repaginate visible window
+  - scroll new chapter ready
+- 真機上做一次完整時間鏈整理
 
-- [reader_progress_mixin.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/provider/reader_progress_mixin.dart)
-- [read_book_controller.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/runtime/read_book_controller.dart)
+完成標準：
 
-建議新增檔案：
+- 可以清楚判斷卡頓來自 fetch / process / paginate / scroll execution / TTS handoff
 
-- `lib/features/reader/runtime/reader_progress_store.dart`
+## 4. 不建議現在做的事
 
-第一批要搬的方法：
+以下事情暫時不應優先：
 
-- `persistCurrentProgress(...)`
-- `persistChapterCharOffsetProgress(...)`
-- `shouldPersistVisiblePosition()`
-- scroll visible progress debounce 邏輯
+- 再做一輪大規模架構改名
+- 重新推倒 `ReaderContentMixin`
+- 強行完全移除所有 mixin
+- 引入更多抽象層但沒有測試保護
+- 為了對齊 legado 命名而大面積改檔
 
-驗收標準：
+原因很簡單：
 
-- progress 行為不再依賴 mixin 內隱狀態
-- progress 可獨立測試
+目前最值錢的是「主鏈已穩」，不是「名義上更漂亮」。
 
-目前進度：
-
-- 已完成第一版落地
-- 已新增 `lib/features/reader/runtime/reader_progress_store.dart`
-- `ReadBookController` / `ReaderProgressMixin` 已改為委派 durable progress persist 與 save policy
-- 已補 `reader_progress_store_test.dart`
-
----
-
-## Phase B: 補厚 ReaderChapter
-
-### B1. 補 paragraph / page query API
-
-目標：
-
-- 讓外部更少直接碰 `pages`
-
-目標檔案：
-
-- [reader_chapter.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/runtime/models/reader_chapter.dart)
-
-建議新增能力：
-
-- `lineAtCharOffset(...)`
-- `paragraphAtCharOffset(...)`
-- `pageAtLocalOffset(...)`
-- `nextPageStartCharOffset(...)`
-- `prevPageStartCharOffset(...)`
-- `isCharOffsetVisibleInPage(...)`
-
-驗收標準：
-
-- `ReadAloudController`
-- `ReadViewRuntime`
-- `ReaderProgressMixin` / 後續 progress store
-
-對 `pages` 的直接掃描顯著減少
-
-目前進度：
-
-- 已完成第一版落地
-- `ReaderChapter` 已新增 line / paragraph / page / prev-next page helper
-- `ReadAloudController` 已改為優先依賴 chapter runtime 的 highlight 與頁跳轉定位
-- `ReadViewRuntime` 已改為使用 `resolveRestoreTarget(...)` / `resolveScrollAnchor(...)`
-- 已擴充 `reader_chapter_runtime_test.dart`
-
-### B2. 補 restore / highlight snapshot helper
-
-目標：
-
-- 讓 restore / TTS / scroll follow 使用同一套章內語義
-
-建議新增能力：
-
-- `resolveHighlightRange(...)`
-- `resolveRestoreTarget(...)`
-- `resolveScrollAnchor(...)`
-
-驗收標準：
-
-- TTS highlight 與 restore 共享更多 chapter runtime API
-
-目前進度：
-
-- 已完成第一版落地
-- `ReaderChapter` 已新增：
-  - `resolveHighlightRange(...)`
-  - `resolveRestoreTarget(...)`
-  - `resolveScrollAnchor(...)`
-- TTS highlight / scroll follow / restore page anchor 已開始共享同一套章內語義
-
----
-
-## Phase C: 瘦身 ReadViewRuntime
-
-### C1. 拆出 ScrollExecutionAdapter
-
-目標：
-
-- 把 scroll jump / ensureVisible / pixel adjust 細節隔離
-
-候選來源檔案：
-
-- [read_view_runtime.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/view/read_view_runtime.dart)
-
-建議新增檔案：
-
-- `lib/features/reader/view/scroll_execution_adapter.dart`
-
-第一批要搬的方法：
-
-- `_scrollToPageKey(...)`
-- `_scrollToChapterLocalOffset(...)`
-- `_jumpScrollPosition(...)`
-
-驗收標準：
-
-- `ReadViewRuntime` 不再直接持有大段 scroll execution 細節
-
-目前進度：
-
-- 已完成第一版落地
-- 已新增 `lib/features/reader/view/scroll_execution_adapter.dart`
-- `_scrollToChapterLocalOffset(...)` 已從 `ReadViewRuntime` 抽到 adapter
-- `ReadViewRuntime` 保留 restore / follow / coordination，本身不再直接持有主要的 scroll pixel 計算
-
-### C2. 把 restore retry policy 抽成小協調器
-
-目標：
-
-- 讓 `ReadViewRuntime` 不再自己管理 restore retry 次數與重試條件
-
-候選來源檔案：
-
-- [read_view_runtime.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/view/read_view_runtime.dart)
-
-建議新增檔案：
-
-- `lib/features/reader/view/scroll_restore_runner.dart`
-
-驗收標準：
-
-- `ReadViewRuntime` 只發起 restore，runner 負責 retry
-
-目前進度：
-
-- 已完成第一版落地
-- 已新增 `lib/features/reader/view/scroll_restore_runner.dart`
-- `ReadViewRuntime` 已改為委派 restore retry / reload / retry exhaustion 前的重試流程
-
-### C3. 把可見項回報策略上收
-
-目標：
-
-- 將 visible chapter -> preload / visible progress 的策略轉到 controller/coordinator
-
-候選來源檔案：
-
-- [read_view_runtime.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/view/read_view_runtime.dart)
-
-驗收標準：
-
-- `ReadViewRuntime` 只回報 raw visible positions
-- 策略判斷由 controller 或 coordinator 完成
-
-目前進度：
-
-- 已完成第一版落地
-- 已新增 `lib/features/reader/runtime/reader_scroll_visibility_coordinator.dart`
-- `ReadViewRuntime` 現在只回報 top visible chapter / localOffset / visible chapters
-- visible preload / visible chapter ensure / 去重請求 已移到 controller/coordinator
-
----
-
-## Phase D: 升級 ChapterContentManager 語義
-
-### D1. 對外 API 改成 lifecycle-oriented
-
-目標：
-
-- 從 cache/preload manager 改為 chapter lifecycle service
-
-目標檔案：
-
-- [chapter_content_manager.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/engine/chapter_content_manager.dart)
-
-建議改造方向：
-
-- `ensureChapterReady(index)`
-- `warmChaptersAround(index, radius)`
-- `repaginateVisibleWindow(indexes)`
-- `evictOutside(indexes)`
-- `prioritize(indexes)`
-
-驗收標準：
-
-- `ReaderContentMixin` 或後續 content domain 不再大量操縱 queue/window 細節
-
-目前進度：
-
-- 已完成第一版落地
-- `ChapterContentManager` 已新增：
-  - `ensureChapterReady(index)`
-  - `warmChaptersAround(index, radius)`
-  - `repaginateVisibleWindow(indexes)`
-  - `evictOutside(indexes)`
-  - `prioritize(indexes, centerIndex)`
-- `ReaderContentMixin` 已開始改用新的 lifecycle-oriented API
-
-### D2. 弱化 targetWindow 作為對外語義
-
-目標：
-
-- 外部不要直接依賴 `_targetWindow` / `targetWindow`
-
-驗收標準：
-
-- `targetWindow` 逐漸退回 manager 內部細節
-
-目前進度：
-
-- 已開始落地
-- `ReaderContentMixin` 在 window 同步與 repaginate 路徑已減少直接操作 queue/preload 細節
-- `targetWindow` 仍保留於少數快取同步路徑，後續可再往 `visibleWindow` / `lifecycle window` 語義收斂
-
----
-
-## Phase E: Integration Tests
-
-### E1. 新增 reader runtime integration tests
-
-建議新增檔案：
-
-- `test/features/reader/read_book_controller_runtime_test.dart`
-- `test/features/reader/read_restore_flow_test.dart`
-- `test/features/reader/read_aloud_runtime_test.dart`
-
-第一批場景：
-
-1. restore 到 scroll 指定 offset
-2. restore 到 slide 指定 page
-3. TTS progress 不重複觸發 jump storm
-4. auto page 被 user scroll 打斷後不錯亂
-5. repaginate 後 progress 不漂移
-6. command guard 能正確擋下低優先級命令
-
-驗收標準：
-
-- 新一輪重構不再只靠 widget/人工驗證
-
-目前進度：
-
-- 已完成第一版落地
-- 已新增：
-  - `test/features/reader/chapter_content_manager_lifecycle_test.dart`
-  - `test/features/reader/reader_runtime_flow_test.dart`
-- 目前先覆蓋 restore/navigation/visibility/content lifecycle 的 integration-style flow
-- `ReadBookController` / `ReadAloudController` 的 full runtime integration test 可在下一輪補強
-
-### E2. 保留並擴充 runtime helper tests
-
-目標：
-
-- 延續現有：
-  - `reader_command_guard_test.dart`
-  - `reader_chapter_runtime_test.dart`
-
-新增：
-
-- restore target helper test
-- highlight range helper test
-- page navigation helper test
-
-目前進度：
-
-- 已完成第一版落地
-- 既有 helper tests 已擴充至：
-  - restore target
-  - highlight range
-  - page navigation
-  - scroll visibility coordinator
-
----
-
-## Phase F: Performance Trace
-
-### F1. 為關鍵路徑加時間埋點
-
-目標檔案：
-
-- [chapter_content_manager.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/engine/chapter_content_manager.dart)
-- [read_book_controller.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/runtime/read_book_controller.dart)
-- [read_aloud_controller.dart](/C:/Users/benny/Desktop/Folder/Project/reader/ios/lib/features/reader/runtime/read_aloud_controller.dart)
-
-建議觀測點：
-
-- 首章 ready
-- restore ready
-- repaginate cost
-- next chapter preload ready
-- TTS chapter handoff
-
-驗收標準：
-
-- 能分辨卡頓來自 fetch / process / paginate / scroll execution
-
-目前進度：
-
-- 已完成第一版落地
-- `ReaderPerfTrace` 已新增：
-  - `mark(...)`
-  - `measureSync(...)`
-- 已接入觀測點：
-  - `prime initial window`
-  - `restore ready`
-  - `tts speak`
-  - `tts prefetched next chapter`
-  - `tts chapter handoff nextChapter`
-  - `tts handoff speak`
-
----
-
-## 3. 建議執行節奏
-
-如果按兩到三輪提交來做，建議這樣拆：
+## 5. 建議的執行順序
 
 ### Round 1
 
-- Phase A
-- Phase B1
-
-輸出：
-
-- controller 子域初步拆分
-- `ReaderChapter` 補強一批 API
+- 補 `ReadBookController` runtime integration tests
+- 補 `ReadAloudController` runtime tests
+- 補 command interaction tests
 
 ### Round 2
 
-- Phase C
-- Phase D
-
-輸出：
-
-- view runtime 明顯變薄
-- chapter content manager 對外語義升級
+- 繼續縮小 `ReadBookController`
+- 讓 `ReaderContentMixin` 更薄
+- 再弱化 `targetWindow` 暴露
 
 ### Round 3
 
-- Phase E
-- Phase F
+- 把 scroll auto-page ticker 再上收
+- 補完整 performance trace
+- 依真機結果做性能修正
 
-輸出：
+## 6. 結論
 
-- runtime 行為有測試保護
-- 性能優化有觀測基礎
+現在的閱讀器不需要再靠大重構找方向，方向已經很明確。
 
----
+接下來的最佳策略是：
 
-## 4. 結論
+- 用測試保住主鏈
+- 用 trace 量出瓶頸
+- 用小步重構繼續把 controller、content、view 邊界做乾淨
 
-下一輪重構的重點不是再“做更多功能”，而是把閱讀器模組正式定型成：
-
-- 內核：navigation / restore / progress / chapter runtime
-- 中層：chapter lifecycle / read aloud / auto page
-- 外層：view runtime / mode delegates
-
-只要這一輪做完，後面要加：
-
-- 更強 TTS
-- 更多翻頁動畫
-- 更穩的 restore
-- 更複雜的 preload
-
-都不需要再去碰整條主鏈。
+只要照這個順序推，後續加功能時就不會再回到「每加一個能力就重新扯動整條閱讀鏈」的狀態。
