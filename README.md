@@ -5,6 +5,8 @@
 目前這個倉庫以「可自行部署、可自行側載」為主，不走 App Store，也沒有 TestFlight。  
 如果你是 iPhone / iPad 使用者，建議走 AltStore 安裝路線。
 
+目前倉庫也已配置 GitHub Actions，可自動建置 Android 與 iOS artifact。之後可直接從 `Actions` 或 `Releases` 下載產物。
+
 ## 目前提供什麼
 
 - Flutter 原始碼
