@@ -67,16 +67,18 @@ jobs:
       - name: Build iOS without codesign
         run: flutter build ios --release --no-codesign
 
-      - name: Archive unsigned iOS app bundle
+      - name: Package unsigned IPA for AltStore
         run: |
-          cd build/ios/iphoneos
-          zip -r Runner.app.zip Runner.app
+          mkdir -p build/ios/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/Runner.app
+          cd build/ios/ipa
+          zip -r 保安專用閱讀器-ios-unsigned.ipa Payload
 
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-runner-app
-          path: build/ios/iphoneos/Runner.app.zip
+          name: ios-unsigned-ipa
+          path: build/ios/ipa/保安專用閱讀器-ios-unsigned.ipa
 
   publish-release:
     name: Publish GitHub Release
@@ -96,7 +98,7 @@ jobs:
       - name: Download iOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: ios-unsigned-runner-app
+          name: ios-unsigned-ipa
           path: dist
 
       - name: Publish GitHub release
@@ -104,5 +106,5 @@ jobs:
         with:
           files: |
             dist/app-release.apk
-            dist/Runner.app.zip
+            dist/保安專用閱讀器-ios-unsigned.ipa
           generate_release_notes: true
