@@ -38,7 +38,7 @@ class _WelcomePageState extends State<WelcomePage> {
       builder: (context) => AlertDialog(
         title: const Text('隱私協議與服務條款'),
         content: const SingleChildScrollView(
-          child: Text('感謝您使用 Legado Reader！\\n\\n本軟體為開源閱讀工具，不提供任何書籍內容。\\n\\n在您開始使用前，請閱讀並同意我們的隱私政策。我們將依法保護您的個人資訊安全。'),
+          child: Text('感謝您使用保安專用閱讀器！\\n\\n本軟體為開源閱讀工具，不提供任何書籍內容。\\n\\n在您開始使用前，請閱讀並同意我們的隱私政策。我們將依法保護您的個人資訊安全。'),
         ),
         actions: [
           TextButton(
@@ -104,7 +104,7 @@ class _WelcomePageState extends State<WelcomePage> {
                   const Column(
                     children: [
                       Text(
-                        'Legado Reader',
+                        '保安專用閱讀器',
                         style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 2),
                       ),
                       SizedBox(height: 8),

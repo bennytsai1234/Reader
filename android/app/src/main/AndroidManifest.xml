@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <application
-        android:label="Legado Reader"
+        android:label="保安專用閱讀器"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
@@ -40,7 +40,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
-            android:label="Legado Reader"
+            android:label="保安專用閱讀器"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -53,7 +53,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
-            android:label="Reader Black"
+            android:label="保安專用閱讀器"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

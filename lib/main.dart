@@ -36,6 +36,7 @@ void callbackDispatcher() {
 }
 
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+const String kAppDisplayName = '保安專用閱讀器';
 
 void main() {
   runZonedGuarded(() async {
@@ -70,10 +71,11 @@ void main() {
       await configureDependencies();
       AppLog.i('Dependencies Configured Successfully');
 
-      // 強制開啟日誌記錄模式
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('recordLog', true);
-      AppLog.i('Debug Mode: recordLog forced to TRUE');
+      if (kDebugMode) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('recordLog', true);
+        AppLog.i('Debug Mode: recordLog forced to TRUE');
+      }
       
       AppLog.i('Initializing TTSService...');
       await TTSService().init();
@@ -86,7 +88,7 @@ void main() {
         AppLog.e('Flutter Error: ${details.exception}', error: details.exception, stackTrace: details.stack);
       };
 
-      AppLog.i('Legado Reader Ready to Run');
+      AppLog.i('$kAppDisplayName Ready to Run');
 
       runApp(
         MultiProvider(
@@ -126,7 +128,7 @@ class _LegadoReaderAppState extends State<LegadoReaderApp> {
     return Consumer<SettingsProvider>(
       builder: (context, settings, child) {
         return MaterialApp(
-          title: 'Legado Reader',
+          title: kAppDisplayName,
           scaffoldMessengerKey: scaffoldMessengerKey,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,

@@ -64,7 +64,7 @@ class AudioPlayService extends ChangeNotifier {
       await _init();
       final mediaItem = MediaItem(
         id: url,
-        album: album ?? 'Legado Reader',
+        album: album ?? '保安專用閱讀器',
         title: title ?? 'Unknown Chapter',
         artist: artist ?? 'Unknown Author',
         artUri: artUri != null ? Uri.parse(artUri) : null,
