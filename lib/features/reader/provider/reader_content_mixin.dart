@@ -27,6 +27,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   ReaderChapterContentLoader? _chapterContentLoader;
   bool _isPaginating = false;
   int _lastVisibleScrollChapter = -1;
+  int? _pinnedSlideChapterIndex;
+  int _pinnedSlideCharOffset = 0;
+  bool _pinnedSlideFromEnd = false;
 
   List<TextPage> get currentChapterPages =>
       chapterPagesCache[currentChapterIndex] ?? const <TextPage>[];
@@ -253,6 +256,33 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     return globalIndex >= 0 ? globalIndex : 0;
   }
 
+  void _pinSlideTarget({
+    required int chapterIndex,
+    required int charOffset,
+    bool fromEnd = false,
+  }) {
+    _pinnedSlideChapterIndex = chapterIndex;
+    _pinnedSlideCharOffset = charOffset;
+    _pinnedSlideFromEnd = fromEnd;
+  }
+
+  void _clearPinnedSlideTarget() {
+    _pinnedSlideChapterIndex = null;
+    _pinnedSlideCharOffset = 0;
+    _pinnedSlideFromEnd = false;
+  }
+
+  bool _isPinnedSlideTargetReached() {
+    final chapterIndex = _pinnedSlideChapterIndex;
+    if (chapterIndex == null || slidePages.isEmpty) return true;
+    final targetIndex = _findSlidePageIndexByCharOffset(
+      chapterIndex: chapterIndex,
+      charOffset: _pinnedSlideCharOffset,
+      fromEnd: _pinnedSlideFromEnd,
+    );
+    return currentPageIndex == targetIndex;
+  }
+
   void bootstrapChapterWindow(int centerIndex) {
     if (!hasContentManager) return;
     _prepareChapterDisplayWindow(
@@ -360,6 +390,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
         page.index,
       ),
     );
+    if (_isPinnedSlideTargetReached()) {
+      _clearPinnedSlideTarget();
+    }
     _refreshSlidePages();
     notifyListeners();
     final title = chapters.isNotEmpty ? chapters[currentChapterIndex].title : '';
@@ -578,6 +611,17 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   }
 
   int _resolveSlideTargetIndex(TextPage? previousPage) {
+    final pinnedChapterIndex = _pinnedSlideChapterIndex;
+    if (pinnedChapterIndex != null) {
+      final pinnedIndex = _findSlidePageIndexByCharOffset(
+        chapterIndex: pinnedChapterIndex,
+        charOffset: _pinnedSlideCharOffset,
+        fromEnd: _pinnedSlideFromEnd,
+      );
+      if (slidePages.isNotEmpty) {
+        return pinnedIndex;
+      }
+    }
     final remappedIndex = previousPage != null
         ? slidePages.indexWhere(
             (page) =>
@@ -680,10 +724,21 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       );
       return;
     }
+    final targetCharOffset = fromEnd && pages.isNotEmpty
+        ? ChapterPositionResolver.getCharOffsetForPage(
+            pages,
+            pages.length - 1,
+          )
+        : book.durChapterPos;
+    _pinSlideTarget(
+      chapterIndex: chapterIndex,
+      charOffset: targetCharOffset,
+      fromEnd: fromEnd,
+    );
     _refreshSlidePages();
     currentPageIndex = _findSlidePageIndexByCharOffset(
       chapterIndex: chapterIndex,
-      charOffset: book.durChapterPos,
+      charOffset: targetCharOffset,
       fromEnd: fromEnd,
     );
     (this as dynamic).jumpToSlidePage(
@@ -732,6 +787,11 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       );
       return;
     }
+    _pinSlideTarget(
+      chapterIndex: targetChapter,
+      charOffset: book.durChapterPos,
+      fromEnd: fromEnd,
+    );
     currentPageIndex = _findSlidePageIndexByCharOffset(
       chapterIndex: targetChapter,
       charOffset: book.durChapterPos,
@@ -775,5 +835,20 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     for (final index in evicted) {
       (this as dynamic).refreshChapterRuntime?.call(index);
     }
+  }
+
+  void refreshSlidePagesForTesting({
+    int? anchorChapterIndex,
+    int charOffset = 0,
+    bool fromEnd = false,
+  }) {
+    if (anchorChapterIndex != null) {
+      _pinSlideTarget(
+        chapterIndex: anchorChapterIndex,
+        charOffset: charOffset,
+        fromEnd: fromEnd,
+      );
+    }
+    _refreshSlidePages();
   }
 }

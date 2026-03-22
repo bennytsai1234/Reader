@@ -127,6 +127,8 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     slidePages = pages;
   }
 
+  List<TextPage>? buildSlideRuntimePages() => null;
+
   bool shouldPersistVisiblePosition() => persistVisiblePosition;
 
   void jumpToSlidePage(
@@ -436,6 +438,37 @@ void main() {
       expect(harness.book.durChapterIndex, 0);
       expect(harness.book.durChapterPos, 0);
       expect(harness.persistedRequests, isEmpty);
+    });
+
+    test('slide refresh 在切章期間會優先落到 pinned target，不會 remap 回舊章頁面', () {
+      final harness = _ReaderRuntimeHarness(
+        book: Book(bookUrl: 'book', name: 'Book'),
+        chapters: [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
+          BookChapter(title: 'c1', index: 1, bookUrl: 'book'),
+          BookChapter(title: 'c2', index: 2, bookUrl: 'book'),
+        ],
+      );
+      harness.pageTurnMode = PageAnim.slide;
+      harness.setChapterPages(0, _buildPages(0, [0, 8], title: 'c0'));
+      harness.setChapterPages(1, _buildPages(1, [0, 8], title: 'c1'));
+      harness.setChapterPages(2, _buildPages(2, [0, 8], title: 'c2'));
+      harness.setSlidePages([
+        ...harness.pagesForChapter(0),
+        ...harness.pagesForChapter(1),
+      ]);
+
+      harness.currentPageIndex = 1;
+      harness.currentChapterIndex = 1;
+
+      harness.refreshSlidePagesForTesting(
+        anchorChapterIndex: 1,
+        charOffset: 0,
+      );
+
+      expect(harness.slidePages[harness.currentPageIndex].chapterIndex, 1);
+      expect(harness.slidePages[harness.currentPageIndex].index, 0);
+      expect(harness.currentPageIndex, 2);
     });
   });
 }

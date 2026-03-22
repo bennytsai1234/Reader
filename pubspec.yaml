@@ -1,7 +1,7 @@
 name: legado_reader
 description: "An iOS novel reader inspired by Legado"
 publish_to: 'none'
-version: 0.1.0
+version: 0.1.1+2
 
 environment:
   sdk: ^3.7.0

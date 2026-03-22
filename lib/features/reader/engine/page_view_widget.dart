@@ -250,10 +250,12 @@ class _TextPagePainter extends CustomPainter {
 
       // 處理 TTS 高亮（對位 Android：朗讀時背景高亮）
       // 同時限制章節索引，避免多章節合併時不同 chapter 的相同 chapterPosition 誤觸發
+      final lineStart = line.chapterPosition;
+      final lineEnd = line.chapterPosition + line.text.length;
       final bool isTtsActive = ttsStart != -1 &&
           (ttsChapterIndex < 0 || targetPage.chapterIndex == ttsChapterIndex) &&
-          line.chapterPosition >= ttsStart &&
-          line.chapterPosition < ttsEnd;
+          lineEnd > ttsStart &&
+          lineStart < ttsEnd;
 
       if (isTtsActive) {
         final highlightPaint = Paint()

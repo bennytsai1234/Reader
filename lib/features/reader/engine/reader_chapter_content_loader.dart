@@ -99,7 +99,7 @@ class ReaderChapterContentLoader {
         'remote content chapter $chapterIndex',
         () => service.getContent(resolvedSource, book, chapter),
       );
-      if (raw != null && raw.isNotEmpty) {
+      if (raw.isNotEmpty) {
         return raw;
       }
       return '章節內容為空 (可能解析規則有誤)';

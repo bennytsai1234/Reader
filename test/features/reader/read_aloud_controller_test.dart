@@ -384,5 +384,108 @@ void main() {
       controller.detach();
       await fakeTts.disposeStreams();
     });
+
+    test('slide 模式 progress 會跳到對應頁並更新高亮', () async {
+      final fakeTts = FakeTtsService();
+      final chapters = <int, ReaderChapter>{
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB', 'CCCCCDDDDD'],
+        ),
+      };
+      final pageJumpRequests = <int>[];
+
+      final controller = ReadAloudController(
+        tts: fakeTts,
+        nextChapter: () async {},
+        prevChapter: ({bool fromEnd = true}) async {},
+        nextPage: () async {},
+        prevPage: () async {},
+        canMoveToNextPage: () => true,
+        canMoveToPrevPage: () => false,
+        requestJumpToPage: pageJumpRequests.add,
+        requestJumpToChapter: ({
+          required int chapterIndex,
+          required double alignment,
+          required double localOffset,
+        }) {},
+        chapterOf: (chapterIndex) => chapters[chapterIndex],
+        currentChapterIndex: () => 0,
+        visibleChapterIndex: () => 0,
+        currentCharOffset: () => 0,
+        visibleCharOffset: () => 0,
+        isScrollMode: () => false,
+        onStateChanged: () {},
+        updateMediaInfo: (_, __) {},
+      );
+
+      controller.attach();
+      controller.toggle();
+      await flushAsync();
+
+      fakeTts.emitProgress(14, 16);
+      await flushAsync();
+
+      expect(controller.ttsChapterIndex, 0);
+      expect(controller.ttsStart, greaterThanOrEqualTo(0));
+      expect(controller.ttsEnd, greaterThan(controller.ttsStart));
+      expect(pageJumpRequests, [1]);
+
+      controller.detach();
+      await fakeTts.disposeStreams();
+    });
+
+    test('跨章 handoff 後第一筆 progress 仍會產生下一章高亮', () async {
+      final fakeTts = FakeTtsService();
+      final chapters = <int, ReaderChapter>{
+        0: buildChapter(index: 0, title: 'Chapter 0', paragraphs: ['AAAAABBBBB']),
+        1: buildChapter(index: 1, title: 'Chapter 1', paragraphs: ['CCCCCDDDDD', 'EEEEFFFFGG']),
+      };
+      var currentChapterIndex = 0;
+
+      final controller = ReadAloudController(
+        tts: fakeTts,
+        nextChapter: () async {
+          currentChapterIndex = 1;
+        },
+        prevChapter: ({bool fromEnd = true}) async {},
+        nextPage: () async {},
+        prevPage: () async {},
+        canMoveToNextPage: () => false,
+        canMoveToPrevPage: () => false,
+        requestJumpToPage: (_) {},
+        requestJumpToChapter: ({
+          required int chapterIndex,
+          required double alignment,
+          required double localOffset,
+        }) {},
+        chapterOf: (chapterIndex) => chapters[chapterIndex],
+        currentChapterIndex: () => currentChapterIndex,
+        visibleChapterIndex: () => currentChapterIndex,
+        currentCharOffset: () => 0,
+        visibleCharOffset: () => 0,
+        isScrollMode: () => false,
+        onStateChanged: () {},
+        updateMediaInfo: (_, __) {},
+      );
+
+      controller.attach();
+      controller.toggle();
+      await flushAsync();
+
+      await fakeTts.emitAudioEvent('onComplete');
+      await flushAsync();
+
+      fakeTts.emitProgress(0, 2);
+      await flushAsync();
+
+      expect(controller.ttsChapterIndex, 1);
+      expect(controller.ttsStart, 0);
+      expect(controller.ttsEnd, 10);
+
+      controller.detach();
+      await fakeTts.disposeStreams();
+    });
   });
 }
