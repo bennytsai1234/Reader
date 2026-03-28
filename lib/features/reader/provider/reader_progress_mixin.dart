@@ -13,13 +13,16 @@ mixin ReaderProgressMixin
   int initialCharOffset = 0;
   Timer? scrollSaveTimer;
 
-  List<TextPage> _pagesForChapter(int chapterIndex) =>
-      (this as dynamic).pagesForChapter(chapterIndex) as List<TextPage>;
+  List<TextPage> _pagesForChapter(int chapterIndex) {
+    final cb = contentCallbacksRef.pagesForChapter?.call(chapterIndex);
+    if (cb is List<TextPage>) return cb;
+    return chapterPagesCache[chapterIndex] ?? const <TextPage>[];
+  }
 
   dynamic _runtimeChapterFor(int chapterIndex) =>
-      (this as dynamic).chapterAt?.call(chapterIndex);
+      contentCallbacksRef.chapterAt?.call(chapterIndex);
 
-  dynamic get _progressStore => (this as dynamic).progressStore;
+  dynamic get _progressStore => contentCallbacksRef.progressStore;
 
   void updateVisibleChapterPosition({
     required int chapterIndex,
@@ -31,7 +34,7 @@ mixin ReaderProgressMixin
     visibleChapterAlignment = alignment;
 
     if (pageTurnMode != PageAnim.scroll || isLoading) return;
-    if (!((this as dynamic).shouldPersistVisiblePosition() as bool)) return;
+    if (!(contentCallbacksRef.shouldPersistVisiblePosition?.call() ?? false)) return;
 
     final runtimeChapter = _runtimeChapterFor(chapterIndex);
     final pages = _pagesForChapter(chapterIndex);
@@ -57,7 +60,7 @@ mixin ReaderProgressMixin
 
     if (crossThreshold) {
       scrollSaveTimer?.cancel();
-      (this as dynamic).persistCurrentProgress(
+      contentCallbacksRef.persistCurrentProgress?.call(
         chapterIndex: chapterIndex,
         pageIndex: currentPageIndex,
         reason: ReaderCommandReason.userScroll,
@@ -66,7 +69,7 @@ mixin ReaderProgressMixin
       scrollSaveTimer?.cancel();
       scrollSaveTimer = Timer(const Duration(milliseconds: 500), () {
         if (!isDisposed) {
-          (this as dynamic).persistCurrentProgress(
+          contentCallbacksRef.persistCurrentProgress?.call(
             chapterIndex: chapterIndex,
             pageIndex: currentPageIndex,
             reason: ReaderCommandReason.userScroll,

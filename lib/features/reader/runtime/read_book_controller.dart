@@ -391,6 +391,21 @@ class ReadBookController extends ReaderProviderBase
         reason: reason as ReaderCommandReason,
         isRestoringJump: isRestoringJump,
       ),
+      // Progress-related callbacks (used by ReaderProgressMixin)
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
+      progressStore: _progressStore,
+      shouldPersistVisiblePosition: shouldPersistVisiblePosition,
+      persistCurrentProgress: ({
+        required chapterIndex,
+        int? pageIndex,
+        required reason,
+      }) =>
+          persistCurrentProgress(
+        chapterIndex: chapterIndex,
+        pageIndex: pageIndex,
+        reason: reason as ReaderCommandReason,
+      ),
     );
 
     // ── Phase 1: PREPARE (parallel data loading, no UI updates) ──
