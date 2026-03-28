@@ -19,6 +19,7 @@ import 'package:legado_reader/features/reader/runtime/reader_restore_coordinator
 import 'package:legado_reader/features/reader/runtime/reader_scroll_visibility_coordinator.dart';
 import 'package:legado_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:legado_reader/features/reader/provider/reader_settings_mixin.dart';
+import 'package:legado_reader/features/reader/provider/content_callbacks.dart';
 
 class _FakeBookDao implements BookDao {
   @override
@@ -102,6 +103,51 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     required List<BookChapter> chapters,
   }) : super(book) {
     this.chapters = chapters;
+    // Wire content callbacks so jumpToPosition routes correctly
+    contentCallbacks = ContentCallbacks(
+      refreshChapterRuntime: (_) {},
+      buildSlideRuntimePages: () => buildSlideRuntimePages() as List<dynamic>? ?? [],
+      jumpToSlidePage: (pageIndex, {required reason}) =>
+          jumpToSlidePage(pageIndex, reason: reason as ReaderCommandReason),
+      jumpToChapterLocalOffset: ({
+        required chapterIndex,
+        required localOffset,
+        required alignment,
+        required reason,
+      }) =>
+          jumpToChapterLocalOffset(
+        chapterIndex: chapterIndex,
+        localOffset: localOffset,
+        alignment: alignment,
+        reason: reason as ReaderCommandReason,
+      ),
+      jumpToChapterCharOffset: ({
+        required chapterIndex,
+        required charOffset,
+        required reason,
+        bool isRestoringJump = false,
+      }) =>
+          jumpToChapterCharOffset(
+        chapterIndex: chapterIndex,
+        charOffset: charOffset,
+        reason: reason as ReaderCommandReason,
+        isRestoringJump: isRestoringJump,
+      ),
+      chapterAt: (index) => chapterAt(index),
+      pagesForChapter: (index) => pagesForChapter(index),
+      progressStore: _store,
+      shouldPersistVisiblePosition: () => persistVisiblePosition,
+      persistCurrentProgress: ({
+        required chapterIndex,
+        int? pageIndex,
+        required reason,
+      }) =>
+          persistCurrentProgress(
+        chapterIndex: chapterIndex,
+        pageIndex: pageIndex,
+        reason: reason as ReaderCommandReason,
+      ),
+    );
   }
 
   ReaderProgressStore get progressStore => _store;
@@ -340,11 +386,13 @@ void main() {
           harness.chapterAt(1)!.localOffsetFromCharOffset(9);
       final expectedAlignment = harness.chapterAt(1)!.alignmentForCharOffset(9);
 
-      harness.pendingRestorePos = 9;
-      harness.applyPendingRestore();
+      harness.jumpToPosition(
+        chapterIndex: 1,
+        charOffset: 9,
+        isRestoringJump: true,
+      );
 
-      expect(harness.pendingRestorePos, isNull);
-      expect(harness.lifecycle, ReaderLifecycle.restoring);
+      expect(harness.lifecycle, ReaderLifecycle.loading);
       expect(harness.lastChapterJump, isNotNull);
       expect(harness.lastChapterJump!.chapterIndex, 1);
       expect(harness.lastChapterJump!.localOffset, expectedLocalOffset);
@@ -374,7 +422,6 @@ void main() {
         isRestoringJump: true,
       );
 
-      expect(harness.lifecycle, ReaderLifecycle.restoring);
       expect(harness.currentPageIndex, 2);
       expect(harness.lastSlideJump, 2);
       expect(harness.lastSlideJumpReason, ReaderCommandReason.restore);

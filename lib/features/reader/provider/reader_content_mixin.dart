@@ -259,7 +259,19 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       return;
     }
 
-    final clampedIndex = result.mappedIndex.clamp(0, slidePages.length - 1);
+    // Check pinned target first, then fall back to mapped index
+    final pinnedChapterIndex = _pinnedSlideChapterIndex;
+    int targetIndex;
+    if (pinnedChapterIndex != null) {
+      targetIndex = _findSlidePageIndexByCharOffset(
+        chapterIndex: pinnedChapterIndex,
+        charOffset: _pinnedSlideCharOffset,
+        fromEnd: _pinnedSlideFromEnd,
+      );
+    } else {
+      targetIndex = result.mappedIndex;
+    }
+    final clampedIndex = targetIndex.clamp(0, slidePages.length - 1);
     final indexChanged = clampedIndex != currentPageIndex;
     currentPageIndex = clampedIndex;
     if (indexChanged) {
