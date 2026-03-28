@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:legado_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:legado_reader/features/reader/engine/page_view_widget.dart';
 import 'package:legado_reader/features/reader/reader_provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
@@ -51,30 +54,27 @@ class ScrollModeDelegate extends PageModeDelegate {
       physics: const BouncingScrollPhysics(),
       itemBuilder: (_, chapterIndex) {
         final runtimeChapter = provider.chapterAt(chapterIndex);
-        final pages = runtimeChapter?.pages;
+        var pages = runtimeChapter?.pages;
+
+        // Fast path: eagerly paginate for local books to avoid placeholder flash
+        if ((pages == null || pages.isEmpty) && provider.book.origin == 'local') {
+          // trySyncPaginate is actually async, but we fire-and-forget here
+          // and rely on the notifyListeners callback to rebuild with real pages
+          unawaited(provider.trySyncPaginate(chapterIndex));
+        }
+
         if (pages == null || pages.isEmpty) {
+          final estimatedHeight = _estimateChapterHeight(provider, chapterIndex);
           return Container(
             color: provider.currentTheme.backgroundColor,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            constraints: BoxConstraints(
-              minHeight: (provider.viewSize?.height ?? 220) * 0.45,
-            ),
+            height: estimatedHeight,
             alignment: Alignment.center,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: provider.currentTheme.textColor.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Text(
-                  provider.loadingChapters.contains(chapterIndex)
-                      ? '正在載入 ${provider.displayChapterTitleAt(chapterIndex)}...'
-                      : '準備章節內容...',
-                  style: TextStyle(
-                    color: provider.currentTheme.textColor.withValues(alpha: 0.55),
-                  ),
-                ),
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: provider.currentTheme.textColor.withValues(alpha: 0.3),
               ),
             ),
           );
@@ -109,5 +109,18 @@ class ScrollModeDelegate extends PageModeDelegate {
         );
       },
     );
+  }
+
+  double _estimateChapterHeight(ReaderProvider provider, int chapterIndex) {
+    final heights = <double>[];
+    for (final offset in [-1, 1]) {
+      final neighbor = chapterIndex + offset;
+      final neighborPages = provider.chapterPagesCache[neighbor];
+      if (neighborPages != null && neighborPages.isNotEmpty) {
+        heights.add(ChapterPositionResolver.chapterHeight(neighborPages));
+      }
+    }
+    if (heights.isEmpty) return provider.viewSize?.height ?? 600.0;
+    return heights.reduce((double a, double b) => a + b) / heights.length;
   }
 }
