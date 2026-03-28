@@ -11,7 +11,6 @@ import 'reader_settings_mixin.dart';
 mixin ReaderProgressMixin
     on ReaderProviderBase, ReaderSettingsMixin, ReaderContentMixin {
   int initialCharOffset = 0;
-  int? pendingRestorePos;
   Timer? scrollSaveTimer;
 
   List<TextPage> _pagesForChapter(int chapterIndex) =>
@@ -31,7 +30,7 @@ mixin ReaderProgressMixin
     visibleChapterLocalOffset = localOffset;
     visibleChapterAlignment = alignment;
 
-    if (pageTurnMode != PageAnim.scroll || isRestoring || isLoading) return;
+    if (pageTurnMode != PageAnim.scroll || isLoading) return;
     if (!((this as dynamic).shouldPersistVisiblePosition() as bool)) return;
 
     final runtimeChapter = _runtimeChapterFor(chapterIndex);
@@ -85,7 +84,6 @@ mixin ReaderProgressMixin
     bool isRestoringJump = false,
   }) {
     final targetChapter = chapterIndex ?? currentChapterIndex;
-    if (isRestoringJump) lifecycle = ReaderLifecycle.restoring;
 
     if (pageTurnMode == PageAnim.scroll) {
       final runtimeChapter = _runtimeChapterFor(targetChapter);
@@ -103,7 +101,7 @@ mixin ReaderProgressMixin
               pages,
               targetCharOffset,
             );
-      (this as dynamic).jumpToChapterLocalOffset(
+      contentCallbacksRef.jumpToChapterLocalOffset?.call(
         chapterIndex: targetChapter,
         localOffset: localOffset,
         alignment: alignment,
@@ -131,25 +129,13 @@ mixin ReaderProgressMixin
       targetPage = pageIndex.clamp(0, slidePages.length - 1);
     }
     currentPageIndex = targetPage;
-    (this as dynamic).jumpToSlidePage(
+    contentCallbacksRef.jumpToSlidePage?.call(
       targetPage,
       reason: isRestoringJump
           ? ReaderCommandReason.restore
           : ReaderCommandReason.system,
     );
     notifyListeners();
-  }
-
-  void applyPendingRestore() {
-    if (pendingRestorePos == null) return;
-    final pos = pendingRestorePos!;
-    pendingRestorePos = null;
-    (this as dynamic).jumpToChapterCharOffset(
-      chapterIndex: currentChapterIndex,
-      charOffset: pos,
-      reason: ReaderCommandReason.restore,
-      isRestoringJump: true,
-    );
   }
 
   void saveProgress(

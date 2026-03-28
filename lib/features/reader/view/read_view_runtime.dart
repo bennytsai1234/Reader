@@ -118,9 +118,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           localOffset: pendingScrollAction.localOffset,
         );
       });
-    } else if (p.pageTurnMode == PageAnim.scroll && p.isRestoring) {
-      setState(() {});
-      return;
     }
 
     if (_coordinator.shouldFollowTts(
@@ -202,15 +199,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           );
         }
 
-        if (_coordinator.shouldRestoreSlidePage(provider)) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (widget.pageController.hasClients &&
-                widget.pageController.page?.round() != provider.currentPageIndex) {
-              widget.pageController.jumpToPage(provider.currentPageIndex);
-            }
-            provider.completeRestoreTransition();
-          });
-        }
 
         final delegate = provider.pageTurnMode == PageAnim.scroll
             ? ScrollModeDelegate(

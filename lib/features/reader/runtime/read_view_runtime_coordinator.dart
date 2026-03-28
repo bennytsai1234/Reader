@@ -24,18 +24,6 @@ class ReadViewRuntimeCoordinator {
 
     final pendingChapterJump = provider.consumePendingChapterJump();
     if (pendingChapterJump != null) {
-      if (provider.isRestoring) {
-        final token = provider.registerPendingScrollRestore(
-          chapterIndex: pendingChapterJump.chapterIndex,
-          localOffset: pendingChapterJump.localOffset,
-        );
-        return (
-          chapterIndex: pendingChapterJump.chapterIndex,
-          localOffset: pendingChapterJump.localOffset,
-          token: token,
-          isRestore: true,
-        );
-      }
       return (
         chapterIndex: pendingChapterJump.chapterIndex,
         localOffset: pendingChapterJump.localOffset,
@@ -44,7 +32,6 @@ class ReadViewRuntimeCoordinator {
       );
     }
 
-    if (!provider.isRestoring) return null;
     final pendingRestore = provider.consumePendingScrollRestore();
     if (pendingRestore == null) return null;
     return (
@@ -72,7 +59,6 @@ class ReadViewRuntimeCoordinator {
   }) {
     return !hasVisibleData &&
         (provider.lifecycle == ReaderLifecycle.loading ||
-            provider.lifecycle == ReaderLifecycle.restoring ||
             provider.viewSize == null ||
             provider.chapters.isNotEmpty);
   }
@@ -81,12 +67,10 @@ class ReadViewRuntimeCoordinator {
     ReaderProvider provider, {
     required bool hasVisibleData,
   }) {
-    return provider.pageTurnMode == PageAnim.scroll &&
-        provider.lifecycle == ReaderLifecycle.restoring &&
-        hasVisibleData;
+    return false;
   }
 
   bool shouldRestoreSlidePage(ReaderProvider provider) {
-    return provider.isRestoring && provider.pageTurnMode != PageAnim.scroll;
+    return false;
   }
 }

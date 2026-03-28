@@ -10,6 +10,7 @@ import 'package:legado_reader/features/reader/engine/chapter_position_resolver.d
 import 'package:legado_reader/features/reader/engine/reader_perf_trace.dart';
 import 'package:legado_reader/features/reader/engine/text_page.dart';
 import 'package:legado_reader/features/reader/provider/reader_auto_page_mixin.dart';
+import 'package:legado_reader/features/reader/provider/content_callbacks.dart';
 import 'package:legado_reader/features/reader/provider/reader_content_mixin.dart';
 import 'package:legado_reader/features/reader/provider/reader_progress_mixin.dart';
 import 'package:legado_reader/features/reader/provider/reader_provider_base.dart';
@@ -43,6 +44,7 @@ class ReadBookController extends ReaderProviderBase
       ReaderScrollVisibilityCoordinator();
   final ReaderTtsFollowCoordinator _ttsFollow = const ReaderTtsFollowCoordinator();
   late final ReadAloudController _readAloudController;
+  final Completer<Size> _viewSizeCompleter = Completer<Size>();
   int _ttsMode = 0;
   bool _initialSessionPrimed = false;
   DateTime? _ignoreViewportChangesUntil;
@@ -274,21 +276,6 @@ class ReadBookController extends ReaderProviderBase
     return _navigation.shouldPersistForReason(reason);
   }
 
-  void completeRestoreTransition() {
-    if (!isDisposed && lifecycle == ReaderLifecycle.restoring) {
-      ReaderPerfTrace.mark(
-        'restore ready chapter=$visibleChapterIndex offset=${visibleChapterLocalOffset.toStringAsFixed(1)}',
-      );
-      _restore.clear();
-      _navigation.clear(ReaderCommandReason.restore);
-      lifecycle = ReaderLifecycle.ready;
-      if (pageTurnMode == PageAnim.scroll) {
-        updateScrollPreloadForVisibleChapter(visibleChapterIndex);
-        triggerSilentPreload();
-      }
-      notifyListeners();
-    }
-  }
 
   int registerPendingScrollRestore({
     required int chapterIndex,
@@ -373,6 +360,40 @@ class ReadBookController extends ReaderProviderBase
   Future<void> _init() async {
     WidgetsBinding.instance.addObserver(this);
     lifecycle = ReaderLifecycle.loading;
+
+    // Wire typed callbacks (replaces `this as dynamic` casts)
+    contentCallbacks = ContentCallbacks(
+      refreshChapterRuntime: refreshChapterRuntime,
+      buildSlideRuntimePages: buildSlideRuntimePages,
+      jumpToSlidePage: (pageIndex, {required reason}) =>
+          jumpToSlidePage(pageIndex, reason: reason as ReaderCommandReason),
+      jumpToChapterLocalOffset: ({
+        required chapterIndex,
+        required localOffset,
+        required alignment,
+        required reason,
+      }) =>
+          jumpToChapterLocalOffset(
+        chapterIndex: chapterIndex,
+        localOffset: localOffset,
+        alignment: alignment,
+        reason: reason as ReaderCommandReason,
+      ),
+      jumpToChapterCharOffset: ({
+        required chapterIndex,
+        required charOffset,
+        required reason,
+        bool isRestoringJump = false,
+      }) =>
+          jumpToChapterCharOffset(
+        chapterIndex: chapterIndex,
+        charOffset: charOffset,
+        reason: reason as ReaderCommandReason,
+        isRestoringJump: isRestoringJump,
+      ),
+    );
+
+    // ── Phase 1: PREPARE (parallel data loading, no UI updates) ──
     await Future.wait([
       loadSettings(),
       _loadReadAloudPreferences(),
@@ -387,13 +408,49 @@ class ReadBookController extends ReaderProviderBase
       doPaginate();
     };
 
-    lifecycle = ReaderLifecycle.restoring;
-    pendingRestorePos = initialCharOffset;
-    if (viewSize != null) {
-      await _primeInitialWindow();
+    // ── Phase 2: RENDER (wait for viewSize, single UI update) ──
+    final size = viewSize ?? await _viewSizeCompleter.future;
+    if (isDisposed) return;
+
+    batchUpdate(() {
+      viewSize = size;
+      updatePaginationConfig();
+    });
+
+    // Load initial chapter content
+    if (!_initialSessionPrimed) {
+      _initialSessionPrimed = true;
+      final initialPreloadRadius =
+          pageTurnMode == PageAnim.scroll && book.origin == 'local' ? 1 : 0;
+      await loadChapterWithPreloadRadius(
+        currentChapterIndex,
+        preloadRadius: pageTurnMode == PageAnim.scroll ? initialPreloadRadius : 1,
+      );
+      if (isDisposed) return;
     }
+
+    // Apply restore position + transition to ready in ONE update
+    batchUpdate(() {
+      bootstrapChapterWindow(currentChapterIndex);
+      if (initialCharOffset > 0) {
+        jumpToChapterCharOffset(
+          chapterIndex: currentChapterIndex,
+          charOffset: initialCharOffset,
+          reason: ReaderCommandReason.restore,
+          isRestoringJump: false,
+        );
+      }
+      lifecycle = ReaderLifecycle.ready;
+    });
+
+    // ── Phase 3: WARMUP (background, non-blocking) ──
     _startHeartbeat();
     _readAloudController.attach();
+    scheduleDeferredWindowWarmup(currentChapterIndex);
+    if (pageTurnMode == PageAnim.scroll) {
+      updateScrollPreloadForVisibleChapter(visibleChapterIndex);
+      triggerSilentPreload();
+    }
   }
 
   Timer? _heartbeatTimer;
@@ -426,17 +483,20 @@ class ReadBookController extends ReaderProviderBase
   double get autoPageProgress => autoPageProgressNotifier.value;
 
   void setViewSize(Size size) {
+    // During init: just complete the completer, don't paginate
+    if (!_viewSizeCompleter.isCompleted) {
+      _viewSizeCompleter.complete(size);
+      return;
+    }
+
+    // Post-init: handle viewport changes (orientation, keyboard, etc.)
     if (viewSize == null) {
       viewSize = size;
       if (!hasContentManager) return;
       updatePaginationConfig();
-      if (!_initialSessionPrimed) {
-        unawaited(_primeInitialWindow());
-        return;
-      }
       if (contentManager.getCachedContent(currentChapterIndex) != null &&
           (chapterPagesCache[currentChapterIndex]?.isEmpty ?? true)) {
-        unawaited(doPaginate().then((_) => applyPendingRestore()));
+        unawaited(doPaginate());
       }
       return;
     }
@@ -457,7 +517,7 @@ class ReadBookController extends ReaderProviderBase
 
     super.onPageChanged(i);
     final reason = consumePageChangeReason();
-    if (!isRestoring && shouldPersistForReason(reason)) {
+    if (shouldPersistForReason(reason)) {
       persistCurrentProgress(
         chapterIndex: currentChapterIndex,
         pageIndex: i,
@@ -471,10 +531,6 @@ class ReadBookController extends ReaderProviderBase
 
   void handleSlidePageChanged(int index) {
     if (slidePages.isEmpty) return;
-    if (isRestoring) {
-      completeRestoreTransition();
-      return;
-    }
     onPageChanged(index);
   }
 
@@ -677,25 +733,6 @@ class ReadBookController extends ReaderProviderBase
     refreshAllChapterRuntime();
   }
 
-  Future<void> _primeInitialWindow() async {
-    if (_initialSessionPrimed || isDisposed || !hasContentManager || viewSize == null) {
-      return;
-    }
-    _initialSessionPrimed = true;
-    final initialPreloadRadius =
-        pageTurnMode == PageAnim.scroll && book.origin == 'local' ? 1 : 0;
-    await ReaderPerfTrace.measureAsync(
-      'prime initial window chapter $currentChapterIndex',
-      () => loadChapterWithPreloadRadius(
-        currentChapterIndex,
-        preloadRadius: pageTurnMode == PageAnim.scroll ? initialPreloadRadius : 1,
-      ),
-    );
-    if (isDisposed) return;
-    bootstrapChapterWindow(currentChapterIndex);
-    applyPendingRestore();
-    scheduleDeferredWindowWarmup(currentChapterIndex);
-  }
 
   bool _shouldIgnoreViewSizeChange(Size size) {
     final currentSize = viewSize;

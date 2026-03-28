@@ -119,7 +119,6 @@ class ScrollRuntimeExecutor {
 
   void completeScrollRestore(int token) {
     if (!isMounted() || !provider.matchesPendingScrollRestore(token)) return;
-    provider.completeRestoreTransition();
     onRestoreCompleted();
   }
 

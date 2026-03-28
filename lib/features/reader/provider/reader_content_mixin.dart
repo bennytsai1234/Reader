@@ -39,6 +39,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   /// Inject typed callbacks from ReadBookController.
   set contentCallbacks(ContentCallbacks callbacks) => _contentCallbacks = callbacks;
 
+  /// Access typed callbacks (for mixins that depend on ReaderContentMixin).
+  ContentCallbacks get contentCallbacksRef => _contentCallbacks;
+
   /// The current slide window (for external access).
   SlideWindow get slideWindow => _slideWindow;
 
