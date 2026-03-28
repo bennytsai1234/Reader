@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:legado_reader/core/constant/page_anim.dart';
+import 'package:legado_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:legado_reader/features/reader/reader_provider.dart';
 import 'package:legado_reader/features/reader/runtime/read_view_runtime_coordinator.dart';
 import 'package:legado_reader/features/reader/view/delegate/scroll_mode_delegate.dart';
@@ -28,6 +29,10 @@ class ReadViewRuntime extends StatefulWidget {
 
 class _ReadViewRuntimeState extends State<ReadViewRuntime>
     with TickerProviderStateMixin {
+  late final AnimationController _fadeCtrl;
+  late final Animation<double> _fadeAnimation;
+  bool _contentRevealed = false;
+
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
       ItemPositionsListener.create();
@@ -81,12 +86,18 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
         );
       },
     );
+    _fadeCtrl = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeIn);
     widget.provider.addListener(_onProviderStateChanged);
     _itemPositionsListener.itemPositions.addListener(_handleItemPositionsChanged);
   }
 
   @override
   void dispose() {
+    _fadeCtrl.dispose();
     widget.provider.removeListener(_onProviderStateChanged);
     _itemPositionsListener.itemPositions.removeListener(_handleItemPositionsChanged);
     _scrollAutoPageDriver.stop();
@@ -97,6 +108,13 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
 
   void _onProviderStateChanged() {
     if (!mounted) return;
+
+    // Reveal content with fade when ready
+    if (!_contentRevealed && widget.provider.isReady) {
+      _contentRevealed = true;
+      _fadeCtrl.forward();
+    }
+
     final p = widget.provider;
     p.reconcileVisibleScrollLoads();
 
@@ -166,6 +184,11 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           WidgetsBinding.instance.addPostFrameCallback((_) => provider.setViewSize(size));
         }
 
+        // Show theme-colored placeholder during init
+        if (provider.lifecycle == ReaderLifecycle.loading && !_contentRevealed) {
+          return Container(color: provider.currentTheme.backgroundColor);
+        }
+
         final hasVisibleData = provider.pageTurnMode == PageAnim.scroll
             ? provider.pageFactory.orderedChapters.isNotEmpty
             : provider.slidePages.isNotEmpty;
@@ -174,13 +197,8 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           provider,
           hasVisibleData: hasVisibleData,
         );
-        final holdScrollUntilRestored =
-            _coordinator.shouldHoldScrollUntilRestored(
-          provider,
-          hasVisibleData: hasVisibleData,
-        );
 
-        if ((provider.isLoading && !hasVisibleData) || waitingForFirstContent) {
+        if (waitingForFirstContent) {
           return Container(
             color: provider.currentTheme.backgroundColor,
             child: const Center(child: CircularProgressIndicator()),
@@ -198,7 +216,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
             ),
           );
         }
-
 
         final delegate = provider.pageTurnMode == PageAnim.scroll
             ? ScrollModeDelegate(
@@ -222,24 +239,10 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           ),
         );
 
-        if (holdScrollUntilRestored) {
-          return Stack(
-            children: [
-              IgnorePointer(
-                child: Opacity(
-                  opacity: 0,
-                  child: content,
-                ),
-              ),
-              Container(
-                color: provider.currentTheme.backgroundColor,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
-            ],
-          );
-        }
-
-        return content;
+        return FadeTransition(
+          opacity: _contentRevealed ? _fadeAnimation : const AlwaysStoppedAnimation(1.0),
+          child: content,
+        );
       },
     );
   }
