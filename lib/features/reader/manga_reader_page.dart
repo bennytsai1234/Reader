@@ -159,8 +159,8 @@ class _MangaReaderPageState extends State<MangaReaderPage> {
                   _transCtrl.value = Matrix4.identity();
                 } else {
                   _transCtrl.value = Matrix4.identity()
-                    ..translate(-d.localPosition.dx, -d.localPosition.dy)
-                    ..scale(2.0);
+                    ..translateByDouble(-d.localPosition.dx, -d.localPosition.dy, 0.0, 1.0)
+                    ..scaleByDouble(2.0, 2.0, 1.0, 1.0);
                 }
               },
               child: _isLoading

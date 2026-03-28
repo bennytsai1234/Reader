@@ -171,20 +171,19 @@ class SearchProvider extends ChangeNotifier {
     _currentSource = source.bookSourceName;
     notifyListeners();
     try {
-      final fullSource = await _sourceDao.getByUrl(source.bookSourceUrl);
-      if (fullSource == null || _isCancelled) return;
-
-      final books = await _service.searchBooks(fullSource, keyword).timeout(const Duration(seconds: 30));
       if (_isCancelled) return;
-      
+
+      final books = await _service.searchBooks(source, keyword).timeout(const Duration(seconds: 30));
+      if (_isCancelled) return;
+
       // 精準搜尋過濾
-      final filteredBooks = _precisionSearch 
+      final filteredBooks = _precisionSearch
           ? books.where((b) => b.name == keyword || b.author == keyword).toList()
           : books;
 
       _aggregateResults(filteredBooks);
     } catch (e) {
-      debugPrint('搜尋失敗: $e');
+      debugPrint('搜尋失敗 [${source.bookSourceName}]: $e');
     } finally {
       _searchCount++;
       notifyListeners();

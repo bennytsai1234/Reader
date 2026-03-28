@@ -72,14 +72,16 @@ class OtherSettingsPage extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('選擇語言'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: languages.map((lang) => RadioListTile<String>(
-            title: Text(lang['label']!),
-            value: lang['value']!,
-            groupValue: (lang['value'] == 'system' && settings.locale == null) ? 'system' : (settings.locale != null && (lang['value'] == settings.locale!.languageCode || lang['value'] == '${settings.locale!.languageCode}_${settings.locale!.countryCode}')) ? lang['value'] : null,
-            onChanged: (val) { settings.setLanguage(val!); Navigator.pop(context); },
-          )).toList(),
+        content: RadioGroup<String>(
+          groupValue: settings.locale == null ? 'system' : (languages.any((l) => l['value'] == '${settings.locale!.languageCode}_${settings.locale!.countryCode}') ? '${settings.locale!.languageCode}_${settings.locale!.countryCode}' : settings.locale!.languageCode),
+          onChanged: (val) { if (val != null) { settings.setLanguage(val); Navigator.pop(context); } },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: languages.map((lang) => RadioListTile<String>(
+              title: Text(lang['label']!),
+              value: lang['value']!,
+            )).toList(),
+          ),
         ),
       ),
     );
@@ -106,7 +108,7 @@ class OtherSettingsPage extends StatelessWidget {
       return StatefulBuilder(builder: (context, setState) => AlertDialog(
         title: const Text('進階封面設定'),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          DropdownButtonFormField<int>(value: priority, decoration: const InputDecoration(labelText: '搜尋優先級'), items: const [DropdownMenuItem(value: 0, child: Text('書源優先')), DropdownMenuItem(value: 1, child: Text('全域規則優先'))], onChanged: (v) => setState(() => priority = v!)),
+          DropdownButtonFormField<int>(initialValue: priority, decoration: const InputDecoration(labelText: '搜尋優先級'), items: const [DropdownMenuItem(value: 0, child: Text('書源優先')), DropdownMenuItem(value: 1, child: Text('全域規則優先'))], onChanged: (v) => setState(() => priority = v!)),
           const SizedBox(height: 16),
           Text('超時時間: ${(timeout / 1000).toStringAsFixed(1)} 秒'),
           Slider(value: timeout, min: 1000, max: 30000, divisions: 29, onChanged: (v) => setState(() => timeout = v)),

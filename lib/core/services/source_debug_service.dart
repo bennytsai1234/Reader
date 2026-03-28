@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'book_source_service.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/utils/html_formatter.dart';
-import 'package:legado_reader/core/engine/analyze_url.dart';
 
 class DebugLog {
   final int state; // 1: info, 10: search, 20: detail, 30: toc, 40: content, 1000: success, -1: error
@@ -50,34 +48,6 @@ class SourceDebugService {
     _logController.add(debugLog);
   }
 
-  void _logHttp(AnalyzeUrl analyzeUrl, String? responseBody) {
-    var logMsg = '┌── HTTP 請求 ──────────────────\n';
-    logMsg += '│ URL: ${analyzeUrl.url}\n';
-    logMsg += '│ Method: ${analyzeUrl.method}\n';
-    if (analyzeUrl.headerMap.isNotEmpty) {
-      logMsg += '│ Headers: ${jsonEncode(analyzeUrl.headerMap)}\n';
-    }
-    if (analyzeUrl.body != null) {
-      logMsg += '│ Body: ${analyzeUrl.body}\n';
-    }
-    logMsg += '├── HTTP 回應 ──────────────────\n';
-    
-    if (responseBody != null) {
-      try {
-        // 嘗試 JSON 格式化
-        final obj = jsonDecode(responseBody);
-        final pretty = const JsonEncoder.withIndent('  ').convert(obj);
-        logMsg += '│ JSON:\n$pretty\n';
-      } catch (_) {
-        // 否則顯示部分原文
-        final clean = responseBody.length > 500 ? '${responseBody.substring(0, 500)}...' : responseBody;
-        logMsg += '│ Content: $clean\n';
-      }
-    }
-    logMsg += '└───────────────────────────────';
-    log(logMsg);
-  }
-
   void cancel() {
     _isCancelled = true;
   }
@@ -114,13 +84,14 @@ class SourceDebugService {
 
   Future<void> _searchDebug(BookSource source, String key) async {
     log('︾開始解析搜尋頁', state: 10);
-    final analyzeUrl = AnalyzeUrl(source.searchUrl ?? '', source: source, key: key);
-    final body = await analyzeUrl.getResponseBody();
-    _logHttp(analyzeUrl, body);
+    log('  搜尋 URL: ${source.searchUrl}');
 
     final books = await _bookSourceService.searchBooks(source, key, page: 1);
     if (books.isNotEmpty) {
       log('︽搜尋頁解析完成，獲取到 ${books.length} 本書籍', state: 10);
+      for (var i = 0; i < books.length && i < 5; i++) {
+        log('  [$i] ${books[i].name} - ${books[i].author ?? "未知"}');
+      }
       final firstBook = Book(
         origin: source.bookSourceUrl,
         bookUrl: books.first.bookUrl,
@@ -134,13 +105,14 @@ class SourceDebugService {
 
   Future<void> _exploreDebug(BookSource source, String url) async {
     log('︾開始解析發現頁', state: 10);
-    final analyzeUrl = AnalyzeUrl(url, source: source);
-    final body = await analyzeUrl.getResponseBody();
-    _logHttp(analyzeUrl, body);
+    log('  發現 URL: $url');
 
     final books = await _bookSourceService.exploreBooks(source, url, page: 1);
     if (books.isNotEmpty) {
       log('︽發現頁解析完成，獲取到 ${books.length} 本書籍', state: 10);
+      for (var i = 0; i < books.length && i < 5; i++) {
+        log('  [$i] ${books[i].name} - ${books[i].author ?? "未知"}');
+      }
       final firstBook = Book(
         origin: source.bookSourceUrl,
         bookUrl: books.first.bookUrl,
@@ -159,14 +131,13 @@ class SourceDebugService {
       await _tocDebug(source, targetBook.tocUrl, book: targetBook);
       return;
     }
-    
+
     log('︾開始解析詳情頁', state: 20);
-    final analyzeUrl = AnalyzeUrl(url, source: source);
-    final body = await analyzeUrl.getResponseBody();
-    _logHttp(analyzeUrl, body);
+    log('  詳情 URL: $url');
 
     final infoBook = await _bookSourceService.getBookInfo(source, targetBook);
     log('︽詳情頁解析完成: ${infoBook.name}', state: 20);
+    log('  作者: ${infoBook.author}, 目錄: ${infoBook.tocUrl}');
     if (infoBook.tocUrl.isNotEmpty) {
       await _tocDebug(source, infoBook.tocUrl, book: infoBook);
     }
@@ -175,13 +146,15 @@ class SourceDebugService {
   Future<void> _tocDebug(BookSource source, String url, {Book? book}) async {
     final targetBook = book ?? Book(origin: source.bookSourceUrl, tocUrl: url);
     log('︾開始解析目錄頁', state: 30);
-    final analyzeUrl = AnalyzeUrl(url, source: source);
-    final body = await analyzeUrl.getResponseBody();
-    _logHttp(analyzeUrl, body);
+    log('  目錄 URL: $url');
 
     final chapters = await _bookSourceService.getChapterList(source, targetBook);
     log('︽目錄頁解析完成，共 ${chapters.length} 章', state: 30);
-    
+    if (chapters.isNotEmpty) {
+      log('  首章: ${chapters.first.title}');
+      log('  末章: ${chapters.last.title}');
+    }
+
     if (chapters.isNotEmpty) {
       final firstChapter = chapters.first;
       final nextChapterUrl = chapters.length > 1 ? chapters[1].url : null;
@@ -194,11 +167,9 @@ class SourceDebugService {
   Future<void> _contentDebug(BookSource source, String url, {Book? book, BookChapter? chapter, String? nextUrl}) async {
     final targetBook = book ?? Book(origin: source.bookSourceUrl);
     final targetChapter = chapter ?? BookChapter(title: '調試', url: url, bookUrl: targetBook.bookUrl);
-    
+
     log('︾開始解析正文頁: ${targetChapter.title}', state: 40);
-    final analyzeUrl = AnalyzeUrl(url, source: source);
-    final body = await analyzeUrl.getResponseBody();
-    _logHttp(analyzeUrl, body);
+    log('  正文 URL: $url');
 
     final content = await _bookSourceService.getContent(
       source,
@@ -206,7 +177,7 @@ class SourceDebugService {
       targetChapter,
       nextChapterUrl: nextUrl,
     );
-    
+
     log('︽正文頁解析完成 (內容長度: ${content.length})', state: 1000);
     if (content.length > 100) {
       log('正文預覽: ${content.substring(0, 100)}...');
