@@ -55,31 +55,35 @@ class _FontManagerPageState extends State<FontManagerPage> {
               Expanded(
                 child: provider.isLoading && provider.customFonts.isEmpty
                     ? const Center(child: CircularProgressIndicator())
-                    : ListView(
-                        children: [
-                          if (provider.isLoading && provider.downloadProgress > 0)
-                            LinearProgressIndicator(value: provider.downloadProgress),
-                          _buildSectionTitle('系統字體'),
-                          ..._systemFonts.map((font) => _buildFontTile(
-                                font,
-                                font == 'System Default' ? null : font,
-                                provider,
-                              )),
-                          const Divider(),
-                          _buildSectionTitle('自訂字體'),
-                          if (provider.customFonts.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: Text('無自訂字體，點擊右上角按鈕匯入。',
-                                  style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            ),
-                          ...provider.customFonts.map((font) => _buildFontTile(
-                                font,
-                                font,
-                                provider,
-                                isCustom: true,
-                              )),
-                        ],
+                    : RadioGroup<String?>(
+                        groupValue: provider.selectedFont,
+                        onChanged: (val) => provider.setSelectedFont(val),
+                        child: ListView(
+                          children: [
+                            if (provider.isLoading && provider.downloadProgress > 0)
+                              LinearProgressIndicator(value: provider.downloadProgress),
+                            _buildSectionTitle('系統字體'),
+                            ..._systemFonts.map((font) => _buildFontTile(
+                                  font,
+                                  font == 'System Default' ? null : font,
+                                  provider,
+                                )),
+                            const Divider(),
+                            _buildSectionTitle('自訂字體'),
+                            if (provider.customFonts.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text('無自訂字體，點擊右上角按鈕匯入。',
+                                    style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              ),
+                            ...provider.customFonts.map((font) => _buildFontTile(
+                                  font,
+                                  font,
+                                  provider,
+                                  isCustom: true,
+                                )),
+                          ],
+                        ),
                       ),
               ),
             ],
@@ -154,8 +158,6 @@ class _FontManagerPageState extends State<FontManagerPage> {
             ),
           ),
           value: fontFamily,
-          groupValue: provider.selectedFont,
-          onChanged: (val) => provider.setSelectedFont(val),
           secondary: isCustom
               ? IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.redAccent),

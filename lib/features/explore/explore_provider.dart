@@ -38,7 +38,9 @@ class ExploreProvider extends ChangeNotifier {
   }
 
   Future<void> _loadSources() async {
-    _sources = await _sourceDao.getEnabled();
+    final allEnabled = await _sourceDao.getEnabled();
+    // 只顯示啟用了探索功能且有 exploreUrl 的書源
+    _sources = allEnabled.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
     if (_sources.isNotEmpty) {
       setSource(_sources.first);
     }
@@ -56,7 +58,7 @@ class ExploreProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    _allKinds = ExploreUrlParser.parse(source.exploreUrl);
+    _allKinds = ExploreUrlParser.parse(source.exploreUrl, source: source);
     
     // 提取所有唯一分組
     final groupSet = _allKinds.where((k) => k.group != null).map((k) => k.group!).toSet();

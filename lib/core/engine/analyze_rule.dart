@@ -73,8 +73,10 @@ class AnalyzeRule extends AnalyzeRuleBase with AnalyzeRuleRegexHelper, AnalyzeRu
 
   Future<void> preUpdateToc() async {
     if (source is! BookSource) return;
-    // Android 原版在更新目錄前會檢查是否需要執行特定 JS
-    // 例如 bookSource.ruleToc?.preUpdateJs
+    final js = (source as BookSource).ruleToc?.preUpdateJs;
+    if (js != null && js.isNotEmpty) {
+      evalJS(js, null);
+    }
   }
 
   /// 重新獲取書籍資訊 (原 Android AnalyzeRule.reGetBook)

@@ -85,7 +85,7 @@ class SourceItemTile extends StatelessWidget {
             Switch(
               value: source.enabled,
               onChanged: onEnabledChanged,
-              activeColor: Colors.blue,
+              activeThumbColor: Colors.blue,
             ),
           ],
         ),

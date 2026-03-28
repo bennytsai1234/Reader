@@ -103,7 +103,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
       ),
       body: Column(
         children: [
-          if (!_isMultiSelect) _buildGroupTabs(provider),
           Expanded(
             child: provider.isLoading && provider.books.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -115,39 +114,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
                       ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildGroupTabs(BookshelfProvider p) {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: p.groups.length + 2,
-        itemBuilder: (context, index) {
-          int gid;
-          String name;
-          if (index == 0) { gid = -1; name = '全部'; }
-          else if (index == 1) { gid = 0; name = '未分組'; }
-          else {
-            final g = p.groups[index - 2];
-            gid = g.groupId;
-            name = g.groupName;
-          }
-
-          final isSelected = p.currentGroupId == gid;
-          final count = p.groupCounts[gid] ?? 0;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: ChoiceChip(
-              label: Text('$name ($count)'),
-              selected: isSelected,
-              onSelected: (_) => p.setGroup(gid),
-            ),
-          );
-        },
       ),
     );
   }
@@ -199,17 +165,19 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   borderRadius: BorderRadius.circular(4),
                   child: coverUrl.isEmpty
                     ? Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey))
-                    : isLocalCover 
+                    : isLocalCover
                       ? Image.file(
                           File(coverUrl.replaceFirst('local://', '')),
                           fit: BoxFit.cover,
                           width: double.infinity,
+                          height: double.infinity,
                           errorBuilder: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
                         )
                       : CachedNetworkImage(
                           imageUrl: coverUrl,
                           fit: BoxFit.cover,
                           width: double.infinity,
+                          height: double.infinity,
                           placeholder: (context, url) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
                           errorWidget: (context, url, error) => Container(color: Colors.grey[200], child: const Icon(Icons.book, color: Colors.grey)),
                         ),

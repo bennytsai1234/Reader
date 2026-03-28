@@ -9,13 +9,27 @@ class BookInfoParser {
     required String body,
     required String baseUrl,
   }) {
-    final rule = AnalyzeRule(source: source).setContent(body, baseUrl: baseUrl);
     final infoRule = source.ruleBookInfo;
     if (infoRule == null) return book;
 
+    final rule = AnalyzeRule(source: source, ruleData: book).setContent(body, baseUrl: baseUrl);
+
+    // 執行 init 規則 (對標 Android BookInfoRule.init)
+    // init 規則用於頁面預處理，例如 Ajax 載入或 JS 解密
+    if (infoRule.init != null && infoRule.init!.isNotEmpty) {
+      final initResult = rule.getString(infoRule.init!);
+      if (initResult.isNotEmpty) {
+        // init 規則的結果替換為新的解析內容
+        rule.setContent(initResult, baseUrl: baseUrl);
+      }
+    }
+
+    final name = _format(rule.getString(infoRule.name ?? ''));
+    final author = _format(rule.getString(infoRule.author ?? ''));
+
     return book.copyWith(
-      name: _format(rule.getString(infoRule.name ?? '')).isEmpty ? book.name : _format(rule.getString(infoRule.name ?? '')),
-      author: _format(rule.getString(infoRule.author ?? '')).isEmpty ? book.author : _format(rule.getString(infoRule.author ?? '')),
+      name: name.isEmpty ? book.name : name,
+      author: author.isEmpty ? book.author : author,
       kind: rule.getStringList(infoRule.kind ?? '').join(','),
       coverUrl: rule.getString(infoRule.coverUrl ?? '', isUrl: true),
       intro: rule.getString(infoRule.intro ?? ''),

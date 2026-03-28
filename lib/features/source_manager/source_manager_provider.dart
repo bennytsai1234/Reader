@@ -253,8 +253,17 @@ class SourceManagerProvider with ChangeNotifier {
   Future<int> importFromJson(String jsonStr) async {
     _isLoading = true; notifyListeners();
     try {
-      final List<dynamic> list = jsonDecode(jsonStr) is List ? jsonDecode(jsonStr) : [jsonDecode(jsonStr)];
-      final sources = list.map((e) => BookSource.fromJson(e)).toList();
+      final decoded = jsonDecode(jsonStr);
+      final List<dynamic> list = decoded is List ? decoded : [decoded];
+      final sources = <BookSource>[];
+      for (final e in list) {
+        if (e is! Map<String, dynamic>) continue;
+        final source = BookSource.fromJson(e);
+        // 驗證必要欄位
+        if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) continue;
+        sources.add(source);
+      }
+      if (sources.isEmpty) return 0;
       await _dao.insertOrUpdateAll(sources);
       await loadSources();
       return sources.length;

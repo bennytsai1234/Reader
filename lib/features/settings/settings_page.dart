@@ -166,22 +166,23 @@ class SettingsPage extends StatelessWidget {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('主題模式'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(3, (index) {
-                return RadioListTile<int>(
-                  title: Text(modes[index]),
-                  value: index,
-                  groupValue: currentMode,
-                  onChanged: (val) {
-                    if (val != null) {
-                      final mode = val == 0 ? ThemeMode.system : (val == 1 ? ThemeMode.light : ThemeMode.dark);
-                      settings.setThemeMode(mode);
-                      Navigator.pop(ctx);
-                    }
-                  },
-                );
-              }),
+            content: RadioGroup<int>(
+              groupValue: currentMode,
+              onChanged: (val) {
+                if (val == null) return;
+                final mode = val == 0 ? ThemeMode.system : (val == 1 ? ThemeMode.light : ThemeMode.dark);
+                settings.setThemeMode(mode);
+                Navigator.pop(ctx);
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(3, (index) {
+                  return RadioListTile<int>(
+                    title: Text(modes[index]),
+                    value: index,
+                  );
+                }),
+              ),
             ),
           ),
         );
