@@ -12,7 +12,7 @@ import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/services/book_source_service.dart';
 import 'package:legado_reader/features/reader/engine/text_page.dart';
 
-enum ReaderLifecycle { loading, restoring, ready, disposed }
+enum ReaderLifecycle { loading, ready, disposed }
 
 enum ReaderCommandReason {
   restore,
@@ -59,13 +59,41 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   bool showControls = false;
   int scrubbingChapterIndex = -1;
   ReaderLifecycle lifecycle = ReaderLifecycle.loading;
-  bool get isRestoring => lifecycle == ReaderLifecycle.restoring;
   bool get isReady => lifecycle == ReaderLifecycle.ready;
 
   List<int> clickActions = [2, 1, 1, 2, 0, 1, 2, 1, 1];
   List<Bookmark> bookmarks = [];
   final ValueNotifier<int> batteryLevelNotifier = ValueNotifier<int>(100);
   final ValueNotifier<double> autoPageProgressNotifier = ValueNotifier<double>(0.0);
+
+  // ── Batch update support ──────────────────────────────────────────
+  bool _isBatching = false;
+  bool _batchDirty = false;
+
+  /// Run [fn] while suppressing intermediate notifyListeners calls.
+  /// A single notifyListeners fires after [fn] completes if any state changed.
+  void batchUpdate(VoidCallback fn) {
+    _isBatching = true;
+    _batchDirty = false;
+    try {
+      fn();
+    } finally {
+      _isBatching = false;
+      if (_batchDirty) {
+        notifyListeners();
+      }
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    if (_isBatching) {
+      _batchDirty = true;
+      return;
+    }
+    if (_isDisposed) return;
+    super.notifyListeners();
+  }
 
   ReaderProviderBase(this.book);
 
