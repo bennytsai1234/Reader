@@ -25,11 +25,14 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
         break;
       case 'textNodes':
         for (final el in elements) {
-          final nodes = el.nodes
+          final joined = el.nodes
               .where((n) => n.nodeType == Node.TEXT_NODE)
               .map((n) => n.text?.trim() ?? '')
-              .where((t) => t.isNotEmpty);
-          textS.addAll(nodes);
+              .where((t) => t.isNotEmpty)
+              .join('\n');
+          if (joined.isNotEmpty) {
+            textS.add(joined);
+          }
         }
         break;
       case 'ownText':
@@ -45,9 +48,10 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
       case 'html':
       case 'outerHtml':
         for (final el in elements) {
-          // Android 原版在獲取正文 html 時通常不會過濾 script，除非規則有寫
-          // 但為了安全，我們可以保持基礎實作
-          textS.add(el.outerHtml);
+          final clone = el.clone(true);
+          clone.querySelectorAll('script').forEach((node) => node.remove());
+          clone.querySelectorAll('style').forEach((node) => node.remove());
+          textS.add(clone.outerHtml);
         }
         break;
       case 'innerHtml':
@@ -71,4 +75,3 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
     return textS;
   }
 }
-

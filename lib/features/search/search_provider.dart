@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:legado_reader/core/database/app_database.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
@@ -23,6 +24,8 @@ class SearchProvider extends ChangeNotifier {
   int _totalSources = 0;
   String _currentSource = '';
   String _lastSearchKey = '';
+  CancelToken? _cancelToken;
+  int _failedSources = 0;
 
   // 搜尋範圍與精準搜尋
   List<String> _sourceGroups = ['全部'];
@@ -36,7 +39,9 @@ class SearchProvider extends ChangeNotifier {
   String get currentSource => _currentSource;
   String get lastSearchKey => _lastSearchKey;
   double get progress => _totalSources == 0 ? 0 : (_searchCount / _totalSources).clamp(0.0, 1.0);
-  
+  int get failedSources => _failedSources;
+  int get totalSources => _totalSources;
+
   List<String> get sourceGroups => _sourceGroups;
   String get selectedGroup => _selectedGroup;
   bool get precisionSearch => _precisionSearch;
@@ -66,6 +71,8 @@ class SearchProvider extends ChangeNotifier {
 
   void stopSearch() {
     _isCancelled = true;
+    _cancelToken?.cancel('使用者取消搜尋');
+    _cancelToken = null;
     _isSearching = false;
     _currentSource = '已停止';
     notifyListeners();
@@ -106,11 +113,14 @@ class SearchProvider extends ChangeNotifier {
 
   Future<void> search(String keyword) async {
     if (keyword.isEmpty) return;
+    _cancelToken?.cancel('新搜尋開始');
     _lastSearchKey = keyword;
     _isSearching = true;
     _isCancelled = false;
     _results = [];
     _searchCount = 0;
+    _failedSources = 0;
+    _cancelToken = CancelToken();
     notifyListeners();
 
     await _historyDao.add(keyword);
@@ -150,12 +160,15 @@ class SearchProvider extends ChangeNotifier {
 
   Future<void> searchInSource(BookSource source, String keyword) async {
     if (keyword.isEmpty) return;
+    _cancelToken?.cancel('新搜尋開始');
     _lastSearchKey = keyword;
     _isSearching = true;
     _isCancelled = false;
     _results = [];
     _searchCount = 0;
+    _failedSources = 0;
     _totalSources = 1;
+    _cancelToken = CancelToken();
     notifyListeners();
 
     try {
@@ -173,7 +186,9 @@ class SearchProvider extends ChangeNotifier {
     try {
       if (_isCancelled) return;
 
-      final books = await _service.searchBooks(source, keyword).timeout(const Duration(seconds: 30));
+      final books = await _service
+          .searchBooks(source, keyword, cancelToken: _cancelToken)
+          .timeout(const Duration(seconds: 30));
       if (_isCancelled) return;
 
       // 精準搜尋過濾
@@ -182,7 +197,12 @@ class SearchProvider extends ChangeNotifier {
           : books;
 
       _aggregateResults(filteredBooks);
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) return;
+      _failedSources++;
+      debugPrint('搜尋失敗 [${source.bookSourceName}]: $e');
     } catch (e) {
+      _failedSources++;
       debugPrint('搜尋失敗 [${source.bookSourceName}]: $e');
     } finally {
       _searchCount++;

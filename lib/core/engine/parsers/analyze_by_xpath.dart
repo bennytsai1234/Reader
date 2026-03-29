@@ -9,14 +9,18 @@ import 'package:legado_reader/core/engine/rule_analyzer.dart';
 /// 使用 Dart `xpath_selector` + `xpath_selector_html_parser` 套件
 class AnalyzeByXPath {
   late HtmlXPath _xpath;
+  static final RegExp _customFunctionPattern =
+      RegExp(r'/(allText|textNodes|ownText|html|outerHtml)\(\)\s*$');
 
   AnalyzeByXPath(dynamic doc) {
     if (doc is Element) {
       _xpath = HtmlXPath.node(doc);
     } else if (doc is String) {
-      _xpath = HtmlXPath.html(_prepareHtml(doc));
+      final prepared = _prepareHtml(doc);
+      _xpath = HtmlXPath.html(prepared);
     } else {
-      _xpath = HtmlXPath.html(_prepareHtml(doc.toString()));
+      final prepared = _prepareHtml(doc.toString());
+      _xpath = HtmlXPath.html(prepared);
     }
   }
 
@@ -81,6 +85,14 @@ class AnalyzeByXPath {
 
     if (rules.length == 1) {
       final String rule = rules[0].trim();
+      final customMatch = _customFunctionPattern.firstMatch(rule);
+      if (customMatch != null) {
+        final baseXPath = rule.substring(0, customMatch.start);
+        final functionName = customMatch.group(1)!;
+        final nodes = baseXPath.isEmpty ? _xpath.query('//*').nodes : _xpath.query(baseXPath).nodes;
+        return _applyCustomFunction(nodes, functionName);
+      }
+
       final queryResult = _xpath.query(rule);
       
       // 1. 處理屬性提取 /@attr 或 /attr()
@@ -97,10 +109,16 @@ class AnalyzeByXPath {
       }
 
       // 3. 預設返回節點的 outerHtml 或 text (對標 Android asString)
-      return queryResult.nodes.map((n) {
-        // 如果節點是純文本節點，返回 text；否則返回 outerHtml
-        return n.text?.trim() ?? '';
-      }).where((t) => t.isNotEmpty).toList();
+      return queryResult.nodes
+          .map((n) {
+            final domNode = n.node;
+            if (domNode is Element) {
+              return domNode.outerHtml;
+            }
+            return n.text?.trim() ?? '';
+          })
+          .where((t) => t.isNotEmpty)
+          .toList();
     } else {
       final results = <List<String>>[];
       for (final rl in rules) {
@@ -155,5 +173,48 @@ class AnalyzeByXPath {
       return textList.isEmpty ? null : textList.join('\n');
     }
   }
-}
 
+  List<String> _applyCustomFunction(List<XPathNode> nodes, String functionName) {
+    final results = <String>[];
+    for (final node in nodes) {
+      final domNode = node.node;
+      if (domNode is! Element) {
+        continue;
+      }
+      final element = domNode;
+      switch (functionName) {
+        case 'allText':
+          final text = element.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+          if (text.isNotEmpty) {
+            results.add(text);
+          }
+          break;
+        case 'textNodes':
+          final text = element.nodes
+              .where((n) => n.nodeType == Node.TEXT_NODE)
+              .map((n) => n.text?.trim() ?? '')
+              .where((t) => t.isNotEmpty)
+              .join('\n');
+          if (text.isNotEmpty) {
+            results.add(text);
+          }
+          break;
+        case 'ownText':
+          final text = element.nodes
+              .where((n) => n.nodeType == Node.TEXT_NODE)
+              .map((n) => n.text?.trim() ?? '')
+              .where((t) => t.isNotEmpty)
+              .join(' ');
+          if (text.isNotEmpty) {
+            results.add(text);
+          }
+          break;
+        case 'html':
+        case 'outerHtml':
+          results.add(element.outerHtml);
+          break;
+      }
+    }
+    return results;
+  }
+}

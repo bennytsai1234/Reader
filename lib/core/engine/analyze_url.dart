@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:fast_gbk/fast_gbk.dart';
 import 'package:legado_reader/core/models/base_source.dart';
 import 'package:legado_reader/core/engine/analyze_rule.dart';
 import 'package:legado_reader/core/services/http_client.dart';
+import 'package:legado_reader/core/services/rate_limiter.dart';
 import 'package:legado_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:legado_reader/core/network/str_response.dart';
 
@@ -42,6 +44,8 @@ class AnalyzeUrl {
   }
 
   void _init() {
+    // 0. 注入 BookSource.header
+    _initSourceHeaders();
     ruleUrl = rawUrl;
     // 1. 執行 @js, <js>
     _analyzeJs();
@@ -49,6 +53,18 @@ class AnalyzeUrl {
     _replaceKeyPageJs();
     // 3. 解析 URL 選項 (如 ,{"method": "POST"})
     _analyzeUrlOptions();
+  }
+
+  /// 將 BookSource.header（JSON 格式）解析並注入 headerMap
+  void _initSourceHeaders() {
+    final headerStr = source is BaseSource ? (source as BaseSource).header : null;
+    if (headerStr == null || headerStr.isEmpty) return;
+    try {
+      final Map<String, dynamic> headers = jsonDecode(headerStr);
+      headers.forEach((k, v) => headerMap[k.toString()] = v.toString());
+    } catch (e) {
+      debugPrint('AnalyzeUrl source header parse error: $e');
+    }
   }
 
   void _analyzeJs() {
@@ -74,7 +90,21 @@ class AnalyzeUrl {
   }
 
   void _replaceKeyPageJs() {
-    // 替換 {{js}}
+    // 先替換已知模板變數，避免被 {{js}} 正則吃掉
+    if (key != null) {
+      ruleUrl = ruleUrl.replaceAll('{{key}}', _encodeKey(key!));
+    }
+    if (page != null) {
+      ruleUrl = ruleUrl.replaceAll('{{page}}', page.toString());
+    }
+    if (speakText != null) {
+      ruleUrl = ruleUrl.replaceAll('{{speakText}}', speakText!);
+    }
+    if (speakSpeed != null) {
+      ruleUrl = ruleUrl.replaceAll('{{speakSpeed}}', speakSpeed!.toString());
+    }
+
+    // 替換剩餘的 {{js}} 表達式
     final innerJsRegex = RegExp(r'\{\{([\s\S]*?)\}\}');
     ruleUrl = ruleUrl.replaceAllMapped(innerJsRegex, (match) {
       final jsStr = match.group(1)!;
@@ -95,19 +125,40 @@ class AnalyzeUrl {
         return pages.last.trim();
       });
     }
+  }
 
-    // 替換搜尋關鍵字
-    if (key != null) {
-      ruleUrl = ruleUrl.replaceAll('{{key}}', key!);
+  /// 根據 charset 對搜尋關鍵字做 URL 編碼
+  /// 預設 UTF-8，支援 GBK/GB2312/GB18030
+  String _encodeKey(String key) {
+    // charset 在 _analyzeUrlOptions 裡才會解析出來，
+    // 但 {{key}} 替換在 options 之前，所以先從 rawUrl 裡嘗試提前偵測 charset
+    final detectedCharset = _detectCharset();
+    if (detectedCharset != null &&
+        (detectedCharset.toUpperCase().contains('GBK') ||
+         detectedCharset.toUpperCase().contains('GB2312') ||
+         detectedCharset.toUpperCase().contains('GB18030'))) {
+      // GBK 編碼: 逐位元組轉 %XX
+      final bytes = gbk.encode(key);
+      final sb = StringBuffer();
+      for (final b in bytes) {
+        sb.write('%${b.toRadixString(16).toUpperCase().padLeft(2, '0')}');
+      }
+      return sb.toString();
     }
+    return Uri.encodeComponent(key);
+  }
 
-    // 替換 TTS 關鍵字
-    if (speakText != null) {
-      ruleUrl = ruleUrl.replaceAll('{{speakText}}', speakText!);
+  /// 從 rawUrl 的 JSON 選項中提前偵測 charset
+  String? _detectCharset() {
+    final paramSplitRegex = RegExp(r'\s*,\s*(?=\{)');
+    final match = paramSplitRegex.firstMatch(ruleUrl);
+    if (match != null) {
+      try {
+        final Map<String, dynamic> options = jsonDecode(ruleUrl.substring(match.end).trim());
+        return options['charset']?.toString();
+      } catch (_) {}
     }
-    if (speakSpeed != null) {
-      ruleUrl = ruleUrl.replaceAll('{{speakSpeed}}', speakSpeed!.toString());
-    }
+    return null;
   }
 
   void _analyzeUrlOptions() {
@@ -144,45 +195,49 @@ class AnalyzeUrl {
   }
 
   /// 獲取回應內容 (對標 Android AnalyzeUrl.getStrResponseAwait)
-  Future<StrResponse> getStrResponse() async {
-    String finalBody = '';
-    Response? rawResponse;
+  Future<StrResponse> getStrResponse({CancelToken? cancelToken}) async {
+    final limiter = ConcurrentRateLimiter(source is BaseSource ? source as BaseSource : null);
 
-    // 如果開啟了 WebView 抓取模式
-    if (useWebView) {
-      finalBody = await HeadlessWebViewService().getRenderedHtml(
-        url: url,
+    return limiter.withLimit(() async {
+      String finalBody = '';
+      Response? rawResponse;
+
+      // 如果開啟了 WebView 抓取模式
+      if (useWebView) {
+        finalBody = await HeadlessWebViewService().getRenderedHtml(
+          url: url,
+          headers: headerMap,
+          js: webJs,
+          delayTime: webViewDelayTime,
+        );
+        return StrResponse(
+          url: url,
+          body: finalBody,
+          headers: {},
+          raw: Response(requestOptions: RequestOptions(path: url), data: finalBody),
+        );
+      }
+
+      final httpClient = HttpClient();
+      final options = Options(
+        method: method,
         headers: headerMap,
-        js: webJs,
-        delayTime: webViewDelayTime,
+        responseType: ResponseType.plain,
       );
+
+      if (method == 'POST') {
+        rawResponse = await httpClient.client.post(url, data: body, options: options, cancelToken: cancelToken);
+      } else {
+        rawResponse = await httpClient.client.get(url, options: options, cancelToken: cancelToken);
+      }
+
       return StrResponse(
-        url: url,
-        body: finalBody,
-        headers: {},
-        raw: Response(requestOptions: RequestOptions(path: url), data: finalBody),
+        url: rawResponse.realUri.toString(),
+        body: rawResponse.data?.toString() ?? '',
+        headers: rawResponse.headers.map,
+        raw: rawResponse,
       );
-    }
-
-    final httpClient = HttpClient();
-    final options = Options(
-      method: method,
-      headers: headerMap,
-      responseType: ResponseType.plain,
-    );
-
-    if (method == 'POST') {
-      rawResponse = await httpClient.client.post(url, data: body, options: options);
-    } else {
-      rawResponse = await httpClient.client.get(url, options: options);
-    }
-
-    return StrResponse(
-      url: rawResponse.realUri.toString(),
-      body: rawResponse.data?.toString() ?? '',
-      headers: rawResponse.headers.map,
-      raw: rawResponse,
-    );
+    });
   }
 
   /// 獲取回應內容的 body (兼容舊代碼)
@@ -193,20 +248,24 @@ class AnalyzeUrl {
 
   /// 獲取位元組回應內容
   Future<Uint8List> getByteArray() async {
-    final httpClient = HttpClient();
-    final options = Options(
-      method: method,
-      headers: headerMap,
-      responseType: ResponseType.bytes,
-    );
+    final limiter = ConcurrentRateLimiter(source is BaseSource ? source as BaseSource : null);
 
-    Response<List<int>> response;
-    if (method == 'POST') {
-      response = await httpClient.client.post<List<int>>(url, data: body, options: options);
-    } else {
-      response = await httpClient.client.get<List<int>>(url, options: options);
-    }
+    return limiter.withLimit(() async {
+      final httpClient = HttpClient();
+      final options = Options(
+        method: method,
+        headers: headerMap,
+        responseType: ResponseType.bytes,
+      );
 
-    return Uint8List.fromList(response.data ?? []);
+      Response<List<int>> response;
+      if (method == 'POST') {
+        response = await httpClient.client.post<List<int>>(url, data: body, options: options);
+      } else {
+        response = await httpClient.client.get<List<int>>(url, options: options);
+      }
+
+      return Uint8List.fromList(response.data ?? []);
+    });
   }
 }

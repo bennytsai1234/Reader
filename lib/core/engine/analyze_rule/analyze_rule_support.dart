@@ -25,9 +25,20 @@ class SourceRule {
   static const int defaultRuleType = 0;
 
   SourceRule(this.rule, {this.mode = Mode.defaultMode}) {
-    // 處理 ##regex##replacement
+    // 處理 ##regex##replacement 與 ### replaceFirst
     if (rule.contains('##')) {
-      final parts = rule.split('##');
+      final rawParts = rule.split('##');
+      final parts = <String>[];
+      for (var i = 0; i < rawParts.length; i++) {
+        final part = rawParts[i];
+        if (i == rawParts.length - 1 && part.endsWith('#')) {
+          replaceFirst = true;
+          parts.add(part.substring(0, part.length - 1));
+        } else {
+          parts.add(part);
+        }
+      }
+
       if (rule.startsWith('##')) {
         mode = Mode.regex;
         rule = ''; // 提取規則為空，表示對全文進行正則替換
@@ -41,10 +52,16 @@ class SourceRule {
     }
 
     if (mode == Mode.defaultMode) {
-      if (rule.startsWith('@Json:')) {
+      final normalizedRule = rule.toUpperCase();
+      if (normalizedRule.startsWith('@CSS:')) {
+        mode = Mode.defaultMode;
+      } else if (rule.startsWith('@@')) {
+        mode = Mode.defaultMode;
+        rule = rule.substring(2);
+      } else if (normalizedRule.startsWith('@JSON:')) {
         mode = Mode.json;
         rule = rule.substring(6);
-      } else if (rule.startsWith('@XPath:')) {
+      } else if (normalizedRule.startsWith('@XPATH:')) {
         mode = Mode.xpath;
         rule = rule.substring(7);
       } else if (rule.startsWith('/')) {
@@ -65,7 +82,7 @@ class SourceRule {
       } catch (_) {}
     }
     rule = vRuleStr;
-    final evalPattern = RegExp(r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$\..*?\}', caseSensitive: false);
+    final evalPattern = RegExp(r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}', caseSensitive: false);
     var start = 0;
     final evalMatches = evalPattern.allMatches(rule);
     if (evalMatches.isNotEmpty) isDynamic = true;
@@ -114,7 +131,15 @@ class SourceRule {
       if (type == defaultRuleType) {
         buffer.write(param);
       } else if (type == jsRuleType) {
-        buffer.write(analyzer.evalJS(param, result));
+        final trimmed = param.trimLeft();
+        if (trimmed.startsWith('@') ||
+            trimmed.startsWith(r'$.') ||
+            trimmed.startsWith(r'$[') ||
+            trimmed.startsWith('//')) {
+          buffer.write(analyzer.getString(trimmed));
+        } else {
+          buffer.write(analyzer.evalJS(param, result));
+        }
       } else if (type == getRuleType) {
         buffer.write(analyzer.get(param));
       } else if (type == jsonPartRuleType) {
@@ -150,4 +175,3 @@ class SourceRule {
     return analyzer.analyzeByJSonPath ??= AnalyzeByJsonPath(analyzer.content);
   }
 }
-

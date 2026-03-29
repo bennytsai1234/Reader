@@ -58,10 +58,29 @@ void main() {
       expect(analyzer.getString(r'@Json:$.title'), 'JSON Title');
     });
 
+    test('Prefix override is case-insensitive and supports @css:', () {
+      final htmlAnalyzer = AnalyzeRule().setContent(htmlStr);
+      expect(htmlAnalyzer.getString('@css:.title@text'), 'Test Title');
+      expect(htmlAnalyzer.getString('@XPath://div[@class="title"]/text()'), 'Test Title');
+
+      final jsonAnalyzer = AnalyzeRule().setContent(jsonStr);
+      expect(jsonAnalyzer.getString(r'@json:$.title'), 'JSON Title');
+    });
+
+    test('@@ forces default mode', () {
+      final analyzer = AnalyzeRule().setContent(htmlStr);
+      expect(analyzer.getString('@@.title@text'), 'Test Title');
+    });
+
     test('Regex replacement ##', () {
       final analyzer = AnalyzeRule().setContent(htmlStr);
       // Replace Title with Header
       expect(analyzer.getString('.title@text##Title##Header'), 'Test Header');
+    });
+
+    test('Regex replacement ### only replaces first match', () {
+      final analyzer = AnalyzeRule().setContent('<div class="title">Title Title</div>');
+      expect(analyzer.getString('.title@text##Title##Header###'), 'Header Title');
     });
 
     test('Variables @get and put', () {
@@ -73,6 +92,19 @@ void main() {
       
       // Test embedded in rule
       expect(analyzer.getString('Prefix: @get:{myVar}'), 'Prefix: Hello');
+    });
+
+    test('@put runs before rule evaluation in getString', () {
+      final analyzer = AnalyzeRule(ruleData: MockRuleData()).setContent(htmlStr);
+      final value = analyzer.getString('@put:{"myVar":"@css:.title@text"}Prefix: @get:{myVar}');
+
+      expect(value, 'Prefix: Test Title');
+      expect(analyzer.get('myVar'), 'Test Title');
+    });
+
+    test('Rule-like content in {{}} is resolved as rule instead of JS', () {
+      final analyzer = AnalyzeRule().setContent(jsonStr);
+      expect(analyzer.getString(r'{{$.title}}'), 'JSON Title');
     });
   });
 }

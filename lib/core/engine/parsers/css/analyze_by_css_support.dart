@@ -109,7 +109,15 @@ class ElementsSingle {
       }
     }
 
-    if (split == '!' || split == '.') {
+    if (split == '!') {
+      final result = <Element>[];
+      for (var i = 0; i < len; i++) {
+        if (!indexSet.contains(i)) {
+          result.add(elements[i]);
+        }
+      }
+      return result;
+    } else if (split == '.') {
       final result = <Element>[];
       for (final idx in indexSet) {
         result.add(elements[idx]);
@@ -122,6 +130,37 @@ class ElementsSingle {
 
   void findIndexSet(String rule) {
     final rus = rule.trim();
+    final bracketMatch = RegExp(r'^(.*)\[(!?)([-\d:,\s]+)\]$').firstMatch(rus);
+    if (bracketMatch != null) {
+      beforeRule = bracketMatch.group(1)!.trim();
+      split = bracketMatch.group(2) == '!' ? '!' : '.';
+      final segments = bracketMatch.group(3)!.split(',');
+      for (final rawSegment in segments) {
+        final segment = rawSegment.trim();
+        if (segment.isEmpty) {
+          continue;
+        }
+        if (segment.contains(':')) {
+          final parts = segment.split(':').map((e) => e.trim()).toList();
+          int? parsePart(int index) =>
+              index < parts.length && parts[index].isNotEmpty ? int.tryParse(parts[index]) : null;
+          indexes.add(
+            Triple(
+              parsePart(0),
+              parsePart(1),
+              parts.length > 2 ? (parsePart(2) ?? 1) : 1,
+            ),
+          );
+        } else {
+          final value = int.tryParse(segment);
+          if (value != null) {
+            indexes.add(value);
+          }
+        }
+      }
+      return;
+    }
+
     var len = rus.length;
     var curMinus = false;
     final curList = <int?>[];
@@ -225,4 +264,3 @@ class Triple {
   final int third;
   Triple(this.first, this.second, this.third);
 }
-

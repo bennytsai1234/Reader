@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
@@ -30,6 +31,7 @@ class WebBook {
     String key, {
     int? page = 1,
     bool Function(String name, String author)? filter,
+    CancelToken? cancelToken,
   }) async {
     final searchUrl = source.searchUrl;
     if (searchUrl == null || searchUrl.isEmpty) {
@@ -47,7 +49,7 @@ class WebBook {
       page: page,
     );
 
-    var res = await analyzeUrl.getStrResponse();
+    var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res);
     _checkRedirect(source, res);
 

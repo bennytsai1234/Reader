@@ -104,7 +104,29 @@ class _ExplorePageContent extends StatelessWidget {
     if (p.isLoading && p.books.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
+    if (p.errorMessage != null && p.books.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(p.errorMessage!, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => p.refreshExplore(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('重試'),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (p.books.isEmpty) {
       return const Center(child: Text('暫無內容，請嘗試切換分類或書源'));
     }

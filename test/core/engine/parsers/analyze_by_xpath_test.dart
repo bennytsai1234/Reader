@@ -42,6 +42,12 @@ void main() {
       expect(result, 'Item 1\nItem 2');
     });
 
+    test('getStringList - returns outerHtml for element nodes', () {
+      final analyzer = AnalyzeByXPath(html);
+      final result = analyzer.getStringList('//li');
+      expect(result.first, '<li>Item 1</li>');
+    });
+
     test('Logical && operator', () {
       final analyzer = AnalyzeByXPath(html);
       final result = analyzer.getString('//li[1]/text() && //li[2]/text()');
@@ -54,6 +60,17 @@ void main() {
       final analyzer = AnalyzeByXPath(tableFragment);
       final result = analyzer.getString('//td/text()');
       expect(result, 'Data');
+    });
+
+    test('custom functions allText/textNodes/ownText/html', () {
+      const richHtml = '<div class="content">Direct <span>Nested</span> Tail</div>';
+      final analyzer = AnalyzeByXPath(richHtml);
+
+      expect(analyzer.getString('//div/allText()'), 'Direct Nested Tail');
+      expect(analyzer.getString('//div/textNodes()'), 'Direct\nTail');
+      expect(analyzer.getString('//div/ownText()'), 'Direct Tail');
+      expect(analyzer.getString('//div/html()'), '<div class="content">Direct <span>Nested</span> Tail</div>');
+      expect(analyzer.getString('//div/outerHtml()'), '<div class="content">Direct <span>Nested</span> Tail</div>');
     });
   });
 }

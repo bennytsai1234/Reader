@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/chapter.dart';
@@ -23,8 +24,8 @@ class BookSourceService {
   }
 
   /// 搜尋書籍 (對標 searchBookAwait)
-  Future<List<SearchBook>> searchBooks(BookSource source, String key, {int page = 1}) async {
-    return await WebBook.searchBookAwait(source, key, page: page);
+  Future<List<SearchBook>> searchBooks(BookSource source, String key, {int page = 1, CancelToken? cancelToken}) async {
+    return await WebBook.searchBookAwait(source, key, page: page, cancelToken: cancelToken);
   }
 
   /// 發現/探索書籍 (對標 exploreBookAwait)

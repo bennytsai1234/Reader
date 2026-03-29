@@ -74,6 +74,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
                 LinearProgressIndicator(value: provider.progress, backgroundColor: Colors.transparent, valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue)),
                 _buildCurrentSourcePanel(provider),
               ],
+              if (!provider.isSearching && provider.failedSources > 0) _buildFailedSourcesPanel(provider),
               if (provider.precisionSearch || provider.selectedGroup != '全部') _buildFilterStatusPanel(provider),
               Expanded(
                 child: provider.results.isEmpty && !provider.isSearching
@@ -109,6 +110,20 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     }
     return SearchHistoryView(provider: provider, controller: _controller, onSearch: _onSearch);
   }
+
+  Widget _buildFailedSourcesPanel(SearchProvider p) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        width: double.infinity,
+        color: Colors.red.withValues(alpha: 0.08),
+        child: Row(children: [
+          Icon(Icons.warning_amber_rounded, size: 14, color: Colors.red.shade700),
+          const SizedBox(width: 8),
+          Text(
+            '${p.failedSources} 個書源搜尋失敗（共 ${p.totalSources} 個）',
+            style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+          ),
+        ]),
+      );
 
   Widget _buildCurrentSourcePanel(SearchProvider p) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
