@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:legado_reader/core/engine/parsers/analyze_by_css.dart';
+import 'package:legado_reader/core/engine/parsers/css/analyze_by_css_support.dart';
 
 void main() {
   group('AnalyzeByCss Tests', () {
@@ -54,8 +56,8 @@ void main() {
     });
 
     test('4. Index selection using !index (User requirement: selection)', () {
-      expect(analyzer.getString('li.item!0@tag.a@text'), 'Chapter 1');
-      expect(analyzer.getString('li.item!1@tag.a@text'), 'Chapter 2');
+      expect(analyzer.getStringList('li.item!0@tag.a@text'), ['Chapter 2', 'Chapter 3']);
+      expect(analyzer.getStringList('li.item!1@tag.a@text'), ['Chapter 1', 'Chapter 3']);
     });
 
     test('5. Range selection [start:end]', () {
@@ -79,6 +81,46 @@ void main() {
 
     test('8. Logical || operator (fallback)', () {
       expect(analyzer.getString('.none@text || .footer@ownText'), 'Footer Text');
+    });
+
+    test('9. ElementsSingle ! exclusion removes specified indexes', () {
+      final doc = html_parser.parse('<div><p>A</p><p>B</p><p>C</p><p>D</p></div>');
+      final container = doc.querySelector('div')!;
+      final single = ElementsSingle();
+
+      final result = single.getElementsSingle(container, 'tag.p!0');
+      expect(result.map((e) => e.text).toList(), ['B', 'C', 'D']);
+    });
+
+    test('10. Bracket exclusion [!...] removes multiple indexes', () {
+      final doc = html_parser.parse('<div><p>A</p><p>B</p><p>C</p><p>D</p></div>');
+      final container = doc.querySelector('div')!;
+      final single = ElementsSingle();
+
+      final result = single.getElementsSingle(container, 'tag.p[!0,2]');
+      expect(result.map((e) => e.text).toList(), ['B', 'D']);
+    });
+
+    test('11. html strips script and style tags', () {
+      final doc = html_parser.parse(
+        '<div><p>Hello</p><script>alert(1)</script><style>.x{}</style><span>World</span></div>',
+      );
+      final helper = AnalyzeByCss(doc.documentElement!.outerHtml);
+      final result = helper.getResultLast(doc.querySelectorAll('div'), 'html');
+
+      expect(result, hasLength(1));
+      expect(result.first.contains('<script>'), false);
+      expect(result.first.contains('<style>'), false);
+      expect(result.first.contains('Hello'), true);
+      expect(result.first.contains('World'), true);
+    });
+
+    test('12. textNodes joins direct text nodes per element', () {
+      final doc = html_parser.parse('<div>First<br>Second<span>Skip</span>Third</div>');
+      final helper = AnalyzeByCss(doc.documentElement!.outerHtml);
+      final result = helper.getResultLast(doc.querySelectorAll('div'), 'textNodes');
+
+      expect(result, ['First\nSecond\nThird']);
     });
   });
 }

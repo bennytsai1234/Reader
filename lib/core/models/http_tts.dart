@@ -2,7 +2,7 @@ import 'base_source.dart';
 
 /// HttpTTS - 在線朗讀引擎模型
 /// (原 Android data/entities/HttpTTS.kt)
-class HttpTTS implements BaseSource {
+class HttpTTS extends BaseSource {
   final int id;
   String name;
   String url;
@@ -26,6 +26,7 @@ class HttpTTS implements BaseSource {
   @override
   bool enabledCookieJar;
 
+  @override
   String? loginCheckJs;
   int lastUpdateTime;
 
@@ -84,4 +85,3 @@ class HttpTTS implements BaseSource {
     );
   }
 }
-

@@ -8,6 +8,7 @@ import 'extensions/js_font_extensions.dart';
 import 'extensions/js_java_object.dart';
 import 'js_encode_utils.dart';
 import 'package:legado_reader/core/services/http_client.dart';
+import 'package:legado_reader/core/services/cookie_store.dart';
 
 export 'js_extensions_base.dart';
 export 'extensions/js_network_extensions.dart';
@@ -37,6 +38,51 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('log', (args) => debugPrint('JS_LOG: $args'));
     runtime.onMessage('toast', (args) => debugPrint('JS_TOAST: $args'));
     runtime.onMessage('cacheFile', (args) => cacheFile(args[0].toString(), args.length > 1 ? args[1] as int : 0));
+    runtime.onMessage('setCookie', (args) async {
+      if (args is List && args.length >= 2) {
+        await CookieStore().setCookie(args[0].toString(), args[1].toString());
+      }
+    });
+    runtime.onMessage('removeCookie', (args) async {
+      await CookieStore().removeCookie(args.toString());
+    });
+    runtime.onMessage('allCookies', (args) async => '');
+    runtime.onMessage('getCache', (args) async => await cacheManager.get(args.toString()) ?? '');
+    runtime.onMessage('putCache', (args) async {
+      if (args is List && args.length >= 2) {
+        final saveTime = args.length > 2 ? int.tryParse(args[2].toString()) ?? 0 : 0;
+        await cacheManager.put(args[0].toString(), args[1].toString(), saveTimeSeconds: saveTime);
+      }
+    });
+    runtime.onMessage('deleteCache', (args) async {
+      await cacheManager.delete(args.toString());
+    });
+    runtime.onMessage('sourcePut', (args) async {
+      if (args is List && args.length >= 2 && source != null) {
+        final key = args[0].toString();
+        final value = args[1].toString();
+        await cacheManager.put('v_${source!.getKey()}_$key', value);
+        return value;
+      }
+      return '';
+    });
+    runtime.onMessage('sourceGet', (args) async {
+      if (source == null) {
+        return '';
+      }
+      return await cacheManager.get('v_${source!.getKey()}_${args.toString()}') ?? '';
+    });
+    runtime.onMessage('sourceGetLoginInfo', (args) async {
+      if (source == null) {
+        return '';
+      }
+      return await source!.getLoginInfo() ?? '';
+    });
+    runtime.onMessage('sourcePutLoginInfo', (args) async {
+      if (source != null) {
+        await source!.putLoginInfo(args.toString());
+      }
+    });
   }
 
   Future<String> cacheFile(String url, int saveTime) async {
@@ -51,4 +97,3 @@ class JsExtensions extends JsExtensionsBase {
     } catch (_) { return ''; }
   }
 }
-

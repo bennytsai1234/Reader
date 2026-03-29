@@ -30,7 +30,14 @@ extension JsJavaObject on JsExtensionsBase {
         log: function(msg) { sendMessage('log', JSON.stringify(msg)); },
         toast: function(msg) { sendMessage('toast', JSON.stringify(msg)); },
         md5Encode: function(str) { return sendMessage('_md5Encode', JSON.stringify(str)); },
+        md5Encode16: function(str) { return sendMessage('_md5Encode16', JSON.stringify(str)); },
         base64Encode: function(str) { return sendMessage('_base64Encode', JSON.stringify(str)); },
+        base64Decode: function(str) { return sendMessage('_base64Decode', JSON.stringify(str)); },
+        hexEncodeToString: function(str) { return sendMessage('_hexEncode', JSON.stringify(str)); },
+        hexDecodeToString: function(hex) { return sendMessage('_hexDecode', JSON.stringify(hex)); },
+        randomUUID: function() { return sendMessage('_randomUUID', ''); },
+        timeFormat: function(time) { return sendMessage('_timeFormat', JSON.stringify(time)); },
+        timeFormatUTC: function(time, format, sh) { return sendMessage('timeFormatUTC', JSON.stringify([time, format, sh])); },
         t2s: function(text) { return sendMessage('t2s', JSON.stringify(text)); },
         s2t: function(text) { return sendMessage('s2t', JSON.stringify(text)); },
         strToBytes: function(str, charset) { return sendMessage('strToBytes', JSON.stringify([str, charset])); },
@@ -60,7 +67,16 @@ extension JsJavaObject on JsExtensionsBase {
         put: function(key, value, time) { return sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
         delete: function(key) { return sendMessage('deleteCache', JSON.stringify(key)); }
       };
+
+      var source = source || {};
+      source.getLoginInfo = function() { return sendMessage('sourceGetLoginInfo', ''); };
+      source.putLoginInfo = function(info) { return sendMessage('sourcePutLoginInfo', JSON.stringify(info)); };
+      source.getLoginInfoMap = function() {
+        var info = sendMessage('sourceGetLoginInfo', '');
+        try { return JSON.parse(info); } catch(e) { return {}; }
+      };
+      source.put = function(key, value) { return sendMessage('sourcePut', JSON.stringify([key, value])); };
+      source.get = function(key) { return sendMessage('sourceGet', JSON.stringify(key)); };
     ''');
   }
 }
-

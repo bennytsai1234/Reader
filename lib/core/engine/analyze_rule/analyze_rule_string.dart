@@ -23,6 +23,16 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           break;
         }
 
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach((key, valueRule) {
+            final val = getString(valueRule);
+            if (val.isNotEmpty) {
+              put(key, val);
+              log('  ◇ 保存變數: $key = $val');
+            }
+          });
+        }
+
         sourceRule.makeUpRule(result, this);
         final rule = sourceRule.rule;
         log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
@@ -62,18 +72,6 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           result = replaceRegexLogic(result.toString(), sourceRule);
         }
 
-        // 處理 @put
-        if (sourceRule.putMap.isNotEmpty && result != null) {
-          sourceRule.putMap.forEach((key, valueRule) {
-            // 使用當前結果作為上下文來解析變數值
-            final val = getString(valueRule);
-            if (val.isNotEmpty) {
-              put(key, val);
-              log('  ◇ 保存變數: $key = $val');
-            }
-          });
-        }
-
         final preview = result?.toString() ?? 'null';
         log('  └ 字串預覽: ${preview.length > 500 ? preview.substring(0, 500) : preview}');
       }
@@ -103,6 +101,16 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
       for (final sourceRule in ruleList) {
         if (result == null) {
           break;
+        }
+
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach((key, valueRule) {
+            final val = getString(valueRule);
+            if (val.isNotEmpty) {
+              put(key, val);
+              log('  ◇ 保存變數: $key = $val');
+            }
+          });
         }
 
         sourceRule.makeUpRule(result, this);
@@ -147,4 +155,3 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     return str.split('\n').where((s) => s.isNotEmpty).toSet().toList();
   }
 }
-

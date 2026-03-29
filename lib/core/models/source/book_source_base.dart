@@ -2,7 +2,7 @@ import '../base_source.dart';
 import 'book_source_rules.dart';
 
 /// BookSource 的基礎屬性與欄位定義
-abstract class BookSourceBase implements BaseSource {
+abstract class BookSourceBase extends BaseSource {
   String bookSourceUrl = ''; // 書源 URL (唯一識別)
   String bookSourceName = ''; // 書源名稱
   String? bookSourceGroup; // 書源分組
@@ -22,7 +22,7 @@ abstract class BookSourceBase implements BaseSource {
   @override
   String? loginUrl;
   @override String? loginUi;
-  String? loginCheckJs;
+  @override String? loginCheckJs;
   String? coverDecodeJs;
 
 
@@ -68,4 +68,3 @@ abstract class BookSourceBase implements BaseSource {
   bool get hasTocRule => ruleToc != null;
   bool get hasContentRule => ruleContent != null;
 }
-

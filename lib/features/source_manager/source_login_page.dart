@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/services/cookie_store.dart';
+import 'package:legado_reader/core/engine/js/js_engine.dart';
 import 'dynamic_form_builder.dart';
 
 class SourceLoginPage extends StatefulWidget {
@@ -93,11 +96,103 @@ class _SourceLoginPageState extends State<SourceLoginPage> {
     }
   }
 
-  void _handleDynamicAction(String action, Map<String, String> data) {
-    // 這裡應整合 JS 注入
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('執行: $action (功能待進一步 JS 聯動補齊)'))
-    );
+  Map<String, String> _collectFormData() {
+    return _controllers.map((key, controller) => MapEntry(key, controller.text));
+  }
+
+  Future<void> _runLoginScript(String jsCode, Map<String, String> data) async {
+    final engine = JsEngine(source: widget.source);
+    try {
+      await widget.source.putLoginInfo(jsonEncode(data));
+      engine.evaluate(
+        '''
+        $jsCode
+        if (typeof login === 'function') {
+          login();
+        }
+        ''',
+        context: {
+          'result': data,
+          'baseUrl': widget.source.bookSourceUrl,
+          'source': {
+            'bookSourceUrl': widget.source.bookSourceUrl,
+            'bookSourceName': widget.source.bookSourceName,
+            'loginUrl': widget.source.loginUrl,
+          },
+        },
+      );
+    } finally {
+      engine.dispose();
+    }
+  }
+
+  Future<void> _executeLogin() async {
+    final loginJs = widget.source.getLoginJs();
+    if (loginJs == null || loginJs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('此書源未提供 JS 登入腳本')));
+      }
+      return;
+    }
+
+    final data = _collectFormData();
+    try {
+      await _runLoginScript(loginJs, data);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('登入腳本已執行')));
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('登入失敗: $e')));
+      }
+    }
+  }
+
+  Future<void> _handleDynamicAction(String action, Map<String, String> data) async {
+    if (action.isEmpty) {
+      return;
+    }
+    if (action.startsWith('http://') || action.startsWith('https://')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('外部動作: $action')));
+      }
+      return;
+    }
+
+    final loginJs = widget.source.getLoginJs();
+    final payload = loginJs == null || loginJs.isEmpty ? action : '$loginJs\n$action';
+    try {
+      final engine = JsEngine(source: widget.source);
+      await widget.source.putLoginInfo(jsonEncode(data));
+      engine.evaluate(
+        payload,
+        context: {
+          'result': data,
+          'baseUrl': widget.source.bookSourceUrl,
+        },
+      );
+      engine.dispose();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('執行失敗: $e')));
+      }
+    }
+  }
+
+  Future<void> _handleDone() async {
+    final controller = _controller;
+    if (!_useDynamicUi && controller != null) {
+      final currentUrl = await controller.currentUrl();
+      if (currentUrl != null && currentUrl.isNotEmpty) {
+        await _captureCookies(currentUrl);
+      }
+    }
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
   }
 
   @override
@@ -112,6 +207,12 @@ class _SourceLoginPageState extends State<SourceLoginPage> {
               onPressed: () => _controller?.reload(),
               tooltip: '重新整理',
             ),
+          if (_useDynamicUi)
+            IconButton(
+              icon: const Icon(Icons.login),
+              onPressed: _executeLogin,
+              tooltip: '登入',
+            ),
           IconButton(
             icon: const Icon(Icons.delete_sweep),
             onPressed: _clearCookies,
@@ -119,7 +220,7 @@ class _SourceLoginPageState extends State<SourceLoginPage> {
           ),
           IconButton(
             icon: const Icon(Icons.check),
-            onPressed: () => Navigator.pop(context),
+            onPressed: _handleDone,
             tooltip: '完成',
           ),
         ],
@@ -139,4 +240,3 @@ class _SourceLoginPageState extends State<SourceLoginPage> {
     );
   }
 }
-

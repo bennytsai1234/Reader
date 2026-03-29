@@ -7,6 +7,8 @@ import '../parsers/css/analyze_by_css_core.dart';
 
 /// AnalyzeRule 的元素解析擴展
 mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
+  String getString(String ruleStr, {bool isUrl = false, bool unescape = true});
+
   /// 獲取單個元素
   dynamic getElement(String ruleStr) {
     if (ruleStr.isEmpty) {
@@ -21,6 +23,16 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
       for (final sourceRule in ruleList) {
         if (result == null) {
           break;
+        }
+
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach((key, valueRule) {
+            final val = getString(valueRule);
+            if (val.isNotEmpty) {
+              put(key, val);
+              log('  ◇ 保存變數: $key = $val');
+            }
+          });
         }
 
         sourceRule.makeUpRule(result, this);
@@ -85,6 +97,16 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           break;
         }
 
+        if (sourceRule.putMap.isNotEmpty) {
+          sourceRule.putMap.forEach((key, valueRule) {
+            final val = getString(valueRule);
+            if (val.isNotEmpty) {
+              put(key, val);
+              log('  ◇ 保存變數: $key = $val');
+            }
+          });
+        }
+
         sourceRule.makeUpRule(result, this);
         final rule = sourceRule.rule;
         log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
@@ -140,4 +162,3 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     return [result];
   }
 }
-
