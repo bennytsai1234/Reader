@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:legado_reader/core/models/book.dart';
 
@@ -32,9 +33,9 @@ class WidgetService {
         );
       }
       
-      debugPrint('Widget data updated for: ${book.name}');
+      AppLog.d('Widget data updated for: ${book.name}');
     } catch (e) {
-      debugPrint('Failed to update widget data: $e');
+      AppLog.e('Failed to update widget data: $e', error: e);
     }
   }
 

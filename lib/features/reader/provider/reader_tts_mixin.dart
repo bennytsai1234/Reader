@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:legado_reader/core/constant/page_anim.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/services/tts_service.dart';
 import 'package:legado_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:legado_reader/features/reader/engine/text_page.dart';
@@ -12,6 +13,22 @@ import 'reader_provider_base.dart';
 import 'reader_settings_mixin.dart';
 
 enum TtsState { idle, speaking, paused, transitioning }
+
+enum AudioEvent {
+  onPlay,
+  onPause,
+  onStop,
+  onSkipToNext,
+  onSkipToPrevious,
+  onComplete;
+
+  static AudioEvent? fromString(String value) {
+    for (final e in values) {
+      if (e.name == value) return e;
+    }
+    return null;
+  }
+}
 
 class TtsSession {
   final int chapterIndex;
@@ -113,33 +130,32 @@ mixin ReaderTtsMixin
   void listenAudioEvents() {
     audioEventSub?.cancel();
     audioEventSub = TTSService().audioEvents.listen((event) {
-      switch (event) {
-        case 'onPlay':
+      final audioEvent = AudioEvent.fromString(event);
+      if (audioEvent == null) {
+        AppLog.w('Unknown audio event: $event');
+        return;
+      }
+      switch (audioEvent) {
+        case AudioEvent.onPlay:
           if (!TTSService().isPlaying) toggleTts();
-          break;
-        case 'onPause':
+        case AudioEvent.onPause:
           if (TTSService().isPlaying) {
             _ttsState = TtsState.paused;
             TTSService().pause();
           }
-          break;
-        case 'onStop':
+        case AudioEvent.onStop:
           if (_suppressStopReset) {
             _suppressStopReset = false;
-            break;
+            return;
           }
           _resetTtsState();
           notifyListeners();
-          break;
-        case 'onSkipToNext':
+        case AudioEvent.onSkipToNext:
           unawaited(nextPageOrChapter());
-          break;
-        case 'onSkipToPrevious':
+        case AudioEvent.onSkipToPrevious:
           unawaited(prevPageOrChapter());
-          break;
-        case 'onComplete':
+        case AudioEvent.onComplete:
           unawaited(_onTtsComplete());
-          break;
       }
     });
   }
@@ -307,7 +323,7 @@ mixin ReaderTtsMixin
       }
       notifyListeners();
     } catch (e) {
-      debugPrint('TTS: nextChapter failed in _onTtsComplete: $e');
+      AppLog.e('TTS: nextChapter failed in _onTtsComplete: $e', error: e);
       _resetTtsState();
     }
   }
@@ -340,7 +356,7 @@ mixin ReaderTtsMixin
         await _startTts(operationVersion: operationVersion);
       }
     } catch (e) {
-      debugPrint('TTS: nextPageOrChapter failed: $e');
+      AppLog.e('TTS: nextPageOrChapter failed: $e', error: e);
       _resetTtsState();
     }
     notifyListeners();
@@ -374,7 +390,7 @@ mixin ReaderTtsMixin
         await _startTts(operationVersion: operationVersion);
       }
     } catch (e) {
-      debugPrint('TTS: prevPageOrChapter failed: $e');
+      AppLog.e('TTS: prevPageOrChapter failed: $e', error: e);
       _resetTtsState();
     }
     notifyListeners();

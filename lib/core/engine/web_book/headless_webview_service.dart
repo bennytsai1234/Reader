@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:legado_reader/core/utils/logger.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 
 class HeadlessWebViewService {
   static final HeadlessWebViewService _instance = HeadlessWebViewService._internal();
@@ -8,6 +8,7 @@ class HeadlessWebViewService {
   HeadlessWebViewService._internal();
 
   WebViewController? _controller;
+  Completer<void>? _mutex;
 
   /// 獲取網頁渲染後的 HTML
   Future<String> getRenderedHtml({
@@ -17,8 +18,14 @@ class HeadlessWebViewService {
     String? js,
     int delayTime = 0,
   }) async {
+    // Serialize concurrent requests
+    while (_mutex != null) {
+      await _mutex!.future;
+    }
+    _mutex = Completer<void>();
+
     final completer = Completer<String>();
-    
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent(userAgent)
@@ -35,7 +42,7 @@ class HeadlessWebViewService {
               try {
                 await _controller?.runJavaScript(js);
               } catch (e) {
-                Logger.e('WebView JS 執行失敗: $e');
+                AppLog.e('WebView JS 執行失敗: $e');
               }
             }
 
@@ -70,10 +77,12 @@ class HeadlessWebViewService {
       final result = await completer.future.timeout(const Duration(seconds: 30));
       return result;
     } catch (e) {
-      Logger.e('HeadlessWebView Error: $e');
+      AppLog.e('HeadlessWebView Error: $e');
       rethrow;
     } finally {
       _controller = null;
+      _mutex?.complete();
+      _mutex = null;
     }
   }
 }

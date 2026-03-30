@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:legado_reader/core/services/update_service.dart';
@@ -174,7 +175,7 @@ class _AboutPageState extends State<AboutPage> {
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      debugPrint('無法開啟連結: $url');
+      AppLog.d('無法開啟連結: $url');
     }
   }
 

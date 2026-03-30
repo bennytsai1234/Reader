@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import '../js_extensions_base.dart';
@@ -30,7 +31,7 @@ extension JsFontExtensions on JsExtensionsBase {
           JsExtensionsBase.ttfCache[cacheKey] = qTTF;
           return cacheKey;
         }
-      } catch (e) { debugPrint('queryTTF error: $e'); }
+      } catch (e) { AppLog.e('queryTTF error: $e', error: e); }
       return null;
     });
 
@@ -59,7 +60,7 @@ extension JsFontExtensions on JsExtensionsBase {
         if (JsExtensionsBase.fontReplaceCache.length > 500) JsExtensionsBase.fontReplaceCache.clear();
         JsExtensionsBase.fontReplaceCache[cacheKey] = finalResult;
         return finalResult;
-      } catch (e) { debugPrint('replaceFont error: $e'); return args[0]?.toString() ?? ''; }
+      } catch (e) { AppLog.e('replaceFont error: $e', error: e); return args[0]?.toString() ?? ''; }
     });
   }
 }

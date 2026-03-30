@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
 import 'package:fast_gbk/fast_gbk.dart';
 import 'package:legado_reader/core/models/base_source.dart';
@@ -63,7 +64,7 @@ class AnalyzeUrl {
       final Map<String, dynamic> headers = jsonDecode(headerStr);
       headers.forEach((k, v) => headerMap[k.toString()] = v.toString());
     } catch (e) {
-      debugPrint('AnalyzeUrl source header parse error: $e');
+      AppLog.e('AnalyzeUrl source header parse error: $e', error: e);
     }
   }
 
@@ -180,7 +181,7 @@ class AnalyzeUrl {
         charset = options['charset'];
         webViewDelayTime = int.tryParse(options['webViewDelayTime']?.toString() ?? '0') ?? 0;
       } catch (e) {
-        debugPrint('AnalyzeUrl options parse error: $e');
+        AppLog.e('AnalyzeUrl options parse error: $e', error: e);
       }
 
     } else {

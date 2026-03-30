@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/database/dao/book_dao.dart';
 import 'package:legado_reader/core/database/dao/chapter_dao.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
@@ -73,7 +74,7 @@ class BookDetailProvider extends ChangeNotifier {
       try {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
         if (_isInBookshelf) await _chapterDao.insertChapters(_allChapters);
-      } catch (e) { debugPrint('加載目錄失敗: $e'); }
+      } catch (e) { AppLog.e('加載目錄失敗: $e', error: e); }
     }
     _applyFilter();
   }
@@ -122,7 +123,7 @@ class BookDetailProvider extends ChangeNotifier {
       }
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
-    } catch (e) { debugPrint('換源失敗: $e'); }
+    } catch (e) { AppLog.e('換源失敗: $e', error: e); }
     finally { _isLoading = false; notifyListeners(); }
   }
 
@@ -142,7 +143,7 @@ class BookDetailProvider extends ChangeNotifier {
           await _chapterDao.insertChapters(_allChapters);
         }
       } catch (e) {
-        debugPrint('加入書架失敗: $e');
+        AppLog.e('加入書架失敗: $e', error: e);
       } finally {
         _isLoading = false;
         notifyListeners();
@@ -174,7 +175,7 @@ class BookDetailProvider extends ChangeNotifier {
 
   void preloadChapters(int start, int count) {
     // 預加載邏輯實作
-    debugPrint('Preloading $count chapters from $start');
+    AppLog.d('Preloading $count chapters from $start');
   }
 
   @override

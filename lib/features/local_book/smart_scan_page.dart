@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
@@ -106,7 +107,7 @@ class _SmartScanPageState extends State<SmartScanPage> {
         await context.read<BookshelfProvider>().importLocalBookPath(path);
         successCount++;
       } catch (e) {
-        debugPrint('匯入 $path 失敗: $e');
+        AppLog.e('匯入 $path 失敗: $e', error: e);
       }
     }
 

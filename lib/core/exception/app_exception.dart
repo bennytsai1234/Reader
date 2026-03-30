@@ -48,3 +48,40 @@ class NoStackTraceException extends AppException {
   NoStackTraceException(super.message);
 }
 
+/// NetworkException - 網路請求失敗
+class NetworkException extends AppException {
+  final int? statusCode;
+  final String? url;
+  NetworkException(super.message, {this.statusCode, this.url});
+}
+
+/// ParsingException - 解析規則執行失敗
+class ParsingException extends AppException {
+  final String? ruleName;
+  ParsingException(super.message, {this.ruleName});
+}
+
+/// LoginCheckException - 書源登入驗證失敗
+class LoginCheckException extends AppException {
+  final String? sourceUrl;
+  LoginCheckException(super.message, {this.sourceUrl});
+}
+
+/// SourceException - 書源配置錯誤（缺少必要欄位等）
+class SourceException extends AppException {
+  final String? sourceUrl;
+  SourceException(super.message, {this.sourceUrl});
+}
+
+/// AdultContentException - 18+ 內容限制
+class AdultContentException extends AppException {
+  AdultContentException(super.message);
+}
+
+/// DownloadException - 下載過程中的錯誤
+class DownloadException extends AppException {
+  final String? bookUrl;
+  final int? chapterIndex;
+  DownloadException(super.message, {this.bookUrl, this.chapterIndex});
+}
+

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:legado_reader/features/settings/settings_provider.dart';
 import 'package:legado_reader/core/services/default_data.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'main_page.dart';
 import '../../main.dart';
 
@@ -33,7 +34,7 @@ class _SplashPageState extends State<SplashPage> {
         );
       }
     } catch (e, stack) {
-      debugPrint('Init Error: $e\n$stack');
+      AppLog.e('Init Error: $e', error: e, stackTrace: stack);
       if (mounted) {
         setState(() { _error = '$e\n$stack'; });
       }

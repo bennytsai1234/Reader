@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +13,7 @@ import 'package:legado_reader/features/bookshelf/bookshelf_provider.dart';
 mixin FileAssociationHandler on AssociationBase {
   void handleSharedMedia(BuildContext context, List<SharedMediaFile> media, Function(BuildContext, String, String, {bool isFile, String? jsonData}) showImportDialog, Function(BuildContext, String) showForceImportDialog) async {
     for (var file in media) {
-      debugPrint('收到分享檔案: ${file.path}');
+      AppLog.d('收到分享檔案: ${file.path}');
       final ext = p.extension(file.path).toLowerCase();
       if (ext == '.json') {
         if (!context.mounted) {
@@ -47,7 +48,7 @@ mixin FileAssociationHandler on AssociationBase {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已將書籍複製並匯入: $fileName')));
       }
     } catch (e) {
-      debugPrint('搬移並匯入書籍失敗: $e');
+      AppLog.e('搬移並匯入書籍失敗: $e', error: e);
     }
   }
 

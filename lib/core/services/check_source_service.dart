@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/source/book_source_logic.dart';
@@ -156,7 +157,7 @@ class CheckSourceService extends ChangeNotifier {
       await _sourceDao.upsert(source);
     } catch (e) {
       _postLog('  ✕ [${source.bookSourceName}] 發生錯誤: $e');
-      debugPrint('CheckSource Error [${source.bookSourceName}]: $e');
+      AppLog.e('CheckSource Error [${source.bookSourceName}]: $e', error: e);
       source.addGroup('網站失效');
       source.addErrorComment('網路發生錯誤: $e');
       await _sourceDao.upsert(source);

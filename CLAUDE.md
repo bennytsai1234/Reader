@@ -26,7 +26,7 @@ flutter build apk            # 建置 Android APK
 - **語言**：Dart / Flutter（SDK ^3.7.0）
 - **狀態管理**：Provider + ChangeNotifier
 - **依賴注入**：get_it
-- **資料庫**：Drift (SQLite ORM，v7 schema)
+- **資料庫**：Drift (SQLite ORM，v8 schema)
 - **網路**：Dio + CookieJar
 - **JS 引擎**：flutter_js（替代 Android Rhino）
 - **WebView**：webview_flutter
@@ -43,17 +43,22 @@ lib/
 │   ├── base/                 # BaseProvider：統一 loading/error 處理
 │   ├── config/               # 常數、PreferenceKey、預設資料
 │   ├── constant/             # 列舉與常數（PageAnim、BookType…）
-│   ├── database/             # Drift schema (v7) / DAO / 遷移
+│   ├── database/             # Drift schema (v8) / DAO / 遷移
 │   ├── di/                   # GetIt 依賴注入 (injection.dart)
 │   ├── engine/               # 書源解析引擎（CSS/JSON/XPath/JS/URL）
 │   │   ├── analyze_rule/     # 規則解析核心
 │   │   ├── analyze_url/      # URL 建構與請求發送
+│   │   ├── parsers/          # 格式解析器（CSS、XPath、JSON、Regex）
+│   │   ├── rule_analyzer/    # 範圍/匹配/分割分析
+│   │   ├── web_book/         # 書源抓取服務（搜尋、書籍資訊、章節、內容）
 │   │   ├── reader/           # 內容後處理（content_processor.dart）
-│   │   └── js/               # flutter_js 沙盒
+│   │   └── js/               # flutter_js 沙盒與擴展
 │   ├── local_book/           # 本機格式解析器
 │   ├── models/               # 資料模型（Book、Chapter、BookSource…）
 │   ├── network/              # HTTP / Cookie
-│   └── services/             # 各種 Service（TTS、音訊、下載…）
+│   ├── services/             # 各種 Service（TTS、音訊、下載…）
+│   ├── storage/              # 路徑註冊、快取、儲存指標
+│   └── utils/                # 工具類（LRU 快取等）
 ├── features/                 # UI 功能模組
 │   ├── reader/               # 閱讀器（核心，見下方詳述）
 │   ├── bookshelf/            # 書架
@@ -71,36 +76,58 @@ lib/
 
 ## 閱讀器架構（重點）
 
-閱讀器是最複雜的模組，`ReaderProvider` 由一條 mixin 鏈組合而成：
+閱讀器是最複雜的模組，以 `ReadBookController` 為中心的 runtime 內核，搭配 mixin 鏈與 coordinator 模式：
+
+### 主控與 Coordinator
+
+`ReadBookController` 是閱讀生命週期的主控（`loading -> restoring -> ready`），內部拆出五個子域：
+
+- `ReaderNavigationController` — 跳轉命令、頁面切換原因、command guard
+- `ReaderRestoreCoordinator` — 進度還原的 token/target 管理
+- `ReaderProgressStore` — 持久化進度寫回（`book.durChapter*` 同步）
+- `ReaderScrollVisibilityCoordinator` — 捲動可見章節追蹤與預載判斷
+- `ReaderTtsFollowCoordinator` — TTS 朗讀時的畫面跟隨
+
+### Mixin 鏈（仍保留）
 
 ```
-ReaderProviderBase          ← DAO、基礎狀態（currentPageIndex、pages、chapterCache…）
-  └── ReaderSettingsMixin   ← 字體/行距/主題等使用者設定（從 SharedPreferences 讀寫）
-        └── ReaderContentMixin  ← 章節加載、ChapterProvider.paginate()、靜默預載
-              └── ReaderProgressMixin  ← 進度儲存/恢復、捲動位置計算
-                    └── ReaderTtsMixin  ← TTS 朗讀、高亮追蹤、章節預取
-                          └── ReaderAutoPageMixin  ← 自動翻頁計時
-                                └── ReaderProvider  ← 組合入口，_init() 串接所有初始化
+ReaderProviderBase → ReaderSettingsMixin → ReaderContentMixin
+  → ReaderProgressMixin → ReaderTtsMixin → ReaderAutoPageMixin
+    → ReadBookController
 ```
 
-### 核心資料流
+Mixin 負責設定投影、內容載入、進度轉換等，但控制權已大幅回收到 controller 與 coordinator。
 
-- **TextPage / TextLine**：`engine/text_page.dart`。每行有 `chapterPosition`（在章節原始文字中的字元偏移），是 TTS 高亮與進度恢復的共同基礎。
-- **chapterCache**：`Map<int, List<TextPage>>`，以章節索引為鍵，存放分頁結果；載入新章節後更新，是多章節捲動模式的頁面來源。
-- **事件通訊**：`ReaderProviderBase` 暴露三個 `StreamController`：
-  - `jumpPageController` — 命令 PageView 跳到指定頁（平移/覆蓋模式）
-  - `scrollOffsetController` — 命令 ScrollView 跳到指定偏移（捲動模式）
-  - `scrollTrimAdjustController` — trim 前方頁面後補償捲動位置
+### 章節 Runtime
+
+`ReaderChapter` 是核心共用 runtime 物件，統一提供：
+- `charOffset ↔ localOffset ↔ pageIndex` 互轉
+- highlight range、restore target、scroll anchor 解析
+- read aloud data 組裝
+
+### 內容生命週期
+
+`ChapterContentManager` 負責章節內容的完整生命週期：
+- 正文抓取協調與靜默預載去重
+- 分頁快取與 progressive paginate
+- 視窗內外快取驅逐
+
+### View Runtime
+
+- `ReadViewRuntime` — 主視圖控制器
+- `PageModeDelegate` / `ScrollModeDelegate` / `SlideModeDelegate` — 三種閱讀模式
+- `ScrollExecutionAdapter` / `ScrollRestoreRunner` — 捲動執行與還原
 
 ### TTS 設計
 
-`TTSService` 是全域單例（`TTSService()` 工廠），在 `main()` 中初始化，與 `audio_service` 整合以提供系統通知欄控制。
+`TTSService` 是全域單例，在 `main()` 中初始化，與 `audio_service` 整合以提供系統通知欄控制。
 
-`ReaderTtsMixin` 使用**錨點游標**而非 `currentPageIndex`：
-- `_ttsAnchorChapterIdx` / `_ttsAnchorEndCharPos` — 記錄「目前正在讀到哪個章節的哪個字元」
-- `_ttsChapterIndex` — 目前朗讀所在章節，用於過濾高亮避免跨章節誤標
+`ReadAloudController` 是實際朗讀流程的主控（取代舊的 `ReaderTtsMixin` 內部實作），負責：
+- TTS session 建立與 offset map
+- progress → chapter offset 映射
+- highlight 同步、章節預取與無縫銜接
 
-TTS 朗讀以**整章**為單位：`_startTts()` 從目前位置收集到章末的所有行，呼叫一次 `TTSService().speak()`；章節邊界由 `_onTtsComplete()` 處理，利用 `_prefetchedChapterTtsText` 實現無縫銜接。
+底層仍使用錨點游標模式（`_ttsAnchorChapterIdx` / `_ttsAnchorEndCharPos`），朗讀以整章為單位。
 
 ## 開發規範
 

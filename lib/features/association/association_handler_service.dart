@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:app_links/app_links.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'handlers/association_base.dart';
@@ -30,7 +31,7 @@ class AssociationHandlerService extends AssociationBase with UriAssociationHandl
     // 2. Sharing Intent (File/Text)
     sharedMediaSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
       if (context.mounted) handleSharedMedia(context, value, showImportDialog, (ctx, path) => showForceImportDialog(ctx, path, handleSharedBook));
-    }, onError: (err) => debugPrint('SharingIntent error: $err'));
+    }, onError: (err) => AppLog.e('SharingIntent error: $err', error: err));
 
     // Check initial intents
     ReceiveSharingIntent.instance.getInitialMedia().then((value) {

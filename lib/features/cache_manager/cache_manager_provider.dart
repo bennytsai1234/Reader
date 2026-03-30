@@ -34,15 +34,9 @@ class CacheManagerProvider extends ChangeNotifier {
     notifyListeners();
 
     _chapters = await _chapterDao.getChapters(book.bookUrl);
-    _cachedIndices.clear();
-    
-    // 檢查每章是否有快取 (這在大章節數下可能較慢，可優化為一次性 SQL 查詢)
-    for (var chapter in _chapters) {
-      final content = await _chapterDao.getContent(chapter.url);
-      if (content != null && content.isNotEmpty) {
-        _cachedIndices.add(chapter.index);
-      }
-    }
+    _cachedIndices
+      ..clear()
+      ..addAll(await _chapterDao.getCachedChapterIndices(book.bookUrl));
 
     _isLoading = false;
     notifyListeners();
@@ -57,16 +51,15 @@ class CacheManagerProvider extends ChangeNotifier {
   }
 
   Future<void> downloadUncached() async {
-    final uncached = _chapters.where((ch) => !_cachedIndices.contains(ch.index)).toList();
+    final uncached =
+        _chapters.where((ch) => !_cachedIndices.contains(ch.index)).toList();
     if (uncached.isNotEmpty) {
       await downloadService.addDownloadTask(book, uncached);
     }
   }
 
   Future<void> clearCache() async {
-    await _chapterDao.deleteByBook(book.bookUrl);
+    await _chapterDao.deleteContentByBook(book.bookUrl);
     await loadStatus();
   }
 }
-
-

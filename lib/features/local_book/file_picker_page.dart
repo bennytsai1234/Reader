@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -55,7 +56,7 @@ class _FilePickerPageState extends State<FilePickerPage> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Navigate to ${dir.path} failed: $e');
+      AppLog.e('Navigate to ${dir.path} failed: $e', error: e);
       setState(() => _isLoading = false);
     }
   }

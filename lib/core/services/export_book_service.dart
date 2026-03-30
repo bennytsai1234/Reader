@@ -1,16 +1,17 @@
-import 'dart:io';
-
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/database/dao/chapter_dao.dart';
 import 'package:legado_reader/core/di/injection.dart';
+import 'package:legado_reader/core/models/book.dart';
+import 'package:legado_reader/core/storage/app_storage_paths.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ExportBookService {
   final ChapterDao _chapterDao = getIt<ChapterDao>();
 
   /// 匯出全書為 TXT 檔案
-  Future<void> exportToTxt(Book book, {Function(double progress)? onProgress}) async {
+  Future<void> exportToTxt(
+    Book book, {
+    Function(double progress)? onProgress,
+  }) async {
     final chapters = await _chapterDao.getChapters(book.bookUrl);
     if (chapters.isEmpty) return;
 
@@ -25,20 +26,19 @@ class ExportBookService {
         buffer.writeln('\n${chapters[i].title}\n');
         buffer.writeln(content);
       }
-      if (onProgress != null) onProgress((i + 1) / chapters.length);
+      if (onProgress != null) {
+        onProgress((i + 1) / chapters.length);
+      }
     }
 
-    final tempDir = await getTemporaryDirectory();
-    final fileName = '${book.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')}.txt';
-    final file = File('${tempDir.path}/$fileName');
+    final fileName =
+        '${book.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')}.txt';
+    final file = await AppStoragePaths.shareExportFile(fileName);
     await file.writeAsString(buffer.toString());
 
     // 使用 SharePlus.instance.share
-    await SharePlus.instance.share(ShareParams(
-      files: [XFile(file.path)],
-      subject: '匯出書籍: ${book.name}',
-    ));
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], subject: '匯出書籍: ${book.name}'),
+    );
   }
 }
-
-

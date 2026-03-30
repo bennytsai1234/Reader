@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
@@ -67,7 +67,7 @@ class DefaultData {
       await getIt<CacheDao>().clearDeadline(now);
 
     } catch (e) {
-      debugPrint('Maintenance error: $e');
+      AppLog.e('Maintenance error: $e', error: e);
     }
   }
 
@@ -84,7 +84,7 @@ class DefaultData {
       final rules = list.map((e) => TxtTocRule.fromJson(e)).toList();
       await getIt<TxtTocRuleDao>().insertOrUpdateAll(rules);
     } catch (e) {
-      debugPrint('Error loading default TOC rules: $e. Falling back to hardcoded rules.');
+      AppLog.e('Error loading default TOC rules: $e. Falling back to hardcoded rules.', error: e);
       // 如果 Asset 缺失，回退到基礎硬編碼規則 (原 Android 應急邏輯)
       final defaultRules = [
         TxtTocRule(id: 0, name: '標準章節', rule: r'第[一二三四五六七八九十百千萬零\d]+[章回節卷集幕計].*', enable: true),
@@ -93,7 +93,7 @@ class DefaultData {
       try {
         await getIt<TxtTocRuleDao>().insertOrUpdateAll(defaultRules);
       } catch (dbError) {
-        debugPrint('Failed to insert hardcoded TOC rules: $dbError');
+        AppLog.e('Failed to insert hardcoded TOC rules: $dbError', error: dbError);
       }
     }
   }
@@ -106,7 +106,7 @@ class DefaultData {
       final engines = list.map((e) => HttpTTS.fromJson(e)).toList();
       await getIt<HttpTtsDao>().insertOrUpdateAll(engines);
     } catch (e) {
-      debugPrint('Default HttpTTS Asset Not Found');
+      AppLog.e('Default HttpTTS Asset Not Found', error: e);
     }
   }
 
@@ -118,7 +118,7 @@ class DefaultData {
       final sources = jsonList.map((j) => BookSource.fromJson(jsonAt(j))).toList();     
       await getIt<BookSourceDao>().insertOrUpdateAll(sources);
     } catch (e) {
-      debugPrint('Error loading default sources: $e');
+      AppLog.e('Error loading default sources: $e', error: e);
     }
   }
 
@@ -130,7 +130,7 @@ class DefaultData {
       final rules = list.map((e) => DictRule.fromJson(e)).toList();
       await getIt<DictRuleDao>().insertOrUpdateAll(rules);
     } catch (e) {
-      debugPrint('Default DictRules Asset Not Found');
+      AppLog.e('Default DictRules Asset Not Found', error: e);
     }
   }
 

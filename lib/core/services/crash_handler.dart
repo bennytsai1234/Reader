@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -86,9 +87,9 @@ class CrashHandler {
       final latestFile = File('${directory.path}/crash_log.txt');
       await latestFile.writeAsString(buffer.toString(), flush: true);
       
-      debugPrint('Crash log saved to: ${file.path}');
+      AppLog.d('Crash log saved to: ${file.path}');
     } catch (e) {
-      debugPrint('Failed to save crash log: $e');
+      AppLog.e('Failed to save crash log: $e', error: e);
     }
   }
 

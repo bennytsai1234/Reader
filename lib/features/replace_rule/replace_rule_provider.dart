@@ -1,4 +1,5 @@
 import 'package:legado_reader/core/di/injection.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -105,7 +106,7 @@ class ReplaceRuleProvider extends ChangeNotifier {
         await loadRules();
       }
     } catch (e) {
-      debugPrint('匯入規則失敗: $e');
+      AppLog.e('匯入規則失敗: $e', error: e);
     }
     return count;
   }
@@ -116,7 +117,7 @@ class ReplaceRuleProvider extends ChangeNotifier {
       final jsonStr = jsonEncode(list);
       await Clipboard.setData(ClipboardData(text: jsonStr));
     } catch (e) {
-      debugPrint('導出規則失敗: $e');
+      AppLog.e('導出規則失敗: $e', error: e);
     }
   }
 }

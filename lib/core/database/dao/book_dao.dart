@@ -48,8 +48,9 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
   }
 
   Future<List<Book>> searchLocal(String key) {
+    final escaped = key.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
     return (select(books)
-          ..where((t) => t.name.like('%$key%') | t.author.like('%$key%')))
+          ..where((t) => t.name.like('%$escaped%') | t.author.like('%$escaped%')))
         .get();
   }
 

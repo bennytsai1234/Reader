@@ -1,25 +1,23 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
-import 'package:legado_reader/core/di/injection.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
+import 'package:legado_reader/core/di/injection.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/book_source_part.dart';
+import 'package:legado_reader/core/storage/app_storage_paths.dart';
 import 'package:legado_reader/core/services/network_service.dart';
 import 'package:legado_reader/core/services/check_source_service.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SourceManagerProvider with ChangeNotifier {
   final BookSourceDao _dao = getIt<BookSourceDao>();
   final CheckSourceService checkService = CheckSourceService();
 
   List<BookSourcePart> _sources = [];
-  
+
   String filterGroup = '全部';
-  int sortMode = 0; 
+  int sortMode = 0;
   bool sortDesc = false;
   bool groupByDomain = false;
 
@@ -32,19 +30,49 @@ class SourceManagerProvider with ChangeNotifier {
     } else if (filterGroup == '需登錄') {
       list = list.where((s) => s.hasLoginUrl).toList();
     } else if (filterGroup == '無分組') {
-      list = list.where((s) => s.bookSourceGroup == null || s.bookSourceGroup!.isEmpty).toList();
+      list =
+          list
+              .where(
+                (s) => s.bookSourceGroup == null || s.bookSourceGroup!.isEmpty,
+              )
+              .toList();
     } else if (filterGroup != '全部') {
-      list = list.where((s) => s.bookSourceGroup?.contains(filterGroup) ?? false).toList();
+      list =
+          list
+              .where((s) => s.bookSourceGroup?.contains(filterGroup) ?? false)
+              .toList();
     }
 
     int multiplier = sortDesc ? -1 : 1;
     switch (sortMode) {
-      case 0: list.sort((a, b) => a.customOrder.compareTo(b.customOrder) * multiplier); break;
-      case 1: list.sort((a, b) => b.weight.compareTo(a.weight) * multiplier); break;
-      case 2: list.sort((a, b) => a.bookSourceName.compareTo(b.bookSourceName) * multiplier); break;
-      case 3: list.sort((a, b) => a.bookSourceUrl.compareTo(b.bookSourceUrl) * multiplier); break;
-      case 4: list.sort((a, b) => a.lastUpdateTime.compareTo(b.lastUpdateTime) * multiplier); break;
-      case 5: list.sort((a, b) => a.respondTime.compareTo(b.respondTime) * multiplier); break;
+      case 0:
+        list.sort(
+          (a, b) => a.customOrder.compareTo(b.customOrder) * multiplier,
+        );
+        break;
+      case 1:
+        list.sort((a, b) => b.weight.compareTo(a.weight) * multiplier);
+        break;
+      case 2:
+        list.sort(
+          (a, b) => a.bookSourceName.compareTo(b.bookSourceName) * multiplier,
+        );
+        break;
+      case 3:
+        list.sort(
+          (a, b) => a.bookSourceUrl.compareTo(b.bookSourceUrl) * multiplier,
+        );
+        break;
+      case 4:
+        list.sort(
+          (a, b) => a.lastUpdateTime.compareTo(b.lastUpdateTime) * multiplier,
+        );
+        break;
+      case 5:
+        list.sort(
+          (a, b) => a.respondTime.compareTo(b.respondTime) * multiplier,
+        );
+        break;
     }
     return list;
   }
@@ -58,7 +86,9 @@ class SourceManagerProvider with ChangeNotifier {
   List<String> _allGroups = [];
   List<String> get allGroups => _allGroups;
 
-  SourceManagerProvider() { loadSources(); }
+  SourceManagerProvider() {
+    loadSources();
+  }
 
   Future<void> loadSources() async {
     _isLoading = true;
@@ -82,10 +112,25 @@ class SourceManagerProvider with ChangeNotifier {
     _allGroups = groupSet.toList()..sort();
   }
 
-  void setFilterGroup(String group) { filterGroup = group; notifyListeners(); }
-  void setSortMode(int mode) { sortMode = mode; notifyListeners(); }
-  void toggleSortDesc() { sortDesc = !sortDesc; notifyListeners(); }
-  void toggleGroupByDomain() { groupByDomain = !groupByDomain; notifyListeners(); }
+  void setFilterGroup(String group) {
+    filterGroup = group;
+    notifyListeners();
+  }
+
+  void setSortMode(int mode) {
+    sortMode = mode;
+    notifyListeners();
+  }
+
+  void toggleSortDesc() {
+    sortDesc = !sortDesc;
+    notifyListeners();
+  }
+
+  void toggleGroupByDomain() {
+    groupByDomain = !groupByDomain;
+    notifyListeners();
+  }
 
   void toggleBatchMode() {
     _isBatchMode = !_isBatchMode;
@@ -94,14 +139,20 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   void toggleSelect(String url) {
-    if (_selectedUrls.contains(url)) { _selectedUrls.remove(url); } 
-    else { _selectedUrls.add(url); }
+    if (_selectedUrls.contains(url)) {
+      _selectedUrls.remove(url);
+    } else {
+      _selectedUrls.add(url);
+    }
     notifyListeners();
   }
 
   void selectAll() {
-    if (_selectedUrls.length == sources.length) { _selectedUrls.clear(); } 
-    else { _selectedUrls.addAll(sources.map((s) => s.bookSourceUrl)); }
+    if (_selectedUrls.length == sources.length) {
+      _selectedUrls.clear();
+    } else {
+      _selectedUrls.addAll(sources.map((s) => s.bookSourceUrl));
+    }
     notifyListeners();
   }
 
@@ -131,9 +182,12 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   /// 通用分享方法：按 URL 集合分享書源 (對標 Android 分享)
-  Future<void> shareSourcesByUrls(Set<String> urls, {String fileName = 'sources.legado'}) async {
+  Future<void> shareSourcesByUrls(
+    Set<String> urls, {
+    String fileName = 'sources.legado',
+  }) async {
     if (urls.isEmpty) return;
-    
+
     final selectedFullSources = <BookSource>[];
     for (var url in urls) {
       final full = await _dao.getByUrl(url);
@@ -142,23 +196,26 @@ class SourceManagerProvider with ChangeNotifier {
 
     if (selectedFullSources.isEmpty) return;
 
-    final jsonStr = jsonEncode(selectedFullSources.map((s) => s.toJson()).toList());
-    final tempDir = await getTemporaryDirectory();
-    final file = File(p.join(tempDir.path, fileName.endsWith('.legado') ? fileName : '$fileName.legado'));
+    final jsonStr = jsonEncode(
+      selectedFullSources.map((s) => s.toJson()).toList(),
+    );
+    final file = await AppStoragePaths.shareExportFile(
+      fileName.endsWith('.legado') ? fileName : '$fileName.legado',
+    );
     await file.writeAsString(jsonStr);
 
     // 使用 SharePlus.instance.share
-    await SharePlus.instance.share(ShareParams(
-      files: [XFile(file.path)],
-      text: '分享 Legado 書源 ($fileName)',
-    ));
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], text: '分享 Legado 書源 ($fileName)'),
+    );
   }
 
   /// 批量分享目前選中的書源
   Future<void> shareSelectedSources() async {
-    final fileName = _selectedUrls.length == 1 
-        ? '${sources.firstWhere((s) => s.bookSourceUrl == _selectedUrls.first).bookSourceName}.legado'
-        : 'export_${_selectedUrls.length}_sources.legado';
+    final fileName =
+        _selectedUrls.length == 1
+            ? '${sources.firstWhere((s) => s.bookSourceUrl == _selectedUrls.first).bookSourceName}.legado'
+            : 'export_${_selectedUrls.length}_sources.legado';
     await shareSourcesByUrls(_selectedUrls, fileName: fileName);
   }
 
@@ -168,7 +225,9 @@ class SourceManagerProvider with ChangeNotifier {
       final full = await _dao.getByUrl(url);
       if (full != null) selectedFullSources.add(full);
     }
-    final json = jsonEncode(selectedFullSources.map((s) => s.toJson()).toList());
+    final json = jsonEncode(
+      selectedFullSources.map((s) => s.toJson()).toList(),
+    );
     await Clipboard.setData(ClipboardData(text: json));
   }
 
@@ -218,7 +277,11 @@ class SourceManagerProvider with ChangeNotifier {
     for (var url in urls) {
       final s = await _dao.getByUrl(url);
       if (s != null) {
-        final groups = (s.bookSourceGroup ?? '').split(RegExp(r'[,，\s]+')).where((e) => e.isNotEmpty).toSet();
+        final groups =
+            (s.bookSourceGroup ?? '')
+                .split(RegExp(r'[,，\s]+'))
+                .where((e) => e.isNotEmpty)
+                .toSet();
         groups.add(g);
         s.bookSourceGroup = groups.join(',');
         await _dao.upsert(s);
@@ -231,7 +294,11 @@ class SourceManagerProvider with ChangeNotifier {
     for (var url in urls) {
       final s = await _dao.getByUrl(url);
       if (s != null) {
-        final groups = (s.bookSourceGroup ?? '').split(RegExp(r'[,，\s]+')).where((e) => e.isNotEmpty).toSet();
+        final groups =
+            (s.bookSourceGroup ?? '')
+                .split(RegExp(r'[,，\s]+'))
+                .where((e) => e.isNotEmpty)
+                .toSet();
         groups.remove(g);
         s.bookSourceGroup = groups.join(',');
         await _dao.upsert(s);
@@ -251,7 +318,8 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   Future<int> importFromJson(String jsonStr) async {
-    _isLoading = true; notifyListeners();
+    _isLoading = true;
+    notifyListeners();
     try {
       final decoded = jsonDecode(jsonStr);
       final List<dynamic> list = decoded is List ? decoded : [decoded];
@@ -260,7 +328,9 @@ class SourceManagerProvider with ChangeNotifier {
         if (e is! Map<String, dynamic>) continue;
         final source = BookSource.fromJson(e);
         // 驗證必要欄位
-        if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) continue;
+        if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
+          continue;
+        }
         sources.add(source);
       }
       if (sources.isEmpty) return 0;
@@ -269,18 +339,25 @@ class SourceManagerProvider with ChangeNotifier {
       return sources.length;
     } catch (_) {
       return 0;
-    } finally { _isLoading = false; notifyListeners(); }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<int> importFromUrl(String url) async {
-    _isLoading = true; notifyListeners();
+    _isLoading = true;
+    notifyListeners();
     try {
       final response = await getIt<NetworkService>().dio.get(url);
       if (response.statusCode == 200) {
         return await importFromJson(jsonEncode(response.data));
       }
-    } catch (_) {}
-    finally { _isLoading = false; notifyListeners(); }
+    } catch (_) {
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
     return 0;
   }
 

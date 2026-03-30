@@ -4,6 +4,7 @@ import 'text_page.dart';
 import 'chapter_provider.dart';
 import 'reader_perf_trace.dart';
 import 'package:legado_reader/core/models/chapter.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 
 /// 分頁設定值物件，傳遞給 ChapterProvider.paginate()
 class PaginationConfig {
@@ -165,7 +166,7 @@ class ChapterContentManager {
       if (_disposed) return [];
       return _paginatedCache[index] ?? [];
     } catch (e) {
-      debugPrint('ChapterContentManager: Load chapter $index failed: $e');
+      AppLog.e('ChapterContentManager: Load chapter $index failed: $e');
       return [];
     } finally {
       _activeLoadingChapters.remove(index);
@@ -240,7 +241,7 @@ class ChapterContentManager {
     _wholeBookPreloadEnabled = true;
     _targetWindow = {for (int i = 0; i < _chapters.length; i++) i};
     final center = (startIndex ?? 0).clamp(0, _chapters.length - 1).toInt();
-    debugPrint(
+    AppLog.d(
       'ChapterContentManager: Whole-book preload enabled '
       '(start: $center, chapters: ${_chapters.length})',
     );
@@ -286,7 +287,7 @@ class ChapterContentManager {
     }
 
     _targetWindow = newIndices;
-    debugPrint(
+    AppLog.d(
       'ChapterContentManager: Window updated to $_targetWindow (center: $centerChapterIndex)',
     );
 
@@ -727,7 +728,7 @@ class ChapterContentManager {
         }
       }
     } catch (e) {
-      debugPrint('ChapterContentManager: Preload chapter $index failed: $e');
+      AppLog.e('ChapterContentManager: Preload chapter $index failed: $e');
     } finally {
       trace.stop();
       ReaderPerfTrace.mark(

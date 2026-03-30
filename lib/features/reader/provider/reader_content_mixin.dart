@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/constant/page_anim.dart';
 import 'package:legado_reader/features/reader/engine/chapter_content_manager.dart';
 import 'package:legado_reader/features/reader/engine/chapter_position_resolver.dart';
@@ -592,7 +593,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
 
   Future<FetchResult> _fetchChapterData(int i) async {
     final chapter = chapters[i];
-    debugPrint('Reader: Fetching content for chapter $i: ${chapter.title}');
+    AppLog.d('Reader: Fetching content for chapter $i: ${chapter.title}');
     return _chapterContentLoader!.load(i, chapter);
   }
 

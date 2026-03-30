@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+
+import 'package:legado_reader/core/storage/app_storage_paths.dart';
 
 /// RuleBigDataService - 大數據規則變數持久化服務 (原 Android help/RuleBigDataHelp.kt)
 /// 當變數過大時，將其存儲為本地檔案而非資料庫欄位
@@ -14,16 +15,16 @@ class RuleBigDataService {
 
   Future<void> _ensureInit() async {
     if (_ruleDataDir != null) return;
-    final appDir = await getApplicationDocumentsDirectory();
-    _ruleDataDir = Directory('${appDir.path}/ruleData');
-    if (!await _ruleDataDir!.exists()) {
-      await _ruleDataDir!.create(recursive: true);
-    }
+    _ruleDataDir = await AppStoragePaths.ruleDataDir(ensureExists: true);
   }
 
   String _md5(String input) => md5.convert(utf8.encode(input)).toString();
 
-  Future<void> putBookVariable(String bookUrl, String key, String? value) async {
+  Future<void> putBookVariable(
+    String bookUrl,
+    String key,
+    String? value,
+  ) async {
     await _ensureInit();
     final md5Url = _md5(bookUrl);
     final md5Key = _md5(key);
@@ -52,7 +53,12 @@ class RuleBigDataService {
     return null;
   }
 
-  Future<void> putChapterVariable(String bookUrl, String chapterUrl, String key, String? value) async {
+  Future<void> putChapterVariable(
+    String bookUrl,
+    String chapterUrl,
+    String key,
+    String? value,
+  ) async {
     await _ensureInit();
     final md5Url = _md5(bookUrl);
     final md5ChUrl = _md5(chapterUrl);
@@ -68,19 +74,30 @@ class RuleBigDataService {
     }
   }
 
-  Future<String?> getChapterVariable(String bookUrl, String chapterUrl, String key) async {
+  Future<String?> getChapterVariable(
+    String bookUrl,
+    String chapterUrl,
+    String key,
+  ) async {
     await _ensureInit();
     final md5Url = _md5(bookUrl);
     final md5ChUrl = _md5(chapterUrl);
     final md5Key = _md5(key);
-    final file = File('${_ruleDataDir!.path}/book/$md5Url/$md5ChUrl/$md5Key.txt');
+    final file = File(
+      '${_ruleDataDir!.path}/book/$md5Url/$md5ChUrl/$md5Key.txt',
+    );
     if (await file.exists()) {
       return await file.readAsString();
     }
     return null;
   }
 
-  Future<void> putRssVariable(String origin, String link, String key, String? value) async {
+  Future<void> putRssVariable(
+    String origin,
+    String link,
+    String key,
+    String? value,
+  ) async {
     await _ensureInit();
     final md5Origin = _md5(origin);
     final md5Link = _md5(link);
@@ -101,7 +118,9 @@ class RuleBigDataService {
     final md5Origin = _md5(origin);
     final md5Link = _md5(link);
     final md5Key = _md5(key);
-    final file = File('${_ruleDataDir!.path}/rss/$md5Origin/$md5Link/$md5Key.txt');
+    final file = File(
+      '${_ruleDataDir!.path}/rss/$md5Origin/$md5Link/$md5Key.txt',
+    );
     if (await file.exists()) {
       return await file.readAsString();
     }
@@ -121,4 +140,3 @@ class RuleBigDataService {
     }
   }
 }
-

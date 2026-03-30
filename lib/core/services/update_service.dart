@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'http_client.dart';
@@ -48,7 +48,7 @@ class AppUpdateService {
         );
       }
     } catch (e) {
-      debugPrint('Check update failed: $e');
+      AppLog.e('Check update failed: $e', error: e);
     }
     return null;
   }

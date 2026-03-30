@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:audio_service/audio_service.dart';
@@ -78,7 +79,7 @@ class AudioPlayService extends ChangeNotifier {
       );
       _player.play();
     } catch (e) {
-      debugPrint('AudioPlayService play error: $e');
+      AppLog.e('AudioPlayService play error: $e', error: e);
     }
   }
 

@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'settings_base.dart';
 import 'package:legado_reader/core/constant/prefer_key.dart';
 
@@ -34,7 +34,7 @@ extension SettingsUiTheme on SettingsProviderBase {
       try {
         const platform = MethodChannel('com.legado.reader/launcher_icon');
         await platform.invokeMethod('changeIcon', {'iconName': v});
-      } catch (e) { debugPrint('變更啟動圖標失敗: $e'); }
+      } catch (e) { AppLog.e('變更啟動圖標失敗: $e', error: e); }
     }
     update();
   }

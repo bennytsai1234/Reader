@@ -1,15 +1,20 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
+import 'package:legado_reader/core/exception/app_exception.dart';
 
 /// BaseProvider - 所有 Provider 的基類
 /// 規範 Loading 狀態與錯誤處理流程
 abstract class BaseProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
+  Object? _lastError;
   final CancelToken _cancelToken = CancelToken();
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  /// 最近一次錯誤的原始物件，用於呼叫端做型別判斷
+  Object? get lastError => _lastError;
   CancelToken get cancelToken => _cancelToken;
 
   /// 設定 Loading 狀態
@@ -21,11 +26,10 @@ abstract class BaseProvider extends ChangeNotifier {
   }
 
   /// 設定錯誤訊息
-  void setError(String? value) {
-    if (_errorMessage != value) {
-      _errorMessage = value;
-      notifyListeners();
-    }
+  void setError(String? value, {Object? error}) {
+    _errorMessage = value;
+    _lastError = error;
+    notifyListeners();
   }
 
   /// 執行異步任務，自動處理 Loading 與 Error
@@ -42,12 +46,13 @@ abstract class BaseProvider extends ChangeNotifier {
       return result;
     } catch (e, stack) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
-        debugPrint('Task cancelled: ${e.message}');
+        AppLog.d('Task cancelled: ${e.message}');
         return null;
       }
-      debugPrint('Provider Error: $e\n$stack');
+      final message = e is AppException ? e.message : e.toString();
+      AppLog.e('Provider Error: $message', error: e, stackTrace: stack);
       if (handleError) {
-        setError(e.toString());
+        setError(message, error: e);
       }
       return null;
     } finally {

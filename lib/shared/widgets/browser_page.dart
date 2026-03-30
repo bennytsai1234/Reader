@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/services/cookie_store.dart';
 import 'base_scaffold.dart';
@@ -58,10 +59,10 @@ class _BrowserPageState extends State<BrowserPage> {
       final cleanCookie = cookieString.replaceAll('"', '');
       if (cleanCookie.isNotEmpty) {
         await CookieStore().setCookie(url, cleanCookie);
-        debugPrint('Captured Cookies for $url: $cleanCookie');
+        AppLog.d('Captured Cookies for $url: $cleanCookie');
       }
     } catch (e) {
-      debugPrint('Failed to capture cookies: $e');
+      AppLog.e('Failed to capture cookies: $e', error: e);
     }
   }
 

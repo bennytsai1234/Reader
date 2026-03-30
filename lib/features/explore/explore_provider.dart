@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
 import 'package:legado_reader/core/di/injection.dart';
@@ -6,11 +7,13 @@ import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/search_book.dart';
 import 'package:legado_reader/core/engine/web_book/web_book_service.dart';
 import 'package:legado_reader/core/engine/explore_url_parser.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ExploreProvider extends ChangeNotifier {
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
   Timer? _debounceTimer;
+  CancelToken? _cancelToken;
 
   List<BookSource> _sources = [];
   BookSource? _selectedSource;
@@ -134,11 +137,13 @@ class ExploreProvider extends ChangeNotifier {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _cancelToken?.cancel('ExploreProvider disposed');
     super.dispose();
   }
 
   Future<void> refreshExplore() async {
     if (_selectedSource == null || _selectedKind == null) return;
+    _cancelToken?.cancel('new explore request');
     _page = 1;
     _books = [];
     _hasMore = true;
@@ -165,19 +170,28 @@ class ExploreProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    _cancelToken = CancelToken();
+
     try {
+      // TODO: pass _cancelToken to WebBook.exploreBookAwait once it supports cancelToken parameter
       final results = await WebBook.exploreBookAwait(
         _selectedSource!,
         _selectedKind!.url,
         page: _page,
       );
+      if (_cancelToken?.isCancelled ?? false) return;
       if (results.isEmpty) {
         _hasMore = false;
       } else {
         _books.addAll(results);
       }
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) return;
+      AppLog.e('探索失敗', error: e);
+      _errorMessage = '載入失敗：$e';
+      if (_page > 1) _page--;
     } catch (e) {
-      debugPrint('探索失敗: $e');
+      AppLog.e('探索失敗', error: e);
       _errorMessage = '載入失敗：$e';
       if (_page > 1) _page--;
     } finally {

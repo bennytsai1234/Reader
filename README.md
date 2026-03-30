@@ -76,8 +76,9 @@ flutter run
 ## 文檔
 
 - [docs/README.md](docs/README.md)
+- [docs/roadmap.md](docs/roadmap.md)
+- [docs/architecture.md](docs/architecture.md)
 - [docs/reader_architecture_current.md](docs/reader_architecture_current.md)
-- [next_refactor_roadmap.md](next_refactor_roadmap.md)
 - [docs/DATABASE.md](docs/DATABASE.md)
 
 ## 授權與使用說明

@@ -35,7 +35,7 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
     };
 
     final evalResult = jsEngine!.evaluate(jsStr, context: context);
-    if (result == null && AnalyzeRuleBase.scriptCache.length < 100) AnalyzeRuleBase.scriptCache[jsStr] = evalResult;
+    if (result == null) AnalyzeRuleBase.scriptCache[jsStr] = evalResult;
     return evalResult;
   }
 

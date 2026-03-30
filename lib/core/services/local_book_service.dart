@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-
+import 'package:legado_reader/core/services/app_log_service.dart';
 
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
@@ -34,13 +33,13 @@ class LocalBookService {
           final accessFile = await _getTxtAccessFile(file, path);
           final start = chapter.start!;
           final end = chapter.end!;
-          debugPrint('LocalBookService: Reading bytes from $start to $end (length: ${end - start})');
+          AppLog.d('LocalBookService: Reading bytes from $start to $end (length: ${end - start})');
           await accessFile.setPosition(start);
           final bytes = await accessFile.read(end - start);
           return _decodeBytes(bytes, book.charset ?? 'utf-8');
         });
       }
-      debugPrint('LocalBookService: Missing offsets for chapter ${chapter.title}');
+      AppLog.d('LocalBookService: Missing offsets for chapter ${chapter.title}');
       return '本地 TXT 索引缺失，請重新匯入';
 
     } else if (ext == 'epub') {

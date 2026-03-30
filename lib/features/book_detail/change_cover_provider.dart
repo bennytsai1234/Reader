@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
 import 'package:legado_reader/core/database/dao/search_book_dao.dart';
 import 'package:legado_reader/core/models/book_source.dart';
@@ -136,7 +137,7 @@ class ChangeCoverProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('搜尋封面書源 ${source.bookSourceName} 失敗: $e');
+      AppLog.e('搜尋封面書源 ${source.bookSourceName} 失敗: $e', error: e);
     } finally {
       _searchCount++;
       notifyListeners();

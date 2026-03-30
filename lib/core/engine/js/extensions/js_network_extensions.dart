@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
 import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
@@ -122,7 +123,7 @@ extension JsNetworkExtensions on JsExtensions {
         final response = await webView.getStrResponse();
         return response['body']?.toString() ?? '';
       } catch (e) {
-        debugPrint('webView error: $e');
+        AppLog.e('webView error: $e', error: e);
         return e.toString();
       }
     });

@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_js/flutter_js.dart';
-import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'js_extensions.dart';
 
 /// JsEngine - JavaScript 執行引擎
@@ -20,7 +20,7 @@ class JsEngine {
       _extensions!.inject();
     } catch (e) {
       // Library not available in some test environments
-      debugPrint('JS Engine init error: $e');
+      AppLog.e('JS Engine init error: $e', error: e);
       _isAvailable = false;
     }
   }

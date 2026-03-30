@@ -7,15 +7,27 @@ import 'package:legado_reader/core/engine/app_event_bus.dart';
 
 /// DownloadService 的調度與任務管理邏輯擴展
 mixin DownloadScheduler on DownloadBase {
+  StreamSubscription? _refreshStartSub;
+  StreamSubscription? _refreshEndSub;
+
   void listenEvents() {
-    AppEventBus().onName(AppEventBus.bookshelfRefreshStart).listen((_) {
+    _refreshStartSub?.cancel();
+    _refreshEndSub?.cancel();
+    _refreshStartSub = AppEventBus().onName(AppEventBus.bookshelfRefreshStart).listen((_) {
       isBookshelfRefreshing = true;
       update();
     });
-    AppEventBus().onName(AppEventBus.bookshelfRefreshEnd).listen((_) {
+    _refreshEndSub = AppEventBus().onName(AppEventBus.bookshelfRefreshEnd).listen((_) {
       isBookshelfRefreshing = false;
       update();
     });
+  }
+
+  void disposeScheduler() {
+    _refreshStartSub?.cancel();
+    _refreshEndSub?.cancel();
+    _refreshStartSub = null;
+    _refreshEndSub = null;
   }
 
   Future<void> checkPriority() async {

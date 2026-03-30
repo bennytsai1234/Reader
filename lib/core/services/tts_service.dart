@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'audio_handler.dart';
 
 /// TTSService - 系統 TTS 朗讀服務（單例）
@@ -61,7 +62,7 @@ class TTSService extends ChangeNotifier {
       );
       _isInitialized = true;
     } catch (e) {
-      debugPrint('TTSService: AudioService.init failed (notification disabled): $e');
+      AppLog.e('TTSService: AudioService.init failed (notification disabled): $e', error: e);
     }
     await _initTts();
   }
@@ -78,7 +79,7 @@ class TTSService extends ChangeNotifier {
         IosTextToSpeechAudioMode.voicePrompt,
       );
     } catch (e) {
-      debugPrint('TTSService: iOS audio category setup failed: $e');
+      AppLog.e('TTSService: iOS audio category setup failed: $e', error: e);
     }
 
     _flutterTts.setStartHandler(() {
@@ -96,7 +97,7 @@ class TTSService extends ChangeNotifier {
     });
 
     _flutterTts.setErrorHandler((msg) {
-      debugPrint('TTSService: TTS error: $msg');
+      AppLog.e('TTSService: TTS error: $msg');
       _isPlaying = false;
       _audioHandler?.setPlaying(false);
       notifyListeners();

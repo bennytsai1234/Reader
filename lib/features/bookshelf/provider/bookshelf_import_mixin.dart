@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
 import 'bookshelf_provider_base.dart';
 import 'package:legado_reader/core/models/book.dart';
@@ -93,7 +94,7 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
       }
       (this as dynamic).loadBooks();
     } catch (e) {
-      debugPrint('匯入本地書籍失敗: $e');
+      AppLog.e('匯入本地書籍失敗: $e', error: e);
     } finally {
       isLoading = false;
       notifyListeners();

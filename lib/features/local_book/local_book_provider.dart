@@ -11,6 +11,7 @@ import 'package:legado_reader/core/database/dao/chapter_dao.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/di/injection.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 
 class LocalBookProvider extends ChangeNotifier {
   final BookDao _bookDao = getIt<BookDao>();
@@ -19,6 +20,12 @@ class LocalBookProvider extends ChangeNotifier {
   bool _isImporting = false;
 
   bool get isImporting => _isImporting;
+
+  @override
+  void dispose() {
+    _jsRuntime.dispose();
+    super.dispose();
+  }
 
   /// 深度還原：利用 JS 解析檔名獲取書名與作者
   Future<Map<String, String>> _parseFileName(String fileName) async {
@@ -44,7 +51,7 @@ class LocalBookProvider extends ChangeNotifier {
         'author': map['author']?.toString() ?? '',
       };
     } catch (e) {
-      debugPrint('JS 檔名解析失敗: $e');
+      AppLog.e('JS 檔名解析失敗: $e');
       return {'name': p.basenameWithoutExtension(fileName), 'author': ''};
     }
   }
@@ -70,7 +77,7 @@ class LocalBookProvider extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      debugPrint('匯入本地書籍失敗 ($path): $e');
+      AppLog.e('匯入本地書籍失敗 ($path): $e');
       return false;
     } finally {
       _isImporting = false;

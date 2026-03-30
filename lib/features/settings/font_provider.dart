@@ -2,19 +2,20 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
+import 'package:legado_reader/core/storage/app_storage_paths.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FontProvider with ChangeNotifier {
   static const String _fontKey = 'selected_font_family';
-  
+
   List<String> _customFonts = [];
   List<String> get customFonts => _customFonts;
-  
+
   String? _selectedFont;
   String? get selectedFont => _selectedFont;
-  
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -28,12 +29,12 @@ class FontProvider with ChangeNotifier {
   Future<void> init() async {
     _isLoading = true;
     notifyListeners();
-    
+
     final prefs = await SharedPreferences.getInstance();
     _selectedFont = prefs.getString(_fontKey);
-    
+
     await loadCustomFonts();
-    
+
     _isLoading = false;
     notifyListeners();
   }
@@ -44,7 +45,7 @@ class FontProvider with ChangeNotifier {
       if (await dir.exists()) {
         final files = dir.listSync().whereType<File>().toList();
         final loadedFonts = <String>[];
-        
+
         for (var file in files) {
           final ext = p.extension(file.path).toLowerCase();
           if (ext == '.ttf' || ext == '.otf') {
@@ -56,24 +57,19 @@ class FontProvider with ChangeNotifier {
               await fontLoader.load();
               loadedFonts.add(name);
             } catch (e) {
-              debugPrint('Failed to load font $name: $e');
+              AppLog.e('Failed to load font $name: $e', error: e);
             }
           }
         }
         _customFonts = loadedFonts;
       }
     } catch (e) {
-      debugPrint('loadCustomFonts error: $e');
+      AppLog.e('loadCustomFonts error: $e', error: e);
     }
   }
 
   Future<Directory> getFontDir() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final fontDir = Directory('${appDir.path}/fonts');
-    if (!await fontDir.exists()) {
-      await fontDir.create(recursive: true);
-    }
-    return fontDir;
+    return AppStoragePaths.fontsDir(ensureExists: true);
   }
 
   Future<void> setSelectedFont(String? font) async {
@@ -91,38 +87,38 @@ class FontProvider with ChangeNotifier {
     _downloadProgress = 0;
     _isLoading = true;
     notifyListeners();
-    
+
     try {
       final fontDir = await getFontDir();
       // 簡單判斷副檔名
       var ext = '.ttf';
       if (url.toLowerCase().contains('.otf')) ext = '.otf';
-      
+
       final savePath = '${fontDir.path}/$name$ext';
-      
+
       await Dio().download(
-        url, 
+        url,
         savePath,
         onReceiveProgress: (count, total) {
           if (total > 0) {
             _downloadProgress = count / total;
             notifyListeners();
           }
-        }
+        },
       );
-      
+
       // 動態加載
       final fontData = await File(savePath).readAsBytes();
       final fontLoader = FontLoader(name);
       fontLoader.addFont(Future.value(ByteData.view(fontData.buffer)));
       await fontLoader.load();
-      
+
       if (!_customFonts.contains(name)) {
         _customFonts.add(name);
       }
       return true;
     } catch (e) {
-      debugPrint('Download font failed: $e');
+      AppLog.e('Download font failed: $e', error: e);
       return false;
     } finally {
       _isLoading = false;
@@ -151,18 +147,17 @@ class FontProvider with ChangeNotifier {
     final ext = p.extension(path);
     final fontDir = await getFontDir();
     final newPath = '${fontDir.path}/$name$ext';
-    
+
     await File(path).copy(newPath);
-    
+
     final fontData = await File(newPath).readAsBytes();
     final fontLoader = FontLoader(name);
     fontLoader.addFont(Future.value(ByteData.view(fontData.buffer)));
     await fontLoader.load();
-    
+
     if (!_customFonts.contains(name)) {
       _customFonts.add(name);
     }
     notifyListeners();
   }
 }
-

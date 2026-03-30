@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:epubx/epubx.dart';
 import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 
 /// EpubParser - 解析 EPUB 格式書籍
 /// (原 Android model/localBook/EpubFile.kt)
@@ -16,7 +17,7 @@ class EpubParser {
       final bytes = await file.readAsBytes();
       _epubBook = await EpubReader.readBook(bytes);
     } catch (e) {
-      debugPrint('EpubParser load error: $e');
+      AppLog.e('EpubParser load error: $e', error: e);
       throw Exception('Failed to load EPUB file: $e');
     }
   }
@@ -69,7 +70,7 @@ class EpubParser {
         }
       }
     } catch (e) {
-      debugPrint('EpubParser getCover error: $e');
+      AppLog.e('EpubParser getCover error: $e', error: e);
     }
     return null;
   }

@@ -11,9 +11,6 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
       return AnalyzeRuleBase.stringRuleCache[ruleStr]!;
     }
     final ruleList = splitSourceRule(ruleStr);
-    if (AnalyzeRuleBase.stringRuleCache.length > 50) {
-      AnalyzeRuleBase.stringRuleCache.clear();
-    }
     AnalyzeRuleBase.stringRuleCache[ruleStr] = ruleList;
     return ruleList;
   }
@@ -60,9 +57,6 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     } else {
       try {
         regex = RegExp(rule.replaceRegex, multiLine: true, dotAll: true);
-        if (AnalyzeRuleBase.regexCache.length > 100) {
-          AnalyzeRuleBase.regexCache.clear();
-        }
         AnalyzeRuleBase.regexCache[rule.replaceRegex] = regex;
       } catch (e) {
         return result;

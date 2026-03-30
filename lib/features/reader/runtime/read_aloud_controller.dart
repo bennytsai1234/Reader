@@ -130,6 +130,13 @@ class ReadAloudController extends ChangeNotifier {
   void detach() {
     _tts.removeListener(_onTtsProgressUpdate);
     _audioEventSub?.cancel();
+    _audioEventSub = null;
+  }
+
+  @override
+  void dispose() {
+    detach();
+    super.dispose();
   }
 
   void notifyController() {

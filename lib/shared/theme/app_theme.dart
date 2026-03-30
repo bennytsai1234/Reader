@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// App Theme - 主題配置
@@ -38,7 +39,7 @@ class AppTheme {
         final List<dynamic> list = jsonDecode(jsonStr);
         readingThemes = list.map((e) => ReadingTheme.fromJson(e)).toList();
       } catch (e) {
-        debugPrint('Error loading reading configs from file: $e');
+        AppLog.e('Error loading reading configs from file: $e', error: e);
       }
     }
 

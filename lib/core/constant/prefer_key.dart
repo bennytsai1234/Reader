@@ -185,6 +185,25 @@ class PreferKey {
   static const String readBarStyleFollowPage = 'readBarStyleFollowPage';
   static const String contentSelectSpeakMod = 'contentReadAloudMod';
   
+  // Reader settings
+  static const String readerFontSize = 'reader_font_size';
+  static const String readerLineHeight = 'reader_line_height';
+  static const String readerParagraphSpacing = 'reader_paragraph_spacing';
+  static const String readerTextIndent = 'reader_text_indent';
+  static const String readerThemeIndex = 'reader_theme_index';
+  static const String readerBrightness = 'reader_brightness';
+  static const String readerPageTurnMode = 'reader_page_turn_mode';
+  static const String readerChineseConvert = 'reader_chinese_convert_v2';
+  static const String readerTtsRate = 'reader_tts_rate';
+  static const String readerTtsPitch = 'reader_tts_pitch';
+  static const String readerTtsLanguage = 'reader_tts_language';
+  static const String readerClickActions = 'reader_click_actions';
+
+  // Explore settings
+  static const String exploreLastSource = 'explore_last_source';
+  static const String exploreLastGroup = 'explore_last_group';
+  static const String exploreLastKind = 'explore_last_kind';
+
   // 兼容性舊鍵名
   static const String localPassword = 'local_password';
   static const String appCrash = 'app_crash';

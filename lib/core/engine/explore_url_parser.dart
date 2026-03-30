@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/engine/analyze_rule.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 
@@ -40,7 +40,7 @@ class ExploreUrlParser {
         }
       }
     } catch (e) {
-      debugPrint('ExploreUrl JS 執行失敗: $e');
+      AppLog.e('ExploreUrl JS 執行失敗: $e', error: e);
       return [];
     }
 
@@ -72,7 +72,7 @@ class ExploreUrlParser {
         }
       }
     } catch (e) {
-      debugPrint('ExploreUrl解析失敗: $e');
+      AppLog.e('ExploreUrl解析失敗: $e', error: e);
     }
 
     return kinds;

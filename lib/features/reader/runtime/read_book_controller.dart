@@ -557,7 +557,7 @@ class ReadBookController extends ReaderProviderBase
     scrollSaveTimer?.cancel();
     _heartbeatTimer?.cancel();
     disposeAutoPageCoordinator();
-    _readAloudController.detach();
+    _readAloudController.dispose();
     disposeContentManager();
     super.dispose();
   }

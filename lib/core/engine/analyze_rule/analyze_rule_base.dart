@@ -6,6 +6,7 @@ import '../parsers/analyze_by_xpath.dart';
 import '../js/js_engine.dart';
 import 'package:legado_reader/core/models/rule_data_interface.dart';
 import 'package:legado_reader/core/services/rule_big_data_service.dart';
+import 'package:legado_reader/core/utils/lru_map.dart';
 
 // 導入同目錄下的其它部分
 import 'analyze_rule_support.dart';
@@ -40,9 +41,9 @@ abstract class AnalyzeRuleBase {
   JsEngine? jsEngine;
 
   static final HtmlUnescape htmlUnescape = HtmlUnescape();
-  static final Map<String, RegExp> regexCache = {};
-  static final Map<String, List<SourceRule>> stringRuleCache = {};
-  static final Map<String, dynamic> scriptCache = {};
+  static final LruMap<String, RegExp> regexCache = LruMap(maxSize: 200);
+  static final LruMap<String, List<SourceRule>> stringRuleCache = LruMap(maxSize: 200);
+  static final LruMap<String, dynamic> scriptCache = LruMap(maxSize: 100);
 
   static void dispose() {
     debugLogController?.close();

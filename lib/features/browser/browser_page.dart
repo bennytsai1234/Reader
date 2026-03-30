@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
@@ -49,14 +50,14 @@ class _BrowserPageState extends State<BrowserPage> {
             }
           },
           onPageStarted: (String url) {
-            debugPrint('Page started loading: $url');
+            AppLog.d('Page started loading: $url');
           },
           onPageFinished: (String url) async {
-            debugPrint('Page finished loading: $url');
+            AppLog.d('Page finished loading: $url');
             _checkCloudflare();
           },
           onWebResourceError: (WebResourceError error) {
-            debugPrint('Web resource error: ${error.description}');
+            AppLog.e('Web resource error: ${error.description}');
           },
           onNavigationRequest: (NavigationRequest request) {
             if (request.url.startsWith('legado://') || request.url.startsWith('yuedu://')) {

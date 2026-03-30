@@ -5,6 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/services/cookie_store.dart';
 import 'package:legado_reader/core/engine/js/js_engine.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'dynamic_form_builder.dart';
 
 class SourceLoginPage extends StatefulWidget {
@@ -81,9 +82,9 @@ class _SourceLoginPageState extends State<SourceLoginPage> {
         await CookieStore().replaceCookie(url, cleanJsCookies);
       }
       
-      debugPrint('Captured Cookies for $url: $cleanJsCookies');
+      AppLog.d('Captured Cookies for $url: $cleanJsCookies');
     } catch (e) {
-      debugPrint('Capture Cookie error: $e');
+      AppLog.e('Capture Cookie error: $e');
     }
   }
 

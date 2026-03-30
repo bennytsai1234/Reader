@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:legado_reader/core/database/app_database.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
 import 'package:legado_reader/core/database/dao/search_history_dao.dart';
 import 'package:legado_reader/core/di/injection.dart';
@@ -200,14 +201,21 @@ class SearchProvider extends ChangeNotifier {
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) return;
       _failedSources++;
-      debugPrint('搜尋失敗 [${source.bookSourceName}]: $e');
+      AppLog.e('搜尋失敗 [${source.bookSourceName}]: $e', error: e);
     } catch (e) {
       _failedSources++;
-      debugPrint('搜尋失敗 [${source.bookSourceName}]: $e');
+      AppLog.e('搜尋失敗 [${source.bookSourceName}]: $e', error: e);
     } finally {
       _searchCount++;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _cancelToken?.cancel('Provider disposed');
+    _cancelToken = null;
+    super.dispose();
   }
 
   void _aggregateResults(List<SearchBook> newBooks) {

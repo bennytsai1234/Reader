@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:legado_reader/core/models/book_source.dart';
 import 'package:legado_reader/core/models/search_book.dart';
 import 'package:legado_reader/core/engine/web_book/web_book_service.dart';
@@ -55,7 +55,7 @@ class SearchService {
         await getIt<SearchBookDao>().insertList(results);
       }
     } catch (e) {
-      debugPrint('Search failed for ${source.bookSourceName}: $e');
+      AppLog.e('Search failed for ${source.bookSourceName}: $e', error: e);
     }
   }
 

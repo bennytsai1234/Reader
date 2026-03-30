@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive.dart';
-import 'package:flutter/foundation.dart';
+import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:legado_reader/core/database/dao/book_dao.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
@@ -55,12 +55,12 @@ class RestoreService {
             await _importData(file.name, decoded);
           }
         } catch (e) {
-          debugPrint('Restore failed for ${file.name}: $e');
+          AppLog.e('Restore failed for ${file.name}: $e', error: e);
         }
       }
       return true;
     } catch (e) {
-      debugPrint('Restore from ZIP failed: $e');
+      AppLog.e('Restore from ZIP failed: $e', error: e);
       return false;
     }
   }
