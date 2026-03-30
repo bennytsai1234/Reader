@@ -9,8 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('BackupService manifest', () {
     // Constants mirrored from BackupService
-    const appVersion = '0.1.5';
-    const schemaVersion = 7;
+    const appVersion = '0.1.6';
+    const schemaVersion = 8;
 
     test('manifest contains expected fields', () {
       final manifest = {
@@ -25,11 +25,11 @@ void main() {
     });
 
     test('appVersion matches current version', () {
-      expect(appVersion, '0.1.5');
+      expect(appVersion, '0.1.6');
     });
 
-    test('schemaVersion matches Drift v7', () {
-      expect(schemaVersion, 7);
+    test('schemaVersion matches Drift v8', () {
+      expect(schemaVersion, 8);
     });
 
     test('manifest timestamp is a positive integer', () {
@@ -60,7 +60,8 @@ void main() {
         'timestamp': 1700000000000,
       };
 
-      final roundTripped = jsonDecode(jsonEncode(manifest)) as Map<String, dynamic>;
+      final roundTripped =
+          jsonDecode(jsonEncode(manifest)) as Map<String, dynamic>;
 
       expect(roundTripped['appVersion'], isA<String>());
       expect(roundTripped['schemaVersion'], isA<int>());

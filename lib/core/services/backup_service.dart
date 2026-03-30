@@ -19,8 +19,8 @@ class BackupService {
   factory BackupService() => _instance;
   BackupService._internal();
 
-  static const String _appVersion = '0.1.5';
-  static const int _schemaVersion = 7;
+  static const String _appVersion = '0.1.6';
+  static const int _schemaVersion = 8;
 
   /// 執行全量備份並返回 ZIP 檔案路徑
   Future<File?> createBackupZip() async {
@@ -36,16 +36,41 @@ class BackupService {
         'schemaVersion': _schemaVersion,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       };
-      await File(p.join(backupFolder.path, 'manifest.json'))
-          .writeAsString(jsonEncode(manifest));
+      await File(
+        p.join(backupFolder.path, 'manifest.json'),
+      ).writeAsString(jsonEncode(manifest));
 
       // 1. 導出資料庫表為 JSON (對標 Android Backup.kt)
-      await _writeJson(backupFolder, 'bookshelf.json', await getIt<BookDao>().getAll());
-      await _writeJson(backupFolder, 'bookSource.json', await getIt<BookSourceDao>().getAllFull());
-      await _writeJson(backupFolder, 'replaceRule.json', await getIt<ReplaceRuleDao>().getAll());
-      await _writeJson(backupFolder, 'bookmark.json', await getIt<BookmarkDao>().getAll());
-      await _writeJson(backupFolder, 'readRecord.json', await getIt<ReadRecordDao>().getAll());
-      await _writeJson(backupFolder, 'txtTocRule.json', await getIt<TxtTocRuleDao>().getAll());
+      await _writeJson(
+        backupFolder,
+        'bookshelf.json',
+        await getIt<BookDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'bookSource.json',
+        await getIt<BookSourceDao>().getAllFull(),
+      );
+      await _writeJson(
+        backupFolder,
+        'replaceRule.json',
+        await getIt<ReplaceRuleDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'bookmark.json',
+        await getIt<BookmarkDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'readRecord.json',
+        await getIt<ReadRecordDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'txtTocRule.json',
+        await getIt<TxtTocRuleDao>().getAll(),
+      );
 
       // 2. 導出偏好設定 (對標 config.xml)
       final prefs = await SharedPreferences.getInstance();
@@ -53,7 +78,9 @@ class BackupService {
       for (var key in prefs.getKeys()) {
         config[key] = prefs.get(key);
       }
-      await File(p.join(backupFolder.path, 'config.json')).writeAsString(jsonEncode(config));
+      await File(
+        p.join(backupFolder.path, 'config.json'),
+      ).writeAsString(jsonEncode(config));
 
       // 3. 打包為 ZIP（先寫暫存檔，再原子重新命名）
       final encoder = ZipFileEncoder();
@@ -80,16 +107,21 @@ class BackupService {
     }
   }
 
-  Future<void> _writeJson(Directory folder, String name, List<dynamic> data) async {
+  Future<void> _writeJson(
+    Directory folder,
+    String name,
+    List<dynamic> data,
+  ) async {
     final file = File(p.join(folder.path, name));
-    final jsonList = data.map((e) {
-      try {
-        return (e as dynamic).toJson();
-      } catch (err) {
-        AppLog.w('Backup: toJson failed for item in $name: $err');
-        return e;
-      }
-    }).toList();
+    final jsonList =
+        data.map((e) {
+          try {
+            return (e as dynamic).toJson();
+          } catch (err) {
+            AppLog.w('Backup: toJson failed for item in $name: $err');
+            return e;
+          }
+        }).toList();
     await file.writeAsString(jsonEncode(jsonList));
   }
 }

@@ -1,263 +1,186 @@
-# Reader Architecture (Target)
+# Reader Architecture
 
-更新日期：2026-03-29
+更新日期：2026-03-30
 
-本文回答的是「這個專案應該怎麼分層、怎麼分模組、每層負責什麼」。  
-它描述的是未來目標架構，不等於今天所有代碼都已經到位。
+本文描述的是這個專案接下來應收斂到的架構方向。它不是要求一次性重寫，而是用來約束之後的整理順序與責任邊界。
 
-如果要理解目前閱讀器 runtime 的實際狀態，請另外看：
+如果要看閱讀器 runtime 的現況，請先讀 [reader_architecture_current.md](reader_architecture_current.md)。
 
-- [reader_architecture_current.md](reader_architecture_current.md)
+## 一句話結論
 
-## 1. 一句話結論
+這個專案目前最合理的收斂方式是：
 
-這個專案應該收斂成：
+- `main.dart` 與 app-level 組裝保持很薄
+- `core/` 承擔跨模組基礎能力
+- `features/` 承擔產品功能
+- `core/engine/` 視為獨立子系統，而不是零碎 helper
+- `shared/` 只放跨模組 UI 共用物
 
-- `app` 管啟動與全域組裝
-- `modules` 管產品功能
-- `core` 管基礎能力
-- `engine` 管書源解析與閱讀規則
-- `shared` 管跨模組共用 UI 與主題
+也就是說，這個專案不是缺功能，而是要繼續把「功能模組」、「底層能力」與「書源引擎」三者的邊界切清楚。
 
-核心原則是：
+## 目前的真實形狀
 
-- 功能按模組切
-- 邏輯按層切
-- 路徑與平台能力集中
-- parser / runtime 與 UI 解耦
-
-## 2. 目標目錄
-
-建議目標結構如下：
+截至 `0.1.6`，專案已經大致形成這個結構：
 
 ```text
 lib/
-  app/
-    bootstrap/
-    routing/
-    providers/
   core/
-    database/
-    network/
-    platform/
-    services/
-    storage/
-    utils/
-  engine/
-    rule/
-    parser/
-    js/
-    analyze_url/
-    book/
-  modules/
-    reader/
-      presentation/
-      application/
-      domain/
-      data/
-    bookshelf/
-      presentation/
-      application/
-      domain/
-      data/
-    source_manager/
-      presentation/
-      application/
-      domain/
-      data/
-    settings/
-      presentation/
-      application/
-      domain/
-      data/
-    local_book/
-      presentation/
-      application/
-      domain/
-      data/
+    database/   Drift schema、DAO、migration
+    di/         get_it 組裝
+    engine/     規則解析、JS、Web 書源、URL 分析
+    local_book/ TXT / EPUB / PDF 等本地書能力
+    network/    Dio 與 API 包裝
+    services/   備份、還原、TTS、更新、資源、下載
+    storage/    路徑、快取、容量指標
+    utils/      純工具
+  features/
+    reader/         閱讀器與 runtime
+    bookshelf/      書架
+    search/         搜尋
+    explore/        探索
+    source_manager/ 書源管理與登入
+    local_book/     本地匯入
+    settings/       設定
+    ...
   shared/
     theme/
     widgets/
-    models/
 ```
 
-這不是要求一次性大搬家，而是未來所有整理都應朝這個方向收斂。
+這個形狀基本可用，但還沒有完全做到語意清晰。幾個主要的歷史包袱仍然存在：
 
-## 3. 分層責任
+- `features/*` 裡仍有部分 provider / mixin / service 邊界交疊
+- `core/services` 偶爾承擔了偏 feature-specific 的協調邏輯
+- `core/engine` 已經像獨立引擎，但命名與對外接口還不夠一致
+- `main.dart` 與 app 根組裝仍偏胖，後續可再薄化
 
-## 3.1 `app`
+## 建議的責任劃分
 
-用途：
+### `main.dart` / app root
+
+只處理：
 
 - 啟動流程
 - 全域初始化
-- DI 組裝
-- Provider 根註冊
-- 導航入口
+- DI 註冊
+- app-level provider 掛載
+- MaterialApp 與全域錯誤處理
 
-適合放：
+不處理：
 
-- `main.dart`
-- app bootstrap
-- app-level provider registration
-- root routing / shell
+- feature 業務流程
+- parser 行為
+- DAO 操作細節
 
-不應承擔：
+### `core/`
 
-- feature 業務邏輯
-- parser 邏輯
-- DAO 邏輯
+放跨整個 app 都可能依賴的基礎能力：
 
-## 3.2 `core`
+- Drift database 與 DAO
+- Dio、cookie、網路攔截
+- 檔案路徑、快取、容量統計
+- 備份、還原、匯出、更新、widget、TTS 等 service
+- 本地書解析
+- 通用工具與常數
 
-用途：
+判斷標準很簡單：如果它不是某個 feature 專屬，而是多處共用，就應該在 `core/`。
 
-- 跨整個專案共用的基礎能力
+### `core/engine/`
 
-可包含：
+這層是專案的書源引擎子系統，應與 UI 明確解耦。
 
-- `database`
-- `network`
-- `services`
-- `storage`
-- `platform`
-- `utils`
-
-判斷標準：
-
-- 如果一個能力不是某個 feature 專屬，而是多處都會依賴，它就應該進 `core`
-
-典型例子：
-
-- `Drift` database
-- `Dio` network stack
-- cache / resource / export / backup / file path 管理
-- app-wide logging
-
-## 3.3 `engine`
-
-用途：
-
-- 書源規則解析與抓取內核
-
-這層應該被視為獨立子系統，而不是零散 helper 集合。
-
-責任：
+它目前涵蓋：
 
 - rule analyze
-- URL analyze
-- CSS / XPath / JsonPath / Regex / JS parser
-- source login 協議支持
-- chapter / content / toc / book info 解析
+- analyze URL
+- CSS / XPath / JsonPath / Regex / JS 解析
+- 字體與網路 JS 擴充
+- Web 書源與 headless webview
+- 搜尋、書籍詳情、章節、正文解析
+- source login 流程支援
 
-不應承擔：
-
-- page widget
-- app route
-- settings page
-
-原則：
+這層的設計要求應該是：
 
 - 輸入輸出盡量純化
-- 可單測、可 integration test
-- 行為與 legado 對齊時，以可驗證事實為準
+- 不依賴 widget
+- 能被單測與 integration test 保護
+- 與 Legado 對齊時，以可驗證行為為準，不依賴印象對齊
 
-## 3.4 `modules`
+### `features/`
 
-用途：
+`features/` 是產品功能主場。每個 feature 內部至少要分出三種責任：
 
-- 產品功能的主舞台
+- 畫面與 widget
+- 狀態協調與頁面流程
+- feature-specific 資料適配
 
-每個 module 建議有四層：
+不一定要立刻搬成 `presentation/application/domain/data` 四層，但新代碼應往這個方向靠攏。
 
-- `presentation`
-- `application`
-- `domain`
-- `data`
+### `shared/`
 
-### `presentation`
+只放跨 feature 共用的呈現層資產：
 
-放：
+- 主題
+- 通用 widgets
+- 少量 presentation-level helper
 
-- page
-- dialog
-- bottom sheet
-- widget
+不要把某個 feature 專屬 provider 或引擎邏輯放進來。
 
-### `application`
+## 目前最重要的邊界
 
-放：
+### UI 不直接碰 DAO 與檔案系統
 
-- provider
-- controller
-- coordinator
-- use case 組裝
-
-### `domain`
-
-放：
-
-- 純規則
-- 介面
-- 語意模型
-- 不依賴 Flutter UI 的邏輯
-
-### `data`
-
-放：
-
-- repository implementation
-- feature-specific datasource
-- feature-specific adapter
-
-## 3.5 `shared`
-
-用途：
-
-- 跨多個 module 重用的 UI 或表示層共用資產
-
-適合放：
-
-- app theme
-- shared widget
-- 跨模組 presentation model
-
-不適合放：
-
-- 某個 feature 專用 provider
-- 某個 feature 專用 parser
-
-## 4. 責任邊界
-
-## 4.1 UI 不直接碰資料層
-
-`Widget / Page` 不應直接：
+`Page` / `Widget` 不應直接：
 
 - 呼叫 DAO
-- 硬寫檔案路徑
-- 操作 `File` / `Directory`
-- 拼 SQL
-- 直接碰 parser 細節
+- 自行拼 SQL
+- 自行組檔案系統路徑
+- 直接操作 parser 細節
 
-它們只應：
+它們應該只面向 provider / controller / service 的語意接口。
 
-- 呼叫 provider / controller
-- 消費狀態
-- 發送互動事件
+### Provider / Controller 只做協調
 
-## 4.2 Provider / Controller 不直接背所有細節
+它們可以：
 
-`Provider` 或 controller 的責任是協調，不是包辦全部：
+- 組合 service、DAO、runtime 物件
+- 維護頁面狀態
+- 協調 restore、jump、save、load 之類的流程
 
-- 可以組合 service / repository
-- 可以維護狀態
-- 可以處理頁面流程
+但不應該：
 
-但不應：
+- 大量直接寫 SQL
+- 自己決定平台存儲路徑
+- 同時背 UI 細節與底層 I/O 細節
 
-- 直接實作大量 SQL 細節
-- 到處自己組平台路徑
-- 同時兼管 UI 細節與底層 I/O
+### 路徑與容量管理集中
+
+快取、備份、匯出、下載、widget、暫存目錄都應收斂到 `core/storage` 與對應 service，不再分散在各 feature 自行處理。
+
+### 閱讀器 runtime 與 view delegate 解耦
+
+閱讀器已經有明確的 runtime 中心，後續應繼續保持：
+
+- 核心狀態在 controller / runtime objects
+- view delegate 只負責渲染與執行
+- restore / progress / TTS follow / auto-page 的語意不回流到 widget 層
+
+## 近期應避免的事情
+
+- 再引入第二套狀態管理方案
+- 再引入第二套 HTTP client 或資料層抽象
+- 為了修一個 feature 再堆出平行 page / provider / service
+- 讓 feature 直接依賴 engine 內部細節，而不是穩定語意接口
+
+## 判斷一個改動是不是對的
+
+如果一個改動能同時做到下面幾點，它大概率就在正方向上：
+
+- 減少重複實作
+- 讓真源更清楚
+- 讓測試更容易寫
+- 讓 feature 之間更少互相知道內部細節
+- 讓文件能用更少篇幅描述清楚
 
 ## 4.3 DAO 只做資料存取
 

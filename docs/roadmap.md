@@ -1,262 +1,127 @@
 # Reader Project Roadmap
 
-更新日期：2026-03-29
+更新日期：2026-03-30
 
-本文回答的是「這個閱讀器專案接下來應該怎麼完成」。  
-它不是臨時待辦，而是用來約束後續開發順序、範圍與完成標準的主路線圖。
+這份 roadmap 不是零碎待辦清單，而是專案在 `0.1.6` 之後的優先級約束。原則只有一個：先讓已經存在的核心能力變穩，再決定要不要擴張功能面。
 
-## 1. 專案目標
+## 專案目標
 
-本專案的最終目標不是做一個功能很多但持續失控的 App，而是做一個：
+這個專案要完成的不是一個短期 demo，而是一個：
 
 - 可長期維護的 Flutter 閱讀器
 - 以中文閱讀體驗為核心
 - 同時支援本地書與網路書源
-- 具備穩定的閱讀器 runtime、資料層與書源引擎
-- 可自行建置、可自行側載、可持續發版
+- 具備穩定閱讀器 runtime、可預測書源引擎與可追蹤資料層
+- 可自行建置、側載、測試與持續發版的 app
 
-## 2. 產品主線
+## 截至 0.1.6 的專案判讀
 
-專案只圍繞四條主線推進：
+整個專案目前已經跨過「只有零散功能」的階段，進入「已有完整主線，但邊界還在收斂」的階段。
 
-1. 閱讀器核心
-2. 書源引擎
-3. 本地資料與同步
-4. UI / 設定 / 平台整合
+相對成熟的部分：
 
-這四條主線的重要度不同。
+- 閱讀器 runtime 已經形成以 `ReadBookController` 為核心的責任鏈
+- `core/engine` 已有完整 parser 與 source login 支撐
+- Drift + DAO 的資料層骨架穩定
+- 備份、還原、匯出、下載、widget 等平台能力已有基礎實作
+- 測試已開始覆蓋閱讀器與解析器主流程
 
-優先級排序：
+仍需優先處理的問題：
 
-1. 閱讀器核心
-2. 書源引擎
-3. 本地資料與同步
-4. UI / 設定 / 平台整合
+- 某些 feature 的 provider / service / page 邊界仍不夠乾淨
+- `core/services` 與 feature 協調層偶爾混責
+- 文檔和版本資訊過去曾出現漂移，必須持續收斂
+- 平台能力雖然已存在，但一致性與回歸保護還不夠
 
-如果時間、精力或上下文有限，永遠先保護前兩項。
+## 最高優先級
 
-## 3. MVP 完成線
+接下來的工作應只按下面順序推進：
 
-在擴功能之前，先把最小可用產品定義清楚。
+1. 閱讀器核心穩定性
+2. 書源引擎可預測性
+3. 資料層與平台能力一致性
+4. UI 與工具頁整理
 
-MVP 必須穩定具備：
+如果時間有限，永遠先保護前兩項。
 
-- 書源搜尋
-- 書籍詳情
-- 加入書架 / 移出書架
-- 章節列表
-- 閱讀頁
-- 閱讀進度保存與還原
-- 本地 TXT / EPUB 匯入
-- 基本閱讀設定
-- 基本書源管理
-- 最小可用的匯出 / 備份能力
+## 近期主線
 
-不屬於 MVP，但可以後補的項目：
-
-- 背景更新
-- 完整 WebDAV 同步策略
-- 高階分享 / 關聯導入
-- 細碎工具頁
-- 過度細化的設定選項
-
-## 4. 目前主要問題
-
-目前專案最大的問題不是缺技術，而是缺少穩定邊界。
-
-主要症狀：
-
-- 功能存在重複實作或平行頁面
-- `features/`、`core/`、service、provider 的責任邊界模糊
-- UI 有時直接碰 DAO、檔案系統或平台路徑
-- 某些功能先堆頁面，再補抽象，造成長期難維護
-- 閱讀器、書源、設定、工具頁的重要性沒有被區分
-
-這代表專案需要的不是全面重寫，而是「先止血，再收斂，再擴充」。
-
-## 5. 開發策略
-
-接下來只採用以下策略：
-
-### 5.1 先收斂，再擴功能
-
-新功能只有在以下條件都成立時才新增：
-
-- 它屬於 MVP 或既定 milestone
-- 它有明確模組歸屬
-- 它不會再產生第二套同類實作
-
-### 5.2 每輪只打一路
-
-每次較大的改動只聚焦一條主線，例如：
-
-- 只整理閱讀器 restore / progress
-- 只整理 source login / parser
-- 只整理 cache / storage / export
-
-不要一輪同時動閱讀器、書源、設定、同步四塊。
-
-### 5.3 保留技術棧，不再引入新流派
-
-現有技術棧可以支撐完成專案，不需要中途再換：
-
-- `Flutter`
-- `Provider + ChangeNotifier`
-- `get_it`
-- `Drift`
-- `Dio`
-- `flutter_js`
-- `webview_flutter`
-- `Workmanager`
-
-原則：
-
-- 不引入新的狀態管理方案
-- 不引入第二套資料庫抽象
-- 不引入第二套 HTTP client
-
-## 6. Milestones
-
-## M1：架構止血
+### M1：閱讀器 runtime 收斂
 
 目標：
 
-- 收斂重複頁面與重複 provider
-- 統一路徑、快取、匯出、資源暫存位置
-- 明確規定 UI / provider / service / dao 責任
-- 補齊總體規劃文檔
+- 讓 restore、progress、jump、visible tracking、TTS follow 的責任邊界保持穩定
+- 繼續降低 widget 層對 runtime 細節的了解
+- 確保 scroll / slide 兩條路徑共用同一套章內語義
 
 完成標準：
 
-- 同類功能只保留單一路徑
-- 檔案系統路徑不再散落硬編碼
-- `flutter analyze`、`flutter test` 維持可綠
+- 閱讀位置真源清楚
+- restore / progress 不再靠多點同步維持
+- 閱讀器主流程測試能覆蓋常見回歸
 
-## M2：閱讀器核心可維護化
+### M2：書源引擎對齊與隔離
 
 目標：
 
-- 穩定閱讀生命週期
-- 穩定 restore / progress / follow / preload
-- 讓閱讀器 runtime 形成清楚內核
-
-重點：
-
-- `ReadBookController`
-- `ReaderChapter`
-- content lifecycle
-- scroll / slide delegate
-- read aloud flow
+- 讓 parser 行為更穩定、更容易驗證
+- 確保 source login、cookie、header、webview 行為可預測
+- 讓 `core/engine` 對外呈現更清楚的語意 API
 
 完成標準：
 
-- 閱讀器的核心狀態真源明確
-- 章內定位語義統一
-- 閱讀器測試覆蓋主流程
+- 常見規則語法有 integration tests 保護
+- login source 具最小回歸保護
+- 書源解析問題可以在 engine 層定位，而不是 UI 層猜測
 
-## M3：書源引擎對齊
+### M3：資料與平台能力一致化
 
 目標：
 
-- 讓 parser 與 legado 邏輯更一致
-- 讓 login / webview / header / cookie 行為可預測
-- 把書源引擎當成獨立子系統維護
-
-重點：
-
-- `core/engine`
-- `AnalyzeUrl`
-- CSS / XPath / JsonPath / Regex / JS parser
-- source login flow
+- 收斂備份 / 還原 / 匯出 / 快取 / 儲存空間指標的版本與路徑口徑
+- 確保 migration、manifest、DAO、設定項沒有版本漂移
+- 繼續把平台與檔案系統能力集中到 `core/storage` + `core/services`
 
 完成標準：
 
-- 常見解析語法具 integration tests
-- login source 有穩定流程與最小回歸測試
+- 版本資訊只由少數可信來源決定
+- manifest、資料庫 schema、文檔與實作一致
+- 檔案路徑與容量管理不再分散
 
-## M4：書架與資料層穩定
+### M4：產品模組整理
 
 目標：
 
-- 書架、詳情、搜尋、章節資料流一致
-- DAO / DB migration 穩定
-- 資料層成為唯一真源
-
-重點：
-
-- `BookDao`
-- `ChapterDao`
-- `SearchHistoryDao`
-- repository / service 邊界
+- 減少 feature 內部平行頁面或平行流程
+- 清理書架、設定、快取管理與工具頁的重複責任
+- 讓功能入口與實際責任更容易理解
 
 完成標準：
 
-- UI 不直接操作原始資料層
-- migration、CRUD、快取清理策略可說明
+- 同一件事只有一條主要代碼路徑
+- 不再出現「新頁面疊在舊頁面上」的擴張方式
 
-## M5：平台能力補齊
+## 明確不做的事
 
-目標：
+在上述主線完成前，不建議：
 
-- 備份 / 還原
-- 分享導入
-- 匯出
-- crash log
-- 背景任務
+- 引入新的狀態管理框架
+- 引入第二套資料層抽象
+- 大量新增細碎工具頁
+- 為了短期修 bug 再建立平行的 provider / service / runtime
 
-原則：
+## 發版原則
 
-- 只有在前四個 milestone 穩定後才大規模補平台能力
-- 平台功能必須掛在既有 service / storage / platform 層，不可零散散落
+從 `0.1.6` 起，建議沿用以下規則：
 
-## M6：發版工程化
+- 每次發版先統一 `pubspec.yaml`、iOS version metadata、備份 manifest 版本口徑
+- 發版前至少跑 `flutter analyze` 與 `flutter test`
+- 只有在工作區、文檔與版本資訊一致時才推送
+- tag 可以做，但應在版本內容穩定後再建立
 
-目標：
+## 一句話總結
 
-- 固定版本管理與發版節奏
-- 確保 analyze / test / build / release 可持續
-- 把 release 流程文件化
-
-完成標準：
-
-- 有固定版號策略
-- 有 release checklist
-- CI 能提供 artifact 或 release 基礎流程
-
-## 7. 技術路徑
-
-## 7.1 UI / Presentation
-
-責任：
-
-- 畫面
-- 互動
-- 導航
-- dialog / bottom sheet / page 組裝
-
-不負責：
-
-- SQL
-- 檔案系統路徑
-- 業務快取策略
-- source parser 細節
-
-## 7.2 Application
-
-責任：
-
-- provider / controller / coordinator
-- 流程協調
-- 狀態聚合
-- use case 調度
-
-不負責：
-
-- 直接硬寫本地路徑
-- 直接寫 SQL 查詢細節
-- 直接知道 widget 細節
-
-## 7.3 Data
+這個專案目前最需要的不是更多功能，而是繼續把已經存在的核心能力做成一套可推理、可測試、可發版的系統。
 
 責任：
 
