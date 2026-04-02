@@ -208,5 +208,22 @@ class PreferKey {
   static const String localPassword = 'local_password';
   static const String appCrash = 'app_crash';
   static const String lastVersionCode = 'last_version_code';
+
+  // 備份與同步
+  static const String autoBackup = 'auto_backup';
+  static const String lastBackup = 'last_backup';
+
+  // 音訊與朗讀
+  static const String speechPitch = 'speech_pitch';
+  static const String speechVolume = 'speech_volume';
+  static const String ignoreAudioFocusAloud = 'ignore_audio_focus_aloud';
+  static const String systemMediaControlCompat = 'system_media_control_compat';
+  static const String mediaButtonPerNext = 'media_button_per_next';
+  static const String mediaButtonOnExit = 'media_button_on_exit';
+
+  // 介面與其他
+  static const String privacyAgreed = 'privacy_agreed';
+  static const String bookStorageDir = 'book_storage_dir';
+  static const String disableReturnKey = 'disable_return_key';
 }
 

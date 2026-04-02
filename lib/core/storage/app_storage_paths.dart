@@ -46,6 +46,22 @@ class AppStoragePaths {
     return File(p.join(dir.path, fileName));
   }
 
+  static Future<Directory> backupTempDir({bool ensureExists = false}) async {
+    return _subdirectory(
+      await temporaryDir(),
+      'legado_backup_zip',
+      ensureExists: ensureExists,
+    );
+  }
+
+  static Future<Directory> jsCacheDir({bool ensureExists = false}) async {
+    return _subdirectory(
+      await temporaryDir(),
+      'js_cache',
+      ensureExists: ensureExists,
+    );
+  }
+
   static Future<Directory> _subdirectory(
     Directory root,
     String name, {

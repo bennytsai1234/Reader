@@ -2,15 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:legado_reader/core/database/dao/book_dao.dart';
+import 'package:legado_reader/core/database/dao/book_group_dao.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
+import 'package:legado_reader/core/database/dao/dict_rule_dao.dart';
+import 'package:legado_reader/core/database/dao/http_tts_dao.dart';
 import 'package:legado_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:legado_reader/core/database/dao/bookmark_dao.dart';
 import 'package:legado_reader/core/database/dao/read_record_dao.dart';
 import 'package:legado_reader/core/database/dao/txt_toc_rule_dao.dart';
 import 'package:legado_reader/core/di/injection.dart';
+import 'package:legado_reader/core/services/app_version.dart';
+import 'package:legado_reader/core/storage/app_storage_paths.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:legado_reader/core/services/app_log_service.dart';
 
@@ -19,20 +23,20 @@ class BackupService {
   factory BackupService() => _instance;
   BackupService._internal();
 
-  static const String _appVersion = '0.1.6';
   static const int _schemaVersion = 8;
 
   /// 執行全量備份並返回 ZIP 檔案路徑
   Future<File?> createBackupZip() async {
-    final tempDir = await getTemporaryDirectory();
-    final backupFolder = Directory(p.join(tempDir.path, 'legado_backup'));
+    final backupTempDir = await AppStoragePaths.backupTempDir(ensureExists: true);
+    final backupFolder = Directory(p.join(backupTempDir.path, 'legado_backup'));
     if (await backupFolder.exists()) await backupFolder.delete(recursive: true);
     await backupFolder.create();
 
     try {
       // 0. 寫入備份 manifest（版本資訊，供還原時驗證）
+      final version = await AppVersion.current();
       final manifest = {
-        'appVersion': _appVersion,
+        'appVersion': version.versionName,
         'schemaVersion': _schemaVersion,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       };
@@ -71,6 +75,21 @@ class BackupService {
         'txtTocRule.json',
         await getIt<TxtTocRuleDao>().getAll(),
       );
+      await _writeJson(
+        backupFolder,
+        'bookGroup.json',
+        await getIt<BookGroupDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'dictRule.json',
+        await getIt<DictRuleDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'httpTts.json',
+        await getIt<HttpTtsDao>().getAll(),
+      );
 
       // 2. 導出偏好設定 (對標 config.xml)
       final prefs = await SharedPreferences.getInstance();
@@ -85,7 +104,7 @@ class BackupService {
       // 3. 打包為 ZIP（先寫暫存檔，再原子重新命名）
       final encoder = ZipFileEncoder();
       final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final zipPath = p.join(tempDir.path, 'backup-$dateStr.zip');
+      final zipPath = p.join(backupTempDir.path, 'backup-$dateStr.zip');
       final tmpZipPath = '$zipPath.tmp';
 
       encoder.create(tmpZipPath);

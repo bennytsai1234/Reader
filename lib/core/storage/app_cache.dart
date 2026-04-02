@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import '../services/app_log_service.dart';
+import 'app_storage_paths.dart';
 
 /// AppCache - 磁碟快取工具 (原 Android utils/ACache.kt)
 /// 支援 String, JSON, Bytes 與過期時間管理
@@ -25,7 +25,7 @@ class AppCache {
     int maxSize = maxSize,
     int maxCount = maxCount,
   }) async {
-    final root = await getTemporaryDirectory();
+    final root = await AppStoragePaths.temporaryDir();
     final dir = Directory(p.join(root.path, cacheName));
     if (!dir.existsSync()) {
       dir.createSync(recursive: true);

@@ -8,13 +8,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// verify the manifest format and constants that BackupService uses.
 void main() {
   group('BackupService manifest', () {
-    // Constants mirrored from BackupService
-    const appVersion = '0.1.6';
+    // schemaVersion is still a constant in BackupService
     const schemaVersion = 8;
 
     test('manifest contains expected fields', () {
       final manifest = {
-        'appVersion': appVersion,
+        'appVersion': '0.1.7',
         'schemaVersion': schemaVersion,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       };
@@ -22,10 +21,6 @@ void main() {
       expect(manifest.containsKey('appVersion'), true);
       expect(manifest.containsKey('schemaVersion'), true);
       expect(manifest.containsKey('timestamp'), true);
-    });
-
-    test('appVersion matches current version', () {
-      expect(appVersion, '0.1.6');
     });
 
     test('schemaVersion matches Drift v8', () {
@@ -40,7 +35,7 @@ void main() {
 
     test('manifest serializes to valid JSON', () {
       final manifest = {
-        'appVersion': appVersion,
+        'appVersion': '0.1.7',
         'schemaVersion': schemaVersion,
         'timestamp': 1700000000000,
       };
@@ -48,14 +43,14 @@ void main() {
       final jsonStr = jsonEncode(manifest);
       final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
 
-      expect(decoded['appVersion'], appVersion);
+      expect(decoded['appVersion'], '0.1.7');
       expect(decoded['schemaVersion'], schemaVersion);
       expect(decoded['timestamp'], 1700000000000);
     });
 
     test('manifest JSON round-trip preserves types', () {
       final manifest = {
-        'appVersion': appVersion,
+        'appVersion': '0.1.7',
         'schemaVersion': schemaVersion,
         'timestamp': 1700000000000,
       };
@@ -76,7 +71,8 @@ void main() {
     });
 
     test('backup exports expected table files', () {
-      // BackupService writes these JSON files into the backup folder
+      // BackupService writes these JSON files into the backup folder.
+      // This list must stay in sync with the _writeJson calls in backup_service.dart.
       const expectedFiles = [
         'manifest.json',
         'bookshelf.json',
@@ -85,14 +81,19 @@ void main() {
         'bookmark.json',
         'readRecord.json',
         'txtTocRule.json',
+        'bookGroup.json',
+        'dictRule.json',
+        'httpTts.json',
         'config.json',
       ];
 
-      // Verify all expected files are accounted for
-      expect(expectedFiles.length, 8);
+      expect(expectedFiles.length, 11);
       expect(expectedFiles, contains('manifest.json'));
       expect(expectedFiles, contains('bookshelf.json'));
       expect(expectedFiles, contains('bookSource.json'));
+      expect(expectedFiles, contains('bookGroup.json'));
+      expect(expectedFiles, contains('dictRule.json'));
+      expect(expectedFiles, contains('httpTts.json'));
       expect(expectedFiles, contains('config.json'));
     });
   });

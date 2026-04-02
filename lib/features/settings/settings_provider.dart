@@ -114,10 +114,10 @@ class SettingsProvider extends SettingsProviderBase {
   void setAntiAlias(bool v) { antiAlias = v; save(PreferKey.antiAlias, v); update(); }
   void setReplaceEnableDefault(bool v) { replaceEnableDefault = v; AppConfig.replaceEnableDefault = v; save(PreferKey.replaceEnableDefault, v); update(); }
   void setEnableCronet(bool v) { enableCronet = v; save(PreferKey.cronet, v); update(); }
-  void setBookStorageDir(String v) { bookStorageDir = v; save('book_storage_dir', v); update(); }
+  void setBookStorageDir(String v) { bookStorageDir = v; save(PreferKey.bookStorageDir, v); update(); }
   void setIgnoreAudioFocus(bool v) { ignoreAudioFocus = v; save(PreferKey.ignoreAudioFocus, v); update(); }
   void setAutoClearExpired(bool v) { autoClearExpired = v; save(PreferKey.autoClearExpired, v); update(); }
-  void setMediaButtonOnExit(bool v) { mediaButtonOnExit = v; save('media_button_on_exit', v); update(); }
+  void setMediaButtonOnExit(bool v) { mediaButtonOnExit = v; save(PreferKey.mediaButtonOnExit, v); update(); }
   void setReadAloudByMediaButton(bool v) { readAloudByMediaButton = v; save(PreferKey.readAloudByMediaButton, v); update(); }
   void setShowAddToShelfAlert(bool v) { showAddToShelfAlert = v; save(PreferKey.showAddToShelfAlert, v); update(); }
   void setShowMangaUi(bool v) { showMangaUi = v; save(PreferKey.showMangaUi, v); update(); }
@@ -134,7 +134,7 @@ class SettingsProvider extends SettingsProviderBase {
 
   void setOnlyLatestBackup(bool v) { onlyLatestBackup = v; save(PreferKey.onlyLatestBackup, v); update(); }
   void setAutoCheckNewBackup(bool v) { autoCheckNewBackup = v; save(PreferKey.autoCheckNewBackup, v); update(); }
-  void setAutoBackup(bool v) { autoBackup = v; save('auto_backup', v); update(); }
+  void setAutoBackup(bool v) { autoBackup = v; save(PreferKey.autoBackup, v); update(); }
 
   void setReadBodyToLh(bool v) { readBodyToLh = v; save(PreferKey.readBodyToLh, v); update(); }
   void setPaddingDisplayCutouts(bool v) { paddingDisplayCutouts = v; save(PreferKey.paddingDisplayCutouts, v); update(); }
@@ -148,7 +148,7 @@ class SettingsProvider extends SettingsProviderBase {
   void setShowBrightnessView(bool v) { showBrightnessView = v; save(PreferKey.showBrightnessView, v); update(); }
   void setNoAnimScrollPage(bool v) { noAnimScrollPage = v; save(PreferKey.noAnimScrollPage, v); update(); }
   void setPreviewImageByClick(bool v) { previewImageByClick = v; save(PreferKey.previewImageByClick, v); update(); }
-  void setDisableReturnKey(bool v) { disableReturnKey = v; save('disable_return_key', v); update(); }
+  void setDisableReturnKey(bool v) { disableReturnKey = v; save(PreferKey.disableReturnKey, v); update(); }
   void setExpandTextMenu(bool v) { expandTextMenu = v; save(PreferKey.expandTextMenu, v); update(); }
   void setShowReadTitleAddition(bool v) { showReadTitleAddition = v; save(PreferKey.showReadTitleAddition, v); update(); }
   void setReadBarStyleFollowPage(bool v) { readBarStyleFollowPage = v; save(PreferKey.readBarStyleFollowPage, v); update(); }
@@ -163,14 +163,14 @@ class SettingsProvider extends SettingsProviderBase {
   void setLastVersionCode(int v) { lastVersionCode = v; save(PreferKey.lastVersionCode, v); update(); }
 
   // --- 朗讀 Setter 補全 ---
-  void setIgnoreAudioFocusAloud(bool v) { ignoreAudioFocusAloud = v; save('ignore_audio_focus_aloud', v); update(); }
+  void setIgnoreAudioFocusAloud(bool v) { ignoreAudioFocusAloud = v; save(PreferKey.ignoreAudioFocusAloud, v); update(); }
   void setPauseReadAloudWhilePhoneCalls(bool v) { pauseReadAloudWhilePhoneCalls = v; save(PreferKey.pauseReadAloudWhilePhoneCalls, v); update(); }
   void setReadAloudWakeLock(bool v) { readAloudWakeLock = v; save(PreferKey.readAloudWakeLock, v); update(); }
-  void setSystemMediaControlCompatibilityChange(bool v) { systemMediaControlCompatibilityChange = v; save('system_media_control_compat', v); update(); }
-  void setMediaButtonPerNext(bool v) { mediaButtonPerNext = v; save('media_button_per_next', v); update(); }
+  void setSystemMediaControlCompatibilityChange(bool v) { systemMediaControlCompatibilityChange = v; save(PreferKey.systemMediaControlCompat, v); update(); }
+  void setMediaButtonPerNext(bool v) { mediaButtonPerNext = v; save(PreferKey.mediaButtonPerNext, v); update(); }
   void setReadAloudByPage(bool v) { readAloudByPage = v; save(PreferKey.readAloudByPage, v); update(); }
   void setStreamReadAloudAudio(bool v) { streamReadAloudAudio = v; save(PreferKey.streamReadAloudAudio, v); update(); }
-  void setLastBackup(int v) { lastBackup = v; save('last_backup', v); update(); }
+  void setLastBackup(int v) { lastBackup = v; save(PreferKey.lastBackup, v); update(); }
 
   SettingsProvider() {
     _loadSettings();
@@ -191,7 +191,7 @@ class SettingsProvider extends SettingsProviderBase {
     recordLog = prefs.getBool(PreferKey.recordLog) ?? false;
     appCrash = prefs.getBool(PreferKey.appCrash) ?? false;
     lastVersionCode = prefs.getInt(PreferKey.lastVersionCode) ?? 0;
-    privacyAgreed = prefs.getBool('privacy_agreed') ?? false;
+    privacyAgreed = prefs.getBool(PreferKey.privacyAgreed) ?? false;
 
     // --- 歡迎與介面 ---
     welcomeImage = prefs.getString(PreferKey.welcomeImage) ?? '';
@@ -204,7 +204,7 @@ class SettingsProvider extends SettingsProviderBase {
     showDiscovery = prefs.getBool(PreferKey.showDiscovery) ?? true;
     showAddToShelfAlert = prefs.getBool(PreferKey.showAddToShelfAlert) ?? true;
 
-    lastBackup = prefs.getInt('last_backup') ?? 0;
+    lastBackup = prefs.getInt(PreferKey.lastBackup) ?? 0;
 
     // --- 主題與顯示 ---
     transparentStatusBar = prefs.getBool(PreferKey.transparentStatusBar) ?? true;
@@ -253,19 +253,19 @@ class SettingsProvider extends SettingsProviderBase {
     // --- 備份與同步 ---
     onlyLatestBackup = prefs.getBool(PreferKey.onlyLatestBackup) ?? true;
     autoCheckNewBackup = prefs.getBool(PreferKey.autoCheckNewBackup) ?? true;
-    autoBackup = prefs.getBool('auto_backup') ?? false;
+    autoBackup = prefs.getBool(PreferKey.autoBackup) ?? false;
 
     // --- 朗讀設定 ---
     ignoreAudioFocus = prefs.getBool(PreferKey.ignoreAudioFocus) ?? false;
-    ignoreAudioFocusAloud = prefs.getBool('ignore_audio_focus_aloud') ?? false;
+    ignoreAudioFocusAloud = prefs.getBool(PreferKey.ignoreAudioFocusAloud) ?? false;
     pauseReadAloudWhilePhoneCalls = prefs.getBool(PreferKey.pauseReadAloudWhilePhoneCalls) ?? false;
     readAloudWakeLock = prefs.getBool(PreferKey.readAloudWakeLock) ?? false;
     readAloudByPage = prefs.getBool(PreferKey.readAloudByPage) ?? false;
     streamReadAloudAudio = prefs.getBool(PreferKey.streamReadAloudAudio) ?? false;
     readAloudByMediaButton = prefs.getBool(PreferKey.readAloudByMediaButton) ?? false;
     speechRate = prefs.getDouble(PreferKey.ttsSpeechRate) ?? 0.5;
-    speechPitch = prefs.getDouble('speech_pitch') ?? 1.0;
-    speechVolume = prefs.getDouble('speech_volume') ?? 1.0;
+    speechPitch = prefs.getDouble(PreferKey.speechPitch) ?? 1.0;
+    speechVolume = prefs.getDouble(PreferKey.speechVolume) ?? 1.0;
 
     notifyListeners();
   }

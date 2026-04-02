@@ -1,10 +1,10 @@
 import 'package:legado_reader/core/di/injection.dart';
 import 'dart:io';
 import 'dart:collection';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:legado_reader/core/database/dao/cache_dao.dart';
 import 'package:legado_reader/core/models/cache.dart';
+import 'package:legado_reader/core/storage/app_storage_paths.dart';
 
 /// LruMemoryCache - 簡易 LRU 記憶體快取
 /// (原 Android LruCache) (String, Any)
@@ -77,9 +77,9 @@ class CacheManager {
 
   /// 獲取快取檔案路徑 (對標 js_cache 目錄)
   Future<String> getCachePath(String key) async {
-    final cacheDir = await getTemporaryDirectory();
+    final cacheDir = await AppStoragePaths.jsCacheDir();
     final safeKey = key.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    return p.join(cacheDir.path, 'js_cache', safeKey);
+    return p.join(cacheDir.path, safeKey);
   }
 
   /// 讀取快取文本 (優先從記憶體，再從磁碟資料庫，最後從檔案系統)
