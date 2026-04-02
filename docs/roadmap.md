@@ -1,6 +1,6 @@
 # Reader Project Roadmap
 
-更新日期：2026-03-30
+更新日期：2026-04-02
 
 這份 roadmap 不是零碎待辦清單，而是專案在 `0.1.6` 之後的優先級約束。原則只有一個：先讓已經存在的核心能力變穩，再決定要不要擴張功能面。
 
@@ -13,6 +13,20 @@
 - 同時支援本地書與網路書源
 - 具備穩定閱讀器 runtime、可預測書源引擎與可追蹤資料層
 - 可自行建置、側載、測試與持續發版的 app
+
+## 截至 0.1.6 之後的進展（2026-04-02）
+
+M1 與 M2 的主要工作已完成：
+
+- **Parser Alignment（M2）**：CSS exclusion、html/textNodes、AnalyzeRule `@put` timing、SourceRule mode detection、XPath 自訂函數（allText/textNodes/ownText）、JS Extensions 缺失 method 補齊、書源登入流程（source_login_page + BaseSource login methods）—— 均已落地，tests 全通過
+- **Reader Lifecycle Refactor（M1）**：`ReaderLifecycle` 簡化（移除 `restoring`）、`batchUpdate`、`SlideWindow`/`SlideSegment`、`ContentCallbacks`（消滅 `this as dynamic`）、`SlidePageController`—— 均已落地
+- **Slide mode bugs**：Bug 1（`_handleChapterReady` 漏 notify）與 Bug 2（跨章節邊界閃現 PageController reset）均已修復
+
+目前狀態：324 tests 全通過，`flutter analyze` 零問題。
+
+**下一主線：M3（settings / cache / storage / export 收斂）**
+
+---
 
 ## 截至 0.1.6 的專案判讀
 

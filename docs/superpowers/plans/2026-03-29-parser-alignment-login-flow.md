@@ -1,6 +1,6 @@
 # Parser Alignment & Login Flow Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Align Dart parsers with Legado 3.0 Android reference implementation and complete the login flow.
 
@@ -50,7 +50,7 @@
 
 The `ElementsSingle` class treats `!` (exclude) identically to `.` (select). In Legado, `!` means "remove these indices from the full list, return everything else."
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```dart
 // test/core/engine/parsers/css/analyze_by_css_test.dart
@@ -92,12 +92,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/parsers/css/analyze_by_css_test.dart -v`
 Expected: FAIL - exclusion returns selected elements instead of excluded
 
-- [ ] **Step 3: Fix exclusion logic in ElementsSingle**
+- [x] **Step 3: Fix exclusion logic in ElementsSingle**
 
 In `lib/core/engine/parsers/css/analyze_by_css_support.dart`, replace lines 112-121:
 
@@ -122,12 +122,12 @@ In `lib/core/engine/parsers/css/analyze_by_css_support.dart`, replace lines 112-
     }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/parsers/css/analyze_by_css_test.dart -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/core/engine/parsers/css/analyze_by_css_support.dart test/core/engine/parsers/css/analyze_by_css_test.dart
@@ -144,7 +144,7 @@ git commit -m "fix(css): fix exclusion mode (!) returning selected instead of ex
 
 Legado strips `<script>` and `<style>` tags when returning `html`. The Dart version returns them as-is.
 
-- [ ] **Step 1: Add failing test**
+- [x] **Step 1: Add failing test**
 
 ```dart
   group('getResultLast html keyword', () {
@@ -168,12 +168,12 @@ Legado strips `<script>` and `<style>` tags when returning `html`. The Dart vers
 
 (Import `analyze_by_css_base.dart` and `analyze_by_css_helper.dart` at the top.)
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/parsers/css/analyze_by_css_test.dart -v`
 Expected: FAIL - html output contains `<script>` and `<style>`
 
-- [ ] **Step 3: Fix html case to strip script/style**
+- [x] **Step 3: Fix html case to strip script/style**
 
 In `lib/core/engine/parsers/css/analyze_by_css_helper.dart`, replace the `html` / `outerHtml` case (lines 45-51):
 
@@ -190,12 +190,12 @@ In `lib/core/engine/parsers/css/analyze_by_css_helper.dart`, replace the `html` 
         break;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/parsers/css/analyze_by_css_test.dart -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/core/engine/parsers/css/analyze_by_css_helper.dart test/core/engine/parsers/css/analyze_by_css_test.dart
@@ -212,7 +212,7 @@ git commit -m "fix(css): strip script/style tags from html keyword output to mat
 
 Legado joins all textNodes of each element into one `\n`-separated string. Dart adds each node separately.
 
-- [ ] **Step 1: Add failing test**
+- [x] **Step 1: Add failing test**
 
 ```dart
     test('textNodes joins per-element text nodes with newline', () {
@@ -229,11 +229,11 @@ Legado joins all textNodes of each element into one `\n`-separated string. Dart 
     });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Expected: FAIL - returns 3 separate entries instead of 1 joined entry
 
-- [ ] **Step 3: Fix textNodes to join per element**
+- [x] **Step 3: Fix textNodes to join per element**
 
 In `lib/core/engine/parsers/css/analyze_by_css_helper.dart`, replace the `textNodes` case (lines 26-33):
 
@@ -250,12 +250,12 @@ In `lib/core/engine/parsers/css/analyze_by_css_helper.dart`, replace the `textNo
         break;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/parsers/css/analyze_by_css_test.dart -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/core/engine/parsers/css/analyze_by_css_helper.dart test/core/engine/parsers/css/analyze_by_css_test.dart
@@ -272,7 +272,7 @@ git commit -m "fix(css): join textNodes per-element with newline to match Legado
 
 Missing: `@CSS:` mode detection, `@@` prefix handling, case-insensitive prefix matching.
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```dart
 // test/core/engine/analyze_rule/analyze_rule_test.dart
@@ -324,12 +324,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/analyze_rule/analyze_rule_test.dart -v`
 Expected: FAIL - @CSS: not recognized, @@ not handled, replaceFirst never true
 
-- [ ] **Step 3: Fix SourceRule constructor**
+- [x] **Step 3: Fix SourceRule constructor**
 
 Replace the SourceRule constructor in `lib/core/engine/analyze_rule/analyze_rule_support.dart` (lines 27-55) with:
 
@@ -378,12 +378,12 @@ Replace the SourceRule constructor in `lib/core/engine/analyze_rule/analyze_rule
 
 (The rest of the constructor after mode detection stays the same - @put, evalPattern, _splitRegex.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/analyze_rule/analyze_rule_test.dart -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/core/engine/analyze_rule/analyze_rule_support.dart test/core/engine/analyze_rule/analyze_rule_test.dart
@@ -401,7 +401,7 @@ git commit -m "fix(analyze_rule): add @CSS:, @@ prefix, case-insensitive detecti
 
 In Android, `@put` is processed BEFORE `makeUpRule()` and rule evaluation. In Flutter, it happens AFTER. Also, `@put` is missing from `getElement`/`getElements`/`getStringList`.
 
-- [ ] **Step 1: Add failing test**
+- [x] **Step 1: Add failing test**
 
 ```dart
   group('@put timing', () {
@@ -415,7 +415,7 @@ In Android, `@put` is processed BEFORE `makeUpRule()` and rule evaluation. In Fl
   });
 ```
 
-- [ ] **Step 2: Move @put processing before rule evaluation in getString**
+- [x] **Step 2: Move @put processing before rule evaluation in getString**
 
 In `lib/core/engine/analyze_rule/analyze_rule_string.dart`, move the `@put` block (lines 65-75) to BEFORE `makeUpRule` (after line 21, before line 26):
 
@@ -444,7 +444,7 @@ In `lib/core/engine/analyze_rule/analyze_rule_string.dart`, move the `@put` bloc
 
 And remove the old @put block (the one that was after replaceRegex).
 
-- [ ] **Step 3: Add @put processing to getElement and getElements**
+- [x] **Step 3: Add @put processing to getElement and getElements**
 
 In `lib/core/engine/analyze_rule/analyze_rule_element.dart`, add after line 25 (before `sourceRule.makeUpRule`):
 
@@ -465,7 +465,7 @@ Add the same block in `getElements` after line 88 (before `sourceRule.makeUpRule
 
 Note: `getString` is available via `AnalyzeRuleString` mixin which is mixed in alongside `AnalyzeRuleElement` in the final `AnalyzeRule` class.
 
-- [ ] **Step 4: Add @put processing to getStringList**
+- [x] **Step 4: Add @put processing to getStringList**
 
 In `lib/core/engine/analyze_rule/analyze_rule_string.dart`, in the `getStringList` method, add after line 107 (before `sourceRule.makeUpRule`):
 
@@ -482,12 +482,12 @@ In `lib/core/engine/analyze_rule/analyze_rule_string.dart`, in the `getStringLis
         }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/analyze_rule/ -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/core/engine/analyze_rule/analyze_rule_string.dart lib/core/engine/analyze_rule/analyze_rule_element.dart test/core/engine/analyze_rule/analyze_rule_test.dart
@@ -504,7 +504,7 @@ git commit -m "fix(analyze_rule): move @put before makeUpRule, add to getElement
 
 In Android, when `{{}}` content starts with `@`, `$.`, `$[`, or `//`, it is evaluated as a rule via `getString()` instead of as JavaScript. Flutter always evaluates it as JS.
 
-- [ ] **Step 1: Add test**
+- [x] **Step 1: Add test**
 
 ```dart
   group('makeUpRule {{}} detection', () {
@@ -518,7 +518,7 @@ In Android, when `{{}}` content starts with `@`, `$.`, `$[`, or `//`, it is eval
   });
 ```
 
-- [ ] **Step 2: Update makeUpRule to handle rule-like {{}} content**
+- [x] **Step 2: Update makeUpRule to handle rule-like {{}} content**
 
 In `lib/core/engine/analyze_rule/analyze_rule_support.dart`, modify the `makeUpRule` method (around line 116-117). Change the JS evaluation to check for rule-like patterns first:
 
@@ -535,12 +535,12 @@ In `lib/core/engine/analyze_rule/analyze_rule_support.dart`, modify the `makeUpR
         }
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/analyze_rule/ -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/core/engine/analyze_rule/analyze_rule_support.dart test/core/engine/analyze_rule/analyze_rule_test.dart
@@ -557,7 +557,7 @@ git commit -m "fix(analyze_rule): detect rule-like content in {{}} and eval as r
 
 Android returns `book.name` for key `"bookName"` and `chapter.title` for key `"title"`.
 
-- [ ] **Step 1: Add special key handling**
+- [x] **Step 1: Add special key handling**
 
 In `lib/core/engine/analyze_rule/analyze_rule_base.dart`, modify the `get` method to add special key handling at the top:
 
@@ -600,12 +600,12 @@ In `lib/core/engine/analyze_rule/analyze_rule_base.dart`, modify the `get` metho
   }
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/analyze_rule/ -v`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/core/engine/analyze_rule/analyze_rule_base.dart
@@ -622,7 +622,7 @@ git commit -m "fix(analyze_rule): add special key handling for bookName and titl
 
 The Dart xpath_selector library doesn't support JsoupXpath's custom functions. We need to intercept these patterns and handle them manually before they reach the XPath engine.
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```dart
 // test/core/engine/parsers/analyze_by_xpath_test.dart
@@ -685,12 +685,12 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/parsers/analyze_by_xpath_test.dart -v`
 Expected: FAIL
 
-- [ ] **Step 3: Implement custom function handling**
+- [x] **Step 3: Implement custom function handling**
 
 Replace `lib/core/engine/parsers/analyze_by_xpath.dart` entirely:
 
@@ -917,12 +917,12 @@ class AnalyzeByXPath {
 }
 ```
 
-- [ ] **Step 4: Run test**
+- [x] **Step 4: Run test**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/parsers/analyze_by_xpath_test.dart -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/core/engine/parsers/analyze_by_xpath.dart test/core/engine/parsers/analyze_by_xpath_test.dart
@@ -940,7 +940,7 @@ git commit -m "feat(xpath): add allText/textNodes/ownText/html/outerHtml custom 
 
 The `cookie` and `cache` JS objects call `sendMessage` with handler names that have no Dart-side `onMessage` registration. Also, ~10 handlers are registered but not wired into the `java` object.
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```dart
 // test/core/engine/js/js_extensions_test.dart
@@ -999,11 +999,11 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run test to verify baseline**
+- [x] **Step 2: Run test to verify baseline**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/js/js_extensions_test.dart -v`
 
-- [ ] **Step 3: Register missing handlers in js_extensions.dart**
+- [x] **Step 3: Register missing handlers in js_extensions.dart**
 
 In `lib/core/engine/js/js_extensions.dart`, add to `_injectCoreHandlers()`:
 
@@ -1048,7 +1048,7 @@ Add import at the top:
 import 'package:legado_reader/core/services/cookie_store.dart';
 ```
 
-- [ ] **Step 4: Wire missing methods into java object**
+- [x] **Step 4: Wire missing methods into java object**
 
 In `lib/core/engine/js/extensions/js_java_object.dart`, add the missing methods to the `java` object literal:
 
@@ -1062,12 +1062,12 @@ In `lib/core/engine/js/extensions/js_java_object.dart`, add the missing methods 
         timeFormatUTC: function(time, format, sh) { return sendMessage('timeFormatUTC', JSON.stringify([time, format, sh])); },
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/core/engine/js/js_extensions_test.dart -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/core/engine/js/js_extensions.dart lib/core/engine/js/extensions/js_java_object.dart test/core/engine/js/js_extensions_test.dart
@@ -1085,7 +1085,7 @@ git commit -m "fix(js): register cookie/cache handlers, wire missing methods int
 
 Android's BaseSource has `getLoginJs()`, `login()`, `getLoginInfo()`, `putLoginInfo()`, `getLoginInfoMap()`. These are all missing.
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 ```dart
 // test/features/source_manager/source_login_test.dart
@@ -1117,7 +1117,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Add login helper to BaseSource**
+- [x] **Step 2: Add login helper to BaseSource**
 
 Replace `lib/core/models/base_source.dart`:
 
@@ -1225,12 +1225,12 @@ class BaseSourceLoginHelper {
 }
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test test/features/source_manager/source_login_test.dart -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/core/models/base_source.dart test/features/source_manager/source_login_test.dart
@@ -1245,7 +1245,7 @@ git commit -m "feat(login): add getLoginJs, putLoginInfo, getLoginInfo to BaseSo
 - Modify: `lib/core/models/base_source.dart`
 - Modify: `lib/core/models/source/book_source_base.dart`
 
-- [ ] **Step 1: Add loginCheckJs to BaseSource interface**
+- [x] **Step 1: Add loginCheckJs to BaseSource interface**
 
 In `lib/core/models/base_source.dart`, add to the abstract class:
 
@@ -1253,16 +1253,16 @@ In `lib/core/models/base_source.dart`, add to the abstract class:
   String? get loginCheckJs;
 ```
 
-- [ ] **Step 2: Verify BookSourceBase already has loginCheckJs**
+- [x] **Step 2: Verify BookSourceBase already has loginCheckJs**
 
 Check `lib/core/models/source/book_source_base.dart` already declares `loginCheckJs`. If not, add it. It should already exist based on research.
 
-- [ ] **Step 3: Run flutter analyze**
+- [x] **Step 3: Run flutter analyze**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter analyze`
 Expected: No new errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/core/models/base_source.dart lib/core/models/source/book_source_base.dart
@@ -1281,7 +1281,7 @@ This is the biggest login task. We need to:
 2. Add a submit action that collects form data, stores it, and calls login JS
 3. Re-capture cookies on WebView "done"
 
-- [ ] **Step 1: Rewrite source_login_page.dart**
+- [x] **Step 1: Rewrite source_login_page.dart**
 
 Replace `lib/features/source_manager/source_login_page.dart`:
 
@@ -1546,12 +1546,12 @@ class _SourceLoginPageState extends State<SourceLoginPage> {
 }
 ```
 
-- [ ] **Step 2: Run flutter analyze**
+- [x] **Step 2: Run flutter analyze**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter analyze`
 Expected: No errors in source_login_page.dart
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/features/source_manager/source_login_page.dart
@@ -1568,7 +1568,7 @@ git commit -m "feat(login): implement dynamic form submission and JS login execu
 
 Android injects a `source` object that JS code can call `source.getLoginInfo()`, `source.putLoginInfo()`, `source.put()`, `source.get()` on.
 
-- [ ] **Step 1: Add source object injection to js_java_object.dart**
+- [x] **Step 1: Add source object injection to js_java_object.dart**
 
 In `lib/core/engine/js/extensions/js_java_object.dart`, add after the `cache` object (before the closing `'''`):
 
@@ -1584,7 +1584,7 @@ In `lib/core/engine/js/extensions/js_java_object.dart`, add after the `cache` ob
       source.get = function(key) { return sendMessage('sourceGet', JSON.stringify(key)); };
 ```
 
-- [ ] **Step 2: Register source handlers in js_extensions.dart**
+- [x] **Step 2: Register source handlers in js_extensions.dart**
 
 In `lib/core/engine/js/js_extensions.dart`, add to `_injectCoreHandlers()`:
 
@@ -1617,12 +1617,12 @@ In `lib/core/engine/js/js_extensions.dart`, add to `_injectCoreHandlers()`:
     });
 ```
 
-- [ ] **Step 3: Run flutter analyze**
+- [x] **Step 3: Run flutter analyze**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter analyze`
 Expected: No errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/core/engine/js/extensions/js_java_object.dart lib/core/engine/js/js_extensions.dart
@@ -1635,21 +1635,21 @@ git commit -m "feat(js): inject source object with getLoginInfo/put/get into JS 
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Run flutter analyze**
+- [x] **Step 1: Run flutter analyze**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter analyze`
 Expected: No errors
 
-- [ ] **Step 2: Run all tests**
+- [x] **Step 2: Run all tests**
 
 Run: `cd /home/benny/.openclaw/workspace/projects/reader && flutter test`
 Expected: All tests pass
 
-- [ ] **Step 3: Fix any issues found**
+- [x] **Step 3: Fix any issues found**
 
 If any tests fail or analysis errors appear, fix them before committing.
 
-- [ ] **Step 4: Final commit if needed**
+- [x] **Step 4: Final commit if needed**
 
 ```bash
 git add -A

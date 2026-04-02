@@ -1,6 +1,6 @@
 # Reader Architecture (Current)
 
-更新日期：2026-03-30
+更新日期：2026-04-02
 
 本文只描述目前 `lib/features/reader` 已經落地的閱讀器架構，不再沿用舊版 mixin 時代或早期對照稿的說法。
 
@@ -190,12 +190,24 @@
 - restore / progress / TTS / visible tracking 不再四散
 - 已有實質 runtime 測試保護主流程
 
+## 2026-04-02 Lifecycle Refactor 落地總結
+
+以下項目已在 lifecycle refactor 中完成：
+
+- `ReaderLifecycle` 簡化為 `loading → ready → disposed`（移除 `restoring`）
+- `batchUpdate` 與 `notifyListeners` override 加入 `ReaderProviderBase`
+- `SlideWindow` / `SlideSegment` 取代舊的 flat page merge
+- `ContentCallbacks` 消滅所有 `(this as dynamic)` cast
+- `SlidePageController` 封裝 PageView jump dedup/debounce
+- Slide mode Bug 1 修復：`_handleChapterReady` slide 分支補 `notifyListeners`
+- Slide mode Bug 2 修復：`consumeControllerReset` 機制，重建 `PageController(initialPage:)` 替代延遲 `jumpToPage`
+
 ## 目前仍存在的限制
 
-- mixin 時代遺留介面還沒完全退出
-- content lifecycle 仍有部分責任散在 provider / manager / runtime 間
-- scroll 模式的執行層還帶有較多 view 細節
-- 部分命名仍混合「頁面語義」與「章內語義」
+- mixin 時代遺留介面尚未完全退出（`ReaderContentMixin`、`ReaderProgressMixin` 仍有部分歷史責任）
+- scroll 模式的 auto-page ticker 仍在 `ReadViewRuntime` 層
+- `ChapterContentManager.targetWindow` 尚未完全收回內部細節
+- `ReadBookController / ReadAloudController` full integration test 仍可補深
 
 ## 測試現況
 

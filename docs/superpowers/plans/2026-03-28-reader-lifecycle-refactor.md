@@ -1,6 +1,6 @@
 # Reader Lifecycle & Core Reading Refactor Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix initialization jitter, slide-mode chapter jump bug, and scroll-mode boundary stutter by refactoring the reader's lifecycle management, slide window model, and scroll preloading strategy.
 
@@ -40,7 +40,7 @@
 
 This is the foundation — all subsequent lifecycle changes depend on batching notifications.
 
-- [ ] **Step 1: Simplify `ReaderLifecycle` enum**
+- [x] **Step 1: Simplify `ReaderLifecycle` enum**
 
 In `lib/features/reader/provider/reader_provider_base.dart`, replace line 15:
 
@@ -52,7 +52,7 @@ enum ReaderLifecycle { loading, restoring, ready, disposed }
 enum ReaderLifecycle { loading, ready, disposed }
 ```
 
-- [ ] **Step 2: Add batch update fields and override `notifyListeners`**
+- [x] **Step 2: Add batch update fields and override `notifyListeners`**
 
 In `lib/features/reader/provider/reader_provider_base.dart`, add after line 47 (after existing field declarations, before the DAO fields):
 
@@ -87,7 +87,7 @@ In `lib/features/reader/provider/reader_provider_base.dart`, add after line 47 (
   }
 ```
 
-- [ ] **Step 3: Remove all `isRestoring` references in base**
+- [x] **Step 3: Remove all `isRestoring` references in base**
 
 In `lib/features/reader/provider/reader_provider_base.dart`, remove the `isRestoring` getter. It is currently:
 
@@ -103,13 +103,13 @@ Replace with:
 
 Keep `isReady` and `isLoading` as-is.
 
-- [ ] **Step 4: Run analyzer to check for compile errors**
+- [x] **Step 4: Run analyzer to check for compile errors**
 
 Run: `flutter analyze lib/features/reader/provider/reader_provider_base.dart`
 
 This will show errors where `isRestoring` and `ReaderLifecycle.restoring` are referenced elsewhere — that's expected, we'll fix those in subsequent tasks.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/features/reader/provider/reader_provider_base.dart
@@ -123,7 +123,7 @@ git commit -m "refactor(reader): add batchUpdate to ReaderProviderBase, simplify
 **Files:**
 - Create: `lib/features/reader/provider/slide_window.dart`
 
-- [ ] **Step 1: Create `slide_window.dart`**
+- [x] **Step 1: Create `slide_window.dart`**
 
 ```dart
 import 'package:legado_reader/features/reader/engine/text_page.dart';
@@ -270,12 +270,12 @@ class SlideWindow {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `flutter analyze lib/features/reader/provider/slide_window.dart`
 Expected: No errors (may have info-level lints).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/features/reader/provider/slide_window.dart
@@ -289,7 +289,7 @@ git commit -m "feat(reader): add SlideWindow and SlideSegment data structures"
 **Files:**
 - Create: `lib/features/reader/provider/content_callbacks.dart`
 
-- [ ] **Step 1: Create `content_callbacks.dart`**
+- [x] **Step 1: Create `content_callbacks.dart`**
 
 ```dart
 /// Typed callback interface for methods that [ReaderContentMixin] needs to call
@@ -323,12 +323,12 @@ class ContentCallbacks {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `flutter analyze lib/features/reader/provider/content_callbacks.dart`
 Expected: No errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/features/reader/provider/content_callbacks.dart
@@ -342,7 +342,7 @@ git commit -m "feat(reader): add ContentCallbacks typed interface"
 **Files:**
 - Create: `lib/features/reader/view/slide_page_controller.dart`
 
-- [ ] **Step 1: Create `slide_page_controller.dart`**
+- [x] **Step 1: Create `slide_page_controller.dart`**
 
 ```dart
 import 'package:flutter/widgets.dart';
@@ -388,12 +388,12 @@ class SlidePageController {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `flutter analyze lib/features/reader/view/slide_page_controller.dart`
 Expected: No errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/features/reader/view/slide_page_controller.dart
@@ -407,7 +407,7 @@ git commit -m "feat(reader): add SlidePageController wrapper for PageView jumps"
 **Files:**
 - Modify: `lib/features/reader/engine/chapter_content_manager.dart`
 
-- [ ] **Step 1: Add `paginateSync()` method**
+- [x] **Step 1: Add `paginateSync()` method**
 
 In `lib/features/reader/engine/chapter_content_manager.dart`, add after the existing `getCachedContent` method (around line 183):
 
@@ -451,7 +451,7 @@ In `lib/features/reader/engine/chapter_content_manager.dart`, add after the exis
   }
 ```
 
-- [ ] **Step 2: Verify `ChapterProvider.paginate` is synchronous**
+- [x] **Step 2: Verify `ChapterProvider.paginate` is synchronous**
 
 Check `lib/features/reader/engine/chapter_provider.dart` — the `paginate` static method. If it returns `Future<List<TextPage>>`, then we need to keep this async. If it returns `List<TextPage>` synchronously, this step works as-is.
 
@@ -459,12 +459,12 @@ Run: `grep -n 'static.*paginate' lib/features/reader/engine/chapter_provider.dar
 
 If `paginate` is async (returns Future), change `paginateSyncIfCached` to return `Future<List<TextPage>>` and add `await`. In that case, rename to `paginateIfCached` (drop the Sync prefix).
 
-- [ ] **Step 3: Run analyzer**
+- [x] **Step 3: Run analyzer**
 
 Run: `flutter analyze lib/features/reader/engine/chapter_content_manager.dart`
 Expected: No errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/features/reader/engine/chapter_content_manager.dart
@@ -480,7 +480,7 @@ git commit -m "feat(reader): add paginateSyncIfCached to ChapterContentManager"
 
 This is the largest task. It replaces the flat `slidePages` merge with `SlideWindow`, rewrites `onPageChanged`, removes `(this as dynamic)`, and adds predictive scroll preloading.
 
-- [ ] **Step 1: Add imports and `SlideWindow` field**
+- [x] **Step 1: Add imports and `SlideWindow` field**
 
 In `lib/features/reader/provider/reader_content_mixin.dart`, add to imports (after line 9):
 
@@ -502,7 +502,7 @@ Add field near other private fields (around line 30):
   SlideWindow get slideWindow => _slideWindow;
 ```
 
-- [ ] **Step 2: Add `trySyncPaginate()` method**
+- [x] **Step 2: Add `trySyncPaginate()` method**
 
 Add after `updateScrollPreloadForVisibleChapter` (around line 366):
 
@@ -519,7 +519,7 @@ Add after `updateScrollPreloadForVisibleChapter` (around line 366):
   }
 ```
 
-- [ ] **Step 3: Replace `_mergeAdjacentSlidePages` and `_refreshSlidePages` with SlideWindow**
+- [x] **Step 3: Replace `_mergeAdjacentSlidePages` and `_refreshSlidePages` with SlideWindow**
 
 Replace lines 218-235 (`_refreshSlidePages`) with:
 
@@ -620,7 +620,7 @@ Replace lines 592-637 (`_applySlidePages` and `_resolveSlideTargetIndex`) with a
   }
 ```
 
-- [ ] **Step 4: Rewrite `onPageChanged` to use SlideWindow**
+- [x] **Step 4: Rewrite `onPageChanged` to use SlideWindow**
 
 Replace lines 380-410 with:
 
@@ -684,7 +684,7 @@ Replace lines 380-410 with:
   }
 ```
 
-- [ ] **Step 5: Replace all `(this as dynamic)` calls with `_contentCallbacks`**
+- [x] **Step 5: Replace all `(this as dynamic)` calls with `_contentCallbacks`**
 
 Search for all `(this as dynamic)` in reader_content_mixin.dart and replace:
 
@@ -698,7 +698,7 @@ Search for all `(this as dynamic)` in reader_content_mixin.dart and replace:
 
 Apply to ALL occurrences (~12 in the file).
 
-- [ ] **Step 6: Add predictive scroll preload**
+- [x] **Step 6: Add predictive scroll preload**
 
 In `updateScrollPreloadForVisibleChapter` (lines 339-366), add the predictive preload logic. Replace the method body:
 
@@ -763,13 +763,13 @@ In `updateScrollPreloadForVisibleChapter` (lines 339-366), add the predictive pr
   }
 ```
 
-- [ ] **Step 7: Run analyzer**
+- [x] **Step 7: Run analyzer**
 
 Run: `flutter analyze lib/features/reader/provider/reader_content_mixin.dart`
 
 Fix any issues. Expect possible errors from callers of the old method signature — those are fixed in Task 7.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add lib/features/reader/provider/reader_content_mixin.dart
@@ -784,7 +784,7 @@ git commit -m "refactor(reader): replace flat slidePages with SlideWindow, add p
 - Modify: `lib/features/reader/runtime/read_book_controller.dart`
 - Modify: `lib/features/reader/provider/reader_progress_mixin.dart`
 
-- [ ] **Step 1: Add import for ContentCallbacks**
+- [x] **Step 1: Add import for ContentCallbacks**
 
 In `lib/features/reader/runtime/read_book_controller.dart`, add import:
 
@@ -792,7 +792,7 @@ In `lib/features/reader/runtime/read_book_controller.dart`, add import:
 import 'package:legado_reader/features/reader/provider/content_callbacks.dart';
 ```
 
-- [ ] **Step 2: Wire `ContentCallbacks` in `_init()`**
+- [x] **Step 2: Wire `ContentCallbacks` in `_init()`**
 
 Replace the existing `_init()` method (lines 373-397) with the three-phase pipeline:
 
@@ -897,7 +897,7 @@ Replace the existing `_init()` method (lines 373-397) with the three-phase pipel
   }
 ```
 
-- [ ] **Step 3: Rewrite `setViewSize()` to use Completer during init**
+- [x] **Step 3: Rewrite `setViewSize()` to use Completer during init**
 
 Replace lines 428-451:
 
@@ -931,7 +931,7 @@ Replace lines 428-451:
   }
 ```
 
-- [ ] **Step 4: Remove `completeRestoreTransition` and all `isRestoring` references**
+- [x] **Step 4: Remove `completeRestoreTransition` and all `isRestoring` references**
 
 In `read_book_controller.dart`:
 
@@ -949,7 +949,7 @@ In `read_book_controller.dart`:
 
 4. Search for `ReaderLifecycle.restoring` references and remove them.
 
-- [ ] **Step 5: Update `reader_progress_mixin.dart`**
+- [x] **Step 5: Update `reader_progress_mixin.dart`**
 
 In `lib/features/reader/provider/reader_progress_mixin.dart`:
 
@@ -958,7 +958,7 @@ In `lib/features/reader/provider/reader_progress_mixin.dart`:
 3. In `jumpToPosition()` (line 89), remove `if (isRestoringJump) lifecycle = ReaderLifecycle.restoring;` — the restoring state no longer exists.
 4. Replace `(this as dynamic)` calls with `_contentCallbacks` calls. Since this mixin has `on ReaderContentMixin`, it can access `_contentCallbacks` through the mixin chain. If not accessible, pass through a helper method.
 
-- [ ] **Step 6: Update `updateScrollPreloadForVisibleChapter` call site**
+- [x] **Step 6: Update `updateScrollPreloadForVisibleChapter` call site**
 
 In `read_book_controller.dart`, wherever `handleVisibleScrollState` calls `updateScrollPreloadForVisibleChapter`, pass `localOffset`:
 
@@ -975,7 +975,7 @@ updateScrollPreloadForVisibleChapter(
 );
 ```
 
-- [ ] **Step 7: Run analyzer on both files**
+- [x] **Step 7: Run analyzer on both files**
 
 Run: `flutter analyze lib/features/reader/runtime/read_book_controller.dart lib/features/reader/provider/reader_progress_mixin.dart`
 
@@ -985,7 +985,7 @@ Fix compilation errors. Common issues:
 - `applyPendingRestore()` calls → remove
 - `completeRestoreTransition()` calls → remove
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add lib/features/reader/runtime/read_book_controller.dart lib/features/reader/provider/reader_progress_mixin.dart
@@ -999,7 +999,7 @@ git commit -m "refactor(reader): three-phase init pipeline, remove restoring lif
 **Files:**
 - Modify: `lib/features/reader/reader_page.dart`
 
-- [ ] **Step 1: Replace manual jump logic with SlidePageController**
+- [x] **Step 1: Replace manual jump logic with SlidePageController**
 
 In `lib/features/reader/reader_page.dart`:
 
@@ -1027,11 +1027,11 @@ In `dispose()`, add:
 _slideCtrl.dispose();
 ```
 
-- [ ] **Step 2: Remove `_schedulePendingJump` method**
+- [x] **Step 2: Remove `_schedulePendingJump` method**
 
 Delete lines 43-58 entirely.
 
-- [ ] **Step 3: Replace all calls to `_schedulePendingJump` with `_slideCtrl.jumpTo`**
+- [x] **Step 3: Replace all calls to `_schedulePendingJump` with `_slideCtrl.jumpTo`**
 
 In the `build` method (around line 86-90), replace:
 
@@ -1051,12 +1051,12 @@ if (pendingJump != null) {
 }
 ```
 
-- [ ] **Step 4: Run analyzer**
+- [x] **Step 4: Run analyzer**
 
 Run: `flutter analyze lib/features/reader/reader_page.dart`
 Expected: No errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/features/reader/reader_page.dart
@@ -1070,7 +1070,7 @@ git commit -m "refactor(reader): use SlidePageController in ReaderPage"
 **Files:**
 - Modify: `lib/features/reader/view/read_view_runtime.dart`
 
-- [ ] **Step 1: Add fade animation controller**
+- [x] **Step 1: Add fade animation controller**
 
 In `_ReadViewRuntimeState`, add fields:
 
@@ -1092,7 +1092,7 @@ In `initState()`, initialize:
 
 In `dispose()`, add `_fadeCtrl.dispose();`.
 
-- [ ] **Step 2: Trigger fade when lifecycle transitions to ready**
+- [x] **Step 2: Trigger fade when lifecycle transitions to ready**
 
 In `_onProviderStateChanged()`, add at the top (after `if (!mounted) return;`):
 
@@ -1104,7 +1104,7 @@ In `_onProviderStateChanged()`, add at the top (after `if (!mounted) return;`):
     }
 ```
 
-- [ ] **Step 3: Wrap content in init overlay + FadeTransition**
+- [x] **Step 3: Wrap content in init overlay + FadeTransition**
 
 In the `build()` method, replace the loading check section. Find the section around lines 186-190 where it shows `CircularProgressIndicator`. Replace with:
 
@@ -1121,7 +1121,7 @@ In the `build()` method, replace the loading check section. Find the section aro
 
 Extract the existing content building logic into `_buildContent(provider, size)` if not already separated.
 
-- [ ] **Step 4: Remove `isRestoring` checks in build**
+- [x] **Step 4: Remove `isRestoring` checks in build**
 
 Search for any `isRestoring` or `ReaderLifecycle.restoring` references in `read_view_runtime.dart`. Remove them or replace with `lifecycle == ReaderLifecycle.loading` checks where appropriate.
 
@@ -1134,12 +1134,12 @@ final holdScrollUntilRestored = _coordinator.shouldHoldScrollUntilRestored(...)
 final holdScrollUntilReady = !provider.isReady;
 ```
 
-- [ ] **Step 5: Run analyzer**
+- [x] **Step 5: Run analyzer**
 
 Run: `flutter analyze lib/features/reader/view/read_view_runtime.dart`
 Expected: No errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/features/reader/view/read_view_runtime.dart
@@ -1153,7 +1153,7 @@ git commit -m "refactor(reader): add init overlay with fade transition, remove r
 **Files:**
 - Modify: `lib/features/reader/view/delegate/scroll_mode_delegate.dart`
 
-- [ ] **Step 1: Add sync-paginate fast path for local books**
+- [x] **Step 1: Add sync-paginate fast path for local books**
 
 In `scroll_mode_delegate.dart`, in the `itemBuilder` callback (around line 52-55), replace:
 
@@ -1178,7 +1178,7 @@ if ((pages == null || pages.isEmpty) && provider.book.origin == 'local') {
 if (pages == null || pages.isEmpty) {
 ```
 
-- [ ] **Step 2: Replace fixed placeholder height with estimated height**
+- [x] **Step 2: Replace fixed placeholder height with estimated height**
 
 Replace the placeholder Container (lines 56-80):
 
@@ -1224,12 +1224,12 @@ Add import for `ChapterPositionResolver`:
 import 'package:legado_reader/features/reader/engine/chapter_position_resolver.dart';
 ```
 
-- [ ] **Step 3: Run analyzer**
+- [x] **Step 3: Run analyzer**
 
 Run: `flutter analyze lib/features/reader/view/delegate/scroll_mode_delegate.dart`
 Expected: No errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lib/features/reader/view/delegate/scroll_mode_delegate.dart
@@ -1243,7 +1243,7 @@ git commit -m "refactor(reader): sync-paginate fast path and estimated placehold
 **Files:**
 - Various files across the reader module
 
-- [ ] **Step 1: Find all remaining `isRestoring` references**
+- [x] **Step 1: Find all remaining `isRestoring` references**
 
 Run: `grep -rn 'isRestoring\|ReaderLifecycle\.restoring\|lifecycle == ReaderLifecycle\.restoring' lib/features/reader/`
 
@@ -1252,7 +1252,7 @@ For each reference found:
 - If it's a check that triggers on restore completion: replace with `isReady` check
 - If it's setting `lifecycle = ReaderLifecycle.restoring`: delete the line
 
-- [ ] **Step 2: Find all remaining `(this as dynamic)` references**
+- [x] **Step 2: Find all remaining `(this as dynamic)` references**
 
 Run: `grep -rn '(this as dynamic)' lib/features/reader/`
 
@@ -1261,12 +1261,12 @@ For each reference found:
 - In `reader_progress_mixin.dart`: replace with `_contentCallbacks` calls (need to make `_contentCallbacks` accessible, possibly through a getter on `ReaderContentMixin`)
 - In any other file: replace with typed callback or direct method call
 
-- [ ] **Step 3: Run full project analyzer**
+- [x] **Step 3: Run full project analyzer**
 
 Run: `flutter analyze`
 Expected: No errors related to the reader module changes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A lib/features/reader/
@@ -1280,7 +1280,7 @@ git commit -m "refactor(reader): remove all isRestoring references and dynamic c
 **Files:**
 - No file changes — testing only
 
-- [ ] **Step 1: Run existing tests**
+- [x] **Step 1: Run existing tests**
 
 Run: `flutter test`
 
@@ -1289,17 +1289,17 @@ Fix any failures caused by the refactoring. Common issues:
 - Tests calling `applyPendingRestore()` → remove those calls
 - Tests referencing `isRestoring` → update
 
-- [ ] **Step 2: Run analyzer to ensure clean build**
+- [x] **Step 2: Run analyzer to ensure clean build**
 
 Run: `flutter analyze`
 Expected: No errors.
 
-- [ ] **Step 3: Build to verify compilation**
+- [x] **Step 3: Build to verify compilation**
 
 Run: `flutter build apk --debug 2>&1 | tail -5`
 Expected: Build successful.
 
-- [ ] **Step 4: Commit any test fixes**
+- [x] **Step 4: Commit any test fixes**
 
 ```bash
 git add -A test/
