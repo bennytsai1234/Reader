@@ -405,6 +405,7 @@ class ReadBookController extends ReaderProviderBase
                 reason: reason as ReaderCommandReason,
               ),
     );
+    contentCallbacksRef.debugAssertComplete();
 
     // ── Phase 1: PREPARE (parallel data loading, no UI updates) ──
     await Future.wait([
