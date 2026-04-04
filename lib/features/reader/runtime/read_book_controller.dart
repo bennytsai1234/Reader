@@ -12,9 +12,9 @@ import 'package:legado_reader/features/reader/engine/text_page.dart';
 import 'package:legado_reader/features/reader/provider/reader_auto_page_mixin.dart';
 import 'package:legado_reader/features/reader/provider/content_callbacks.dart';
 import 'package:legado_reader/features/reader/provider/reader_content_mixin.dart';
-import 'package:legado_reader/features/reader/provider/reader_progress_mixin.dart';
 import 'package:legado_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:legado_reader/features/reader/provider/reader_settings_mixin.dart';
+import 'package:legado_reader/features/reader/runtime/reader_progress_coordinator.dart';
 import 'package:legado_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:legado_reader/features/reader/runtime/read_aloud_controller.dart';
 import 'package:legado_reader/features/reader/runtime/reader_chapter_provider.dart';
@@ -31,7 +31,6 @@ class ReadBookController extends ReaderProviderBase
     with
         ReaderSettingsMixin,
         ReaderContentMixin,
-        ReaderProgressMixin,
         ReaderAutoPageMixin,
         WidgetsBindingObserver {
   List<String> _chapterDisplayTitles = const [];
@@ -45,10 +44,14 @@ class ReadBookController extends ReaderProviderBase
   final ReaderTtsFollowCoordinator _ttsFollow =
       const ReaderTtsFollowCoordinator();
   late final ReadAloudController _readAloudController;
+  late final ReaderProgressCoordinator _progressCoordinator;
   final Completer<Size> _viewSizeCompleter = Completer<Size>();
   int _ttsMode = 0;
   bool _initialSessionPrimed = false;
   DateTime? _ignoreViewportChangesUntil;
+
+  /// 初始章節字元偏移（由呼叫方傳入，用於還原閱讀位置）
+  int initialCharOffset = 0;
 
   ReadBookController({
     required Book book,
@@ -59,6 +62,24 @@ class ReadBookController extends ReaderProviderBase
     visibleChapterIndex = chapterIndex;
     initialCharOffset = chapterPos;
     _readAloudController = _buildReadAloudController();
+    _progressCoordinator = ReaderProgressCoordinator(
+      book: () => book,
+      chapters: () => chapters,
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
+      store: _progressStore,
+      shouldPersistVisiblePosition: shouldPersistVisiblePosition,
+      persistCurrentProgress: ({
+        required chapterIndex,
+        pageIndex,
+        required reason,
+      }) =>
+          persistCurrentProgress(
+            chapterIndex: chapterIndex,
+            pageIndex: pageIndex,
+            reason: reason,
+          ),
+    );
     _init();
   }
 
@@ -204,12 +225,27 @@ class ReadBookController extends ReaderProviderBase
     required double alignment,
     required List<int> visibleChapterIndexes,
   }) {
-    updateVisibleChapterPosition(
+    _progressCoordinator.updateVisibleChapterPosition(
       chapterIndex: chapterIndex,
       localOffset: localOffset,
       alignment: alignment,
+      pageTurnMode: pageTurnMode,
+      isLoading: isLoading,
+      currentPageIndex: currentPageIndex,
+      updateVisible: (ci, lo, al) {
+        visibleChapterIndex = ci;
+        visibleChapterLocalOffset = lo;
+        visibleChapterAlignment = al;
+      },
+      updateCurrentChapterIndex: (ci) => currentChapterIndex = ci,
     );
-    updateScrollPageIndex(chapterIndex, localOffset);
+    _progressCoordinator.updateScrollPageIndex(
+      chapterIndex: chapterIndex,
+      localOffset: localOffset,
+      setCurrentPageIndex: (i) => currentPageIndex = i,
+      setVisibleChapterIndex: (i) => visibleChapterIndex = i,
+      setCurrentChapterIndex: (i) => currentChapterIndex = i,
+    );
 
     final update = _scrollVisibility.evaluate(
       visibleChapterIndexes: visibleChapterIndexes,
@@ -555,7 +591,7 @@ class ReadBookController extends ReaderProviderBase
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _persistSessionProgress();
-    scrollSaveTimer?.cancel();
+    _progressCoordinator.dispose();
     _heartbeatTimer?.cancel();
     disposeAutoPageCoordinator();
     _readAloudController.dispose();
@@ -1028,6 +1064,84 @@ class ReadBookController extends ReaderProviderBase
   }) {
     apply();
     _updateSettingAndNotify(key, value);
+  }
+
+  /// 根據 charOffset / pageIndex 解析目標位置並觸發跳轉。
+  /// 此方法取代原本 [ReaderProgressMixin.jumpToPosition]。
+  void jumpToPosition({
+    int? chapterIndex,
+    int? charOffset,
+    int? pageIndex,
+    bool isRestoringJump = false,
+  }) {
+    final targetChapter = chapterIndex ?? currentChapterIndex;
+
+    if (pageTurnMode == PageAnim.scroll) {
+      final runtimeChapter = chapterAt(targetChapter);
+      final pages = pagesForChapter(targetChapter);
+      final targetCharOffset = charOffset ?? 0;
+      final localOffset = runtimeChapter != null
+          ? runtimeChapter.localOffsetFromCharOffset(targetCharOffset)
+          : ChapterPositionResolver.charOffsetToLocalOffset(
+              pages, targetCharOffset);
+      final alignment = runtimeChapter != null
+          ? runtimeChapter.alignmentForCharOffset(targetCharOffset)
+          : ChapterPositionResolver.charOffsetToAlignment(
+              pages, targetCharOffset);
+      requestJumpToChapter(
+        chapterIndex: targetChapter,
+        localOffset: localOffset,
+        alignment: alignment,
+        reason: isRestoringJump
+            ? ReaderCommandReason.restore
+            : ReaderCommandReason.system,
+      );
+      notifyListeners();
+      return;
+    }
+
+    final pages = pagesForChapter(targetChapter);
+    var targetPage = 0;
+    if (charOffset != null && charOffset > 0) {
+      final runtimeChapter = chapterAt(targetChapter);
+      final localPageIndex = runtimeChapter != null
+          ? runtimeChapter.getPageIndexByCharIndex(charOffset)
+          : ChapterPositionResolver.findPageIndexByCharOffset(
+              pages, charOffset);
+      final globalIndex = slidePages.indexWhere(
+        (page) =>
+            page.chapterIndex == targetChapter && page.index == localPageIndex,
+      );
+      targetPage = globalIndex >= 0 ? globalIndex : 0;
+    } else if (pageIndex != null) {
+      targetPage = pageIndex.clamp(0, slidePages.length - 1);
+    }
+    currentPageIndex = targetPage;
+    requestJumpToPage(
+      targetPage,
+      reason: isRestoringJump
+          ? ReaderCommandReason.restore
+          : ReaderCommandReason.system,
+    );
+    notifyListeners();
+  }
+
+  /// 計算並持久化進度（slide 或 scroll mode）。
+  /// 此方法取代原本 [ReaderProgressMixin.saveProgress]。
+  void saveProgress(
+    int chapterIndex,
+    int pageIndex, {
+    ReaderCommandReason reason = ReaderCommandReason.system,
+  }) {
+    _progressCoordinator.saveProgress(
+      chapterIndex: chapterIndex,
+      pageIndex: pageIndex,
+      pageTurnMode: pageTurnMode,
+      visibleChapterLocalOffset: visibleChapterLocalOffset,
+      slidePages: slidePages,
+      write: (ci, title, offset) =>
+          bookDao.updateProgress(book.bookUrl, ci, title, offset),
+    );
   }
 
   void _persistSessionProgress() {

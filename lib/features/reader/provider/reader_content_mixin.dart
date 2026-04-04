@@ -593,13 +593,6 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     return _chapterContentLoader!.load(i, chapter);
   }
 
-  void jumpToPosition({
-    int? chapterIndex,
-    int? charOffset,
-    int? pageIndex,
-    bool isRestoringJump = false,
-  });
-
   void disposeContentManager() {
     _chapterReadySub?.cancel();
     _deferredWindowWarmupTimer?.cancel();
