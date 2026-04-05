@@ -77,6 +77,15 @@ iOS 側載建議：
 
 本倉庫不走 App Store，也沒有 TestFlight 流程。
 
+## 發版流程
+
+1. 撰寫 `release-notes/vX.Y.Z.md`
+2. `git add . && git commit -m "chore: prepare vX.Y.Z"`
+3. `git tag vX.Y.Z`
+4. `git push && git push --tags`
+
+CI 自動觸發，約 25 分鐘後 GitHub Releases 頁面出現 Android APK 與 iOS IPA。
+
 ## 文檔
 
 - [docs/README.md](docs/README.md)：文檔索引與閱讀順序

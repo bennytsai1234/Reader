@@ -10,13 +10,54 @@ permissions:
   contents: write
 
 jobs:
+  inject-version:
+    name: Inject Version from Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject version into pubspec.yaml
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUILD="${{ github.run_number }}"
+          sed -i "s/^version: .*/version: ${VERSION}+${BUILD}/" pubspec.yaml
+          echo "Injected version: ${VERSION}+${BUILD}"
+          grep "^version:" pubspec.yaml
+          grep -q "^version: ${VERSION}+${BUILD}" pubspec.yaml || { echo "Version injection failed"; exit 1; }
+
+      - name: Commit version bump
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUILD="${{ github.run_number }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          git diff --cached --quiet || git commit -m "chore: bump version to ${VERSION}+${BUILD} [skip ci]"
+          git push origin HEAD:refs/heads/main
+
+      - name: Upload pubspec artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pubspec-yaml
+          path: pubspec.yaml
+
   android-release:
     name: Android Release APK
+    needs: inject-version
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download injected pubspec
+        uses: actions/download-artifact@v4
+        with:
+          name: pubspec-yaml
+          path: .
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -44,11 +85,18 @@ jobs:
 
   ios-unsigned:
     name: iOS Unsigned Build
+    needs: inject-version
     runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download injected pubspec
+        uses: actions/download-artifact@v4
+        with:
+          name: pubspec-yaml
+          path: .
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -107,6 +155,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for release notes
+        id: notes
+        run: |
+          NOTES_FILE="release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            echo "has_notes=true" >> $GITHUB_OUTPUT
+            echo "notes_file=$NOTES_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "has_notes=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Download Android artifact
         uses: actions/download-artifact@v4
         with:
@@ -119,7 +181,17 @@ jobs:
           name: ios-unsigned-ipa
           path: dist
 
-      - name: Publish GitHub release
+      - name: Publish GitHub release (with release notes)
+        if: steps.notes.outputs.has_notes == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/app-release.apk
+            dist/保安專用閱讀器-ios-unsigned.ipa
+          body_path: ${{ steps.notes.outputs.notes_file }}
+
+      - name: Publish GitHub release (auto notes)
+        if: steps.notes.outputs.has_notes == 'false'
         uses: softprops/action-gh-release@v2
         with:
           files: |
