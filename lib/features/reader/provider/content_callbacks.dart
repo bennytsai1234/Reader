@@ -57,4 +57,27 @@ class ContentCallbacks {
   });
 
   static const empty = ContentCallbacks();
+
+  /// 在 debug mode 驗證所有必要的 callback 都已注入。
+  /// 在 ReadBookController._init() 注入 callbacks 後呼叫。
+  void debugAssertComplete() {
+    assert(refreshChapterRuntime != null,
+        'ContentCallbacks.refreshChapterRuntime is required');
+    assert(buildSlideRuntimePages != null,
+        'ContentCallbacks.buildSlideRuntimePages is required');
+    assert(jumpToSlidePage != null,
+        'ContentCallbacks.jumpToSlidePage is required');
+    assert(jumpToChapterLocalOffset != null,
+        'ContentCallbacks.jumpToChapterLocalOffset is required');
+    assert(jumpToChapterCharOffset != null,
+        'ContentCallbacks.jumpToChapterCharOffset is required');
+    assert(chapterAt != null, 'ContentCallbacks.chapterAt is required');
+    assert(pagesForChapter != null,
+        'ContentCallbacks.pagesForChapter is required');
+    assert(progressStore != null, 'ContentCallbacks.progressStore is required');
+    assert(shouldPersistVisiblePosition != null,
+        'ContentCallbacks.shouldPersistVisiblePosition is required');
+    assert(persistCurrentProgress != null,
+        'ContentCallbacks.persistCurrentProgress is required');
+  }
 }

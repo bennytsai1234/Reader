@@ -10,10 +10,11 @@ import 'package:legado_reader/core/di/injection.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/features/reader/engine/text_page.dart';
+import 'package:legado_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:legado_reader/features/reader/provider/reader_content_mixin.dart';
-import 'package:legado_reader/features/reader/provider/reader_progress_mixin.dart';
 import 'package:legado_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:legado_reader/features/reader/runtime/reader_navigation_controller.dart';
+import 'package:legado_reader/features/reader/runtime/reader_progress_coordinator.dart';
 import 'package:legado_reader/features/reader/runtime/reader_progress_store.dart';
 import 'package:legado_reader/features/reader/runtime/reader_restore_coordinator.dart';
 import 'package:legado_reader/features/reader/runtime/reader_scroll_visibility_coordinator.dart';
@@ -79,8 +80,9 @@ void _setupReaderRuntimeTestDi() {
 }
 
 class _ReaderRuntimeHarness extends ReaderProviderBase
-    with ReaderSettingsMixin, ReaderContentMixin, ReaderProgressMixin {
+    with ReaderSettingsMixin, ReaderContentMixin {
   final ReaderProgressStore _store = ReaderProgressStore();
+  late final ReaderProgressCoordinator _progressCoordinator;
   final Map<int, ReaderChapter> _runtimeChapters = {};
   final List<({
     int chapterIndex,
@@ -103,7 +105,24 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     required List<BookChapter> chapters,
   }) : super(book) {
     this.chapters = chapters;
-    // Wire content callbacks so jumpToPosition routes correctly
+    _progressCoordinator = ReaderProgressCoordinator(
+      book: () => this.book,
+      chapters: () => this.chapters,
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
+      store: _store,
+      shouldPersistVisiblePosition: () => persistVisiblePosition,
+      persistCurrentProgress: ({
+        required chapterIndex,
+        pageIndex,
+        required reason,
+      }) =>
+          persistCurrentProgress(
+            chapterIndex: chapterIndex,
+            pageIndex: pageIndex,
+            reason: reason,
+          ),
+    );
     contentCallbacks = ContentCallbacks(
       refreshChapterRuntime: (_) {},
       buildSlideRuntimePages: () => buildSlideRuntimePages() as List<dynamic>? ?? [],
@@ -230,6 +249,75 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
         pageIndex: pageIndex ?? currentPageIndex,
         reason: reason,
       ),
+    );
+  }
+
+  void jumpToPosition({
+    int? chapterIndex,
+    int? charOffset,
+    int? pageIndex,
+    bool isRestoringJump = false,
+  }) {
+    final targetChapter = chapterIndex ?? currentChapterIndex;
+    if (pageTurnMode == PageAnim.scroll) {
+      final pages = pagesForChapter(targetChapter);
+      final targetCharOffset = charOffset ?? 0;
+      final localOffset = ChapterPositionResolver.charOffsetToLocalOffset(
+          pages, targetCharOffset);
+      final alignment = ChapterPositionResolver.charOffsetToAlignment(
+          pages, targetCharOffset);
+      jumpToChapterLocalOffset(
+        chapterIndex: targetChapter,
+        localOffset: localOffset,
+        alignment: alignment,
+        reason: isRestoringJump
+            ? ReaderCommandReason.restore
+            : ReaderCommandReason.system,
+      );
+      notifyListeners();
+      return;
+    }
+    final pages = pagesForChapter(targetChapter);
+    var targetPage = 0;
+    if (charOffset != null && charOffset > 0) {
+      final localPageIndex = ChapterPositionResolver.findPageIndexByCharOffset(
+          pages, charOffset);
+      final globalIndex = slidePages.indexWhere(
+        (page) =>
+            page.chapterIndex == targetChapter && page.index == localPageIndex,
+      );
+      targetPage = globalIndex >= 0 ? globalIndex : 0;
+    } else if (pageIndex != null && slidePages.isNotEmpty) {
+      targetPage = pageIndex.clamp(0, slidePages.length - 1);
+    }
+    currentPageIndex = targetPage;
+    jumpToSlidePage(
+      targetPage,
+      reason: isRestoringJump
+          ? ReaderCommandReason.restore
+          : ReaderCommandReason.system,
+    );
+    notifyListeners();
+  }
+
+  void updateVisibleChapterPosition({
+    required int chapterIndex,
+    required double localOffset,
+    double alignment = 0.0,
+  }) {
+    _progressCoordinator.updateVisibleChapterPosition(
+      chapterIndex: chapterIndex,
+      localOffset: localOffset,
+      alignment: alignment,
+      pageTurnMode: pageTurnMode,
+      isLoading: isLoading,
+      currentPageIndex: currentPageIndex,
+      updateVisible: (ci, lo, al) {
+        visibleChapterIndex = ci;
+        visibleChapterLocalOffset = lo;
+        visibleChapterAlignment = al;
+      },
+      updateCurrentChapterIndex: (ci) => currentChapterIndex = ci,
     );
   }
 }

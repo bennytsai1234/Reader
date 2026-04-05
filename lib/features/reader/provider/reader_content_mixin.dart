@@ -513,17 +513,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     }
 
     notifyListeners();
-    final title = chapters.isNotEmpty ? chapters[currentChapterIndex].title : '';
-    unawaited(
-      bookDao.updateProgress(
-        book.bookUrl,
-        page.chapterIndex,
-        title,
-        ChapterPositionResolver.getCharOffsetForPage(
-          chapterPagesCache[page.chapterIndex] ?? const <TextPage>[],
-          page.index,
-        ),
-      ),
+    _contentCallbacks.persistCurrentProgress?.call(
+      chapterIndex: page.chapterIndex,
+      pageIndex: i,
+      reason: ReaderCommandReason.user,
     );
   }
 
@@ -599,13 +592,6 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     AppLog.d('Reader: Fetching content for chapter $i: ${chapter.title}');
     return _chapterContentLoader!.load(i, chapter);
   }
-
-  void jumpToPosition({
-    int? chapterIndex,
-    int? charOffset,
-    int? pageIndex,
-    bool isRestoringJump = false,
-  });
 
   void disposeContentManager() {
     _chapterReadySub?.cancel();
@@ -683,7 +669,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       _refreshSlidePages();
       if (!isDisposed) notifyListeners();
     } else if (pages != null && pages.isNotEmpty) {
-      notifyListeners();
+      if (!isDisposed) notifyListeners();
     }
     trace.stop();
     ReaderPerfTrace.mark(
