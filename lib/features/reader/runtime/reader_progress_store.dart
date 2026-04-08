@@ -54,7 +54,7 @@ class ReaderProgressStore {
       await write(chapterIndex, title, charOffset);
     } catch (e, stack) {
       AppLog.e(
-        'ReaderProgressStore: persist failed ch=$chapterIndex pos=$charOffset: $e',
+        'ReaderProgressStore: persist failed ch=$chapterIndex pos=$charOffset',
         error: e,
         stackTrace: stack,
       );
