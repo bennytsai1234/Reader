@@ -370,6 +370,7 @@ class ReadAloudController extends ChangeNotifier {
       _ttsEnd = -1;
       _lastHighlightStart = -1;
       _lastHighlightEnd = -1;
+      notifyController();
       final prefetched = _session?.prefetchedNext;
       await ReaderPerfTrace.measureAsync(
         'tts chapter handoff nextChapter',
