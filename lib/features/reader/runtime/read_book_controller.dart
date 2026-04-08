@@ -288,10 +288,18 @@ class ReadBookController extends ReaderProviderBase
         ttsStart < 0) {
       return null;
     }
-    final targetLocalOffset =
+    final rawLocalOffset =
         runtimeChapter != null
             ? runtimeChapter.resolveScrollAnchor(ttsStart).localOffset
             : ChapterPositionResolver.charOffsetToLocalOffset(pages, ttsStart);
+
+    // Clamp to chapter height to prevent out-of-bounds scroll targets
+    // (can exceed bounds when ttsStart is past the last text line, e.g. image-ending chapters)
+    final chapterHeight = runtimeChapter?.chapterHeight
+        ?? ChapterPositionResolver.chapterHeight(pages);
+    final targetLocalOffset =
+        chapterHeight > 0 ? rawLocalOffset.clamp(0.0, chapterHeight) : rawLocalOffset;
+
     return _ttsFollow.evaluate(
       chapterIndex: chapterIndex,
       visibleChapterIndex: visibleChapterIndex,
