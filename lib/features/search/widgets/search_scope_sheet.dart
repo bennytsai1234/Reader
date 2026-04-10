@@ -230,42 +230,43 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
         Expanded(
           child: _filteredSources.isEmpty
               ? const Center(child: Text('無匹配書源', style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  controller: scrollController,
-                  itemCount: _filteredSources.length,
-                  itemBuilder: (context, index) {
-                    final source = _filteredSources[index];
-                    final isSelected = _selectedSource?.bookSourceUrl == source.bookSourceUrl;
-                    return ListTile(
-                      leading: Radio<String>(
-                        value: source.bookSourceUrl,
-                        // ignore: deprecated_member_use
-                        groupValue: isSelected ? source.bookSourceUrl : null,
-                        // ignore: deprecated_member_use
-                        onChanged: (_) {
+              : RadioGroup<String>(
+                  groupValue: _selectedSource?.bookSourceUrl,
+                  onChanged: (String? value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedSource = _filteredSources.firstWhere((s) => s.bookSourceUrl == value);
+                      });
+                    }
+                  },
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: _filteredSources.length,
+                    itemBuilder: (context, index) {
+                      final source = _filteredSources[index];
+                      return ListTile(
+                        leading: Radio<String>(
+                          value: source.bookSourceUrl,
+                        ),
+                        title: Text(
+                          source.bookSourceName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          source.bookSourceUrl,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        onTap: () {
                           setState(() {
                             _selectedSource = source;
                           });
                         },
-                      ),
-                      title: Text(
-                        source.bookSourceName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        source.bookSourceUrl,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
-                      ),
-                      onTap: () {
-                        setState(() {
-                          _selectedSource = source;
-                        });
-                      },
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
         ),
       ],
