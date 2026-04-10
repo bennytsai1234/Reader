@@ -6,7 +6,7 @@ import 'package:legado_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:legado_reader/features/reader/reader_page.dart';
 import 'package:legado_reader/features/reader/reader_provider.dart';
 import 'package:legado_reader/features/search/search_page.dart';
-import 'package:legado_reader/features/explore/explore_page.dart';
+
 import 'package:legado_reader/features/settings/settings_page.dart';
 import 'package:legado_reader/features/reader/audio_player_page.dart';
 import 'package:file_picker/file_picker.dart';
@@ -100,16 +100,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                           MaterialPageRoute(builder: (_) => const SearchPage()),
                         ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.explore),
-                    onPressed:
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ExplorePage(),
-                          ),
-                        ),
-                  ),
+
                   PopupMenuButton<String>(
                     itemBuilder:
                         (context) => [
