@@ -68,9 +68,9 @@ class _ChangeSourceContent extends StatelessWidget {
   Widget _buildSourceList(BuildContext context, SearchProvider sp, BookDetailProvider dp) {
     // 展開聚合結果，並按響應時間與匹配度排序 (對標 Android 換源排序)
     final allSources = <SearchBook>[];
-    for (var agg in sp.results) {
-      if (agg.book.name == originalBook.name) {
-        allSources.add(agg.book);
+    for (var sb in sp.results) {
+      if (sb.name == originalBook.name) {
+        allSources.add(sb);
       }
     }
 

@@ -236,7 +236,16 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
                   itemBuilder: (context, index) {
                     final source = _filteredSources[index];
                     final isSelected = _selectedSource?.bookSourceUrl == source.bookSourceUrl;
-                    return RadioListTile<String>(
+                    return ListTile(
+                      leading: Radio<String>(
+                        value: source.bookSourceUrl,
+                        groupValue: isSelected ? source.bookSourceUrl : null,
+                        onChanged: (_) {
+                          setState(() {
+                            _selectedSource = source;
+                          });
+                        },
+                      ),
                       title: Text(
                         source.bookSourceName,
                         maxLines: 1,
@@ -248,9 +257,7 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
-                      value: source.bookSourceUrl,
-                      groupValue: isSelected ? source.bookSourceUrl : null,
-                      onChanged: (_) {
+                      onTap: () {
                         setState(() {
                           _selectedSource = source;
                         });

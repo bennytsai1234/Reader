@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:legado_reader/core/database/dao/book_source_dao.dart';
-import 'package:legado_reader/core/database/dao/search_history_dao.dart';
+import 'package:legado_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:legado_reader/core/models/book_source.dart';
+import 'package:legado_reader/core/models/search_keyword.dart';
 import 'package:legado_reader/features/search/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:legado_reader/core/database/app_database.dart';
 
 // ---------------------------------------------------------------------------
 // Fake DAOs
@@ -20,21 +20,49 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
   @override
   Future<List<BookSource>> getEnabled() async =>
       sources.where((s) => s.enabled).toList();
+
+  @override
+  Future<List<BookSource>> getAll() async => sources;
+
+  @override
+  Future<BookSource?> getByUrl(String url) async =>
+      sources.where((s) => s.bookSourceUrl == url).firstOrNull;
 }
 
-class _FakeHistoryDao extends Fake implements SearchHistoryDao {
-  final List<SearchHistoryRow> _rows = [];
+class _FakeKeywordDao extends Fake implements SearchKeywordDao {
+  final List<SearchKeyword> _keywords = [];
 
   @override
-  Future<List<SearchHistoryRow>> getRecent() async => _rows;
+  Future<List<SearchKeyword>> getByTime() async => _keywords;
 
   @override
-  Future<void> add(String keyword) async {
-    _rows.insert(0, SearchHistoryRow(id: _rows.length, keyword: keyword, searchTime: 0));
+  Future<List<SearchKeyword>> getAll() async => _keywords;
+
+  @override
+  Future<void> saveKeyword(String word) async {
+    final idx = _keywords.indexWhere((k) => k.word == word);
+    if (idx != -1) {
+      _keywords[idx].usage += 1;
+      _keywords[idx].lastUseTime = DateTime.now().millisecondsSinceEpoch;
+    } else {
+      _keywords.add(SearchKeyword(
+        word: word,
+        usage: 1,
+        lastUseTime: DateTime.now().millisecondsSinceEpoch,
+      ));
+    }
   }
 
   @override
-  Future<void> clearAll() async => _rows.clear();
+  Future<void> clearAll() async => _keywords.clear();
+
+  @override
+  Future<void> deleteByWord(String word) async =>
+      _keywords.removeWhere((k) => k.word == word);
+
+  @override
+  Future<SearchKeyword?> getByWord(String word) async =>
+      _keywords.where((k) => k.word == word).firstOrNull;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,16 +71,16 @@ class _FakeHistoryDao extends Fake implements SearchHistoryDao {
 
 void main() {
   late _FakeSourceDao fakeSourceDao;
-  late _FakeHistoryDao fakeHistoryDao;
+  late _FakeKeywordDao fakeKeywordDao;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     fakeSourceDao = _FakeSourceDao();
-    fakeHistoryDao = _FakeHistoryDao();
+    fakeKeywordDao = _FakeKeywordDao();
 
     final getIt = GetIt.instance;
     getIt.registerLazySingleton<BookSourceDao>(() => fakeSourceDao);
-    getIt.registerLazySingleton<SearchHistoryDao>(() => fakeHistoryDao);
+    getIt.registerLazySingleton<SearchKeywordDao>(() => fakeKeywordDao);
   });
 
   tearDown(() async => GetIt.instance.reset());
@@ -64,9 +92,9 @@ void main() {
   }
 
   group('SearchProvider - 書源群組', () {
-    test('無書源時 sourceGroups 只有「全部」', () async {
+    test('無書源時 sourceGroups 為空', () async {
       final p = await makeProvider();
-      expect(p.sourceGroups, ['全部']);
+      expect(p.sourceGroups, isEmpty);
     });
 
     test('有群組的書源會加入 sourceGroups', () async {
@@ -75,16 +103,12 @@ void main() {
         BookSource(bookSourceUrl: 'http://b.com', bookSourceName: 'B', bookSourceGroup: '都市'),
       ];
       final p = await makeProvider();
-      expect(p.sourceGroups, containsAll(['全部', '玄幻', '都市']));
+      expect(p.sourceGroups, containsAll(['玄幻', '都市']));
     });
 
-    test('setGroup 更新 selectedGroup', () async {
-      fakeSourceDao.sources = [
-        BookSource(bookSourceUrl: 'http://a.com', bookSourceName: 'A', bookSourceGroup: '玄幻'),
-      ];
+    test('searchScope 初始為全部', () async {
       final p = await makeProvider();
-      p.setGroup('玄幻');
-      expect(p.selectedGroup, '玄幻');
+      expect(p.searchScope.isAll, isTrue);
     });
   });
 
@@ -146,6 +170,19 @@ void main() {
       await p.search('閱讀');
       await p.clearHistory();
       expect(p.history, isEmpty);
+    });
+
+    test('deleteHistoryKeyword 刪除單條記錄', () async {
+      fakeSourceDao.sources = [];
+      final p = await makeProvider();
+      await p.search('閱讀');
+      await p.search('搜尋');
+      expect(p.history.length, 2);
+
+      final keyword = p.historyKeywords.firstWhere((k) => k.word == '閱讀');
+      await p.deleteHistoryKeyword(keyword);
+      expect(p.history, isNot(contains('閱讀')));
+      expect(p.history, contains('搜尋'));
     });
   });
 

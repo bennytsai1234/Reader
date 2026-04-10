@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'search_provider.dart';
+import 'models/search_scope.dart';
 import 'package:legado_reader/core/models/book_source.dart';
+import 'package:legado_reader/core/models/search_book.dart';
 import 'widgets/search_app_bar.dart';
 import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
