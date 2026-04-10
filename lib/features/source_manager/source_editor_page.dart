@@ -3,8 +3,11 @@ import 'package:legado_reader/core/models/book_source.dart';
 import 'source_debug_page.dart';
 import 'views/source_edit_basic.dart';
 import 'views/source_edit_search.dart';
+import 'views/source_edit_explore.dart';
+import 'views/source_edit_book_info.dart';
 import 'views/source_edit_toc.dart';
 import 'views/source_edit_content.dart';
+import 'views/source_edit_review.dart';
 import 'package:legado_reader/core/services/book_source_service.dart';
 
 class SourceEditorPage extends StatefulWidget {
@@ -24,7 +27,7 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
   void initState() {
     super.initState();
     _editingSource = widget.source ?? BookSource(bookSourceUrl: '');
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _initControllers();
   }
 
@@ -38,7 +41,7 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
     _controllers['loginUrl'] = TextEditingController(text: _editingSource.loginUrl);
     _controllers['header'] = TextEditingController(text: _editingSource.header);
 
-    // 搜尋規則 (原 Android ruleSearch)
+    // 搜尋規則
     _controllers['searchUrl'] = TextEditingController(text: _editingSource.searchUrl);
     _controllers['ruleSearchBookList'] = TextEditingController(text: _editingSource.ruleSearch?.bookList);
     _controllers['ruleSearchName'] = TextEditingController(text: _editingSource.ruleSearch?.name);
@@ -48,6 +51,29 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
     _controllers['ruleSearchLastChapter'] = TextEditingController(text: _editingSource.ruleSearch?.lastChapter);
     _controllers['ruleSearchCoverUrl'] = TextEditingController(text: _editingSource.ruleSearch?.coverUrl);
     _controllers['ruleSearchNoteUrl'] = TextEditingController(text: _editingSource.ruleSearch?.bookUrl);
+
+    // 發現規則
+    _controllers['exploreUrl'] = TextEditingController(text: _editingSource.exploreUrl);
+    _controllers['ruleExploreBookList'] = TextEditingController(text: _editingSource.ruleExplore?.bookList);
+    _controllers['ruleExploreName'] = TextEditingController(text: _editingSource.ruleExplore?.name);
+    _controllers['ruleExploreAuthor'] = TextEditingController(text: _editingSource.ruleExplore?.author);
+    _controllers['ruleExploreKind'] = TextEditingController(text: _editingSource.ruleExplore?.kind);
+    _controllers['ruleExploreWordCount'] = TextEditingController(text: _editingSource.ruleExplore?.wordCount);
+    _controllers['ruleExploreLastChapter'] = TextEditingController(text: _editingSource.ruleExplore?.lastChapter);
+    _controllers['ruleExploreCoverUrl'] = TextEditingController(text: _editingSource.ruleExplore?.coverUrl);
+    _controllers['ruleExploreBookUrl'] = TextEditingController(text: _editingSource.ruleExplore?.bookUrl);
+
+    // 詳情規則
+    _controllers['ruleBookInfoInit'] = TextEditingController(text: _editingSource.ruleBookInfo?.init);
+    _controllers['ruleBookInfoName'] = TextEditingController(text: _editingSource.ruleBookInfo?.name);
+    _controllers['ruleBookInfoAuthor'] = TextEditingController(text: _editingSource.ruleBookInfo?.author);
+    _controllers['ruleBookInfoIntro'] = TextEditingController(text: _editingSource.ruleBookInfo?.intro);
+    _controllers['ruleBookInfoKind'] = TextEditingController(text: _editingSource.ruleBookInfo?.kind);
+    _controllers['ruleBookInfoLastChapter'] = TextEditingController(text: _editingSource.ruleBookInfo?.lastChapter);
+    _controllers['ruleBookInfoUpdateTime'] = TextEditingController(text: _editingSource.ruleBookInfo?.updateTime);
+    _controllers['ruleBookInfoCoverUrl'] = TextEditingController(text: _editingSource.ruleBookInfo?.coverUrl);
+    _controllers['ruleBookInfoTocUrl'] = TextEditingController(text: _editingSource.ruleBookInfo?.tocUrl);
+    _controllers['ruleBookInfoWordCount'] = TextEditingController(text: _editingSource.ruleBookInfo?.wordCount);
 
     // 目錄規則
     _controllers['ruleTocChapterList'] = TextEditingController(text: _editingSource.ruleToc?.chapterList);
@@ -59,6 +85,12 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
     _controllers['ruleContentContent'] = TextEditingController(text: _editingSource.ruleContent?.content);
     _controllers['ruleContentNextPage'] = TextEditingController(text: _editingSource.ruleContent?.nextPage);
     _controllers['ruleContentReplace'] = TextEditingController(text: _editingSource.ruleContent?.replace);
+
+    // 評論規則
+    _controllers['ruleReviewUrl'] = TextEditingController(text: _editingSource.ruleReview?.reviewUrl);
+    _controllers['ruleReviewAvatar'] = TextEditingController(text: _editingSource.ruleReview?.avatarRule);
+    _controllers['ruleReviewContent'] = TextEditingController(text: _editingSource.ruleReview?.contentRule);
+    _controllers['ruleReviewPostTime'] = TextEditingController(text: _editingSource.ruleReview?.postTimeRule);
   }
 
   void _syncSource() {
@@ -70,8 +102,62 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
     _editingSource.loginUrl = _controllers['loginUrl']!.text;
     _editingSource.header = _controllers['header']!.text;
     _editingSource.searchUrl = _controllers['searchUrl']!.text;
+    _editingSource.exploreUrl = _controllers['exploreUrl']!.text;
 
-    // 這裡應根據控制器回填 SearchRule, TocRule 等對象 (省略詳細回填實作以節省空間)
+    _editingSource.ruleSearch = SearchRule(
+      bookList: _controllers['ruleSearchBookList']!.text._emptyToNull,
+      name: _controllers['ruleSearchName']!.text._emptyToNull,
+      author: _controllers['ruleSearchAuthor']!.text._emptyToNull,
+      kind: _controllers['ruleSearchKind']!.text._emptyToNull,
+      wordCount: _controllers['ruleSearchWordCount']!.text._emptyToNull,
+      lastChapter: _controllers['ruleSearchLastChapter']!.text._emptyToNull,
+      coverUrl: _controllers['ruleSearchCoverUrl']!.text._emptyToNull,
+      bookUrl: _controllers['ruleSearchNoteUrl']!.text._emptyToNull,
+    );
+
+    _editingSource.ruleExplore = ExploreRule(
+      bookList: _controllers['ruleExploreBookList']!.text._emptyToNull,
+      name: _controllers['ruleExploreName']!.text._emptyToNull,
+      author: _controllers['ruleExploreAuthor']!.text._emptyToNull,
+      kind: _controllers['ruleExploreKind']!.text._emptyToNull,
+      wordCount: _controllers['ruleExploreWordCount']!.text._emptyToNull,
+      lastChapter: _controllers['ruleExploreLastChapter']!.text._emptyToNull,
+      coverUrl: _controllers['ruleExploreCoverUrl']!.text._emptyToNull,
+      bookUrl: _controllers['ruleExploreBookUrl']!.text._emptyToNull,
+    );
+
+    _editingSource.ruleBookInfo = BookInfoRule(
+      init: _controllers['ruleBookInfoInit']!.text._emptyToNull,
+      name: _controllers['ruleBookInfoName']!.text._emptyToNull,
+      author: _controllers['ruleBookInfoAuthor']!.text._emptyToNull,
+      intro: _controllers['ruleBookInfoIntro']!.text._emptyToNull,
+      kind: _controllers['ruleBookInfoKind']!.text._emptyToNull,
+      lastChapter: _controllers['ruleBookInfoLastChapter']!.text._emptyToNull,
+      updateTime: _controllers['ruleBookInfoUpdateTime']!.text._emptyToNull,
+      coverUrl: _controllers['ruleBookInfoCoverUrl']!.text._emptyToNull,
+      tocUrl: _controllers['ruleBookInfoTocUrl']!.text._emptyToNull,
+      wordCount: _controllers['ruleBookInfoWordCount']!.text._emptyToNull,
+    );
+
+    _editingSource.ruleToc = TocRule(
+      chapterList: _controllers['ruleTocChapterList']!.text._emptyToNull,
+      chapterName: _controllers['ruleTocChapterName']!.text._emptyToNull,
+      chapterUrl: _controllers['ruleTocChapterUrl']!.text._emptyToNull,
+      nextTocUrl: _controllers['ruleTocNextPage']!.text._emptyToNull,
+    );
+
+    _editingSource.ruleContent = ContentRule(
+      content: _controllers['ruleContentContent']!.text._emptyToNull,
+      nextContentUrl: _controllers['ruleContentNextPage']!.text._emptyToNull,
+      replaceRegex: _controllers['ruleContentReplace']!.text._emptyToNull,
+    );
+
+    _editingSource.ruleReview = ReviewRule(
+      reviewUrl: _controllers['ruleReviewUrl']!.text._emptyToNull,
+      avatarRule: _controllers['ruleReviewAvatar']!.text._emptyToNull,
+      contentRule: _controllers['ruleReviewContent']!.text._emptyToNull,
+      postTimeRule: _controllers['ruleReviewPostTime']!.text._emptyToNull,
+    );
   }
 
   Future<void> _save() async {
@@ -95,8 +181,11 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
           tabs: const [
             Tab(text: '基礎'),
             Tab(text: '搜尋'),
+            Tab(text: '發現'),
+            Tab(text: '詳情'),
             Tab(text: '目錄'),
             Tab(text: '正文'),
+            Tab(text: '評論'),
           ],
         ),
       ),
@@ -105,8 +194,11 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
         children: [
           SourceEditBasic(source: _editingSource, controllers: _controllers),
           SourceEditSearch(controllers: _controllers),
+          SourceEditExplore(controllers: _controllers),
+          SourceEditBookInfo(controllers: _controllers),
           SourceEditToc(controllers: _controllers),
           SourceEditContent(controllers: _controllers),
+          SourceEditReview(controllers: _controllers),
         ],
       ),
     );
@@ -120,3 +212,6 @@ class _SourceEditorPageState extends State<SourceEditorPage> with SingleTickerPr
   }
 }
 
+extension on String {
+  String? get _emptyToNull => isEmpty ? null : this;
+}

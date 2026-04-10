@@ -9,6 +9,7 @@ import 'package:legado_reader/core/storage/app_storage_paths.dart';
 import 'package:legado_reader/core/services/network_service.dart';
 import 'package:legado_reader/core/services/check_source_service.dart';
 import 'package:share_plus/share_plus.dart';
+import 'widgets/import_preview_dialog.dart';
 
 class SourceManagerProvider with ChangeNotifier {
   final BookSourceDao _dao = getIt<BookSourceDao>();
@@ -17,12 +18,24 @@ class SourceManagerProvider with ChangeNotifier {
   List<BookSourcePart> _sources = [];
 
   String filterGroup = '全部';
+  String _searchQuery = '';
   int sortMode = 0;
   bool sortDesc = false;
   bool groupByDomain = false;
 
   List<BookSourcePart> get sources {
     var list = List<BookSourcePart>.from(_sources);
+
+    // 全文搜尋
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((s) =>
+        s.bookSourceName.toLowerCase().contains(q) ||
+        s.bookSourceUrl.toLowerCase().contains(q) ||
+        (s.bookSourceComment?.toLowerCase().contains(q) ?? false)
+      ).toList();
+    }
+
     if (filterGroup == '已啟用') {
       list = list.where((s) => s.enabled).toList();
     } else if (filterGroup == '已禁用') {
@@ -127,6 +140,11 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
   void toggleGroupByDomain() {
     groupByDomain = !groupByDomain;
     notifyListeners();
@@ -173,11 +191,72 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   Future<void> deleteSelected() async {
-    for (var url in _selectedUrls) {
-      await _dao.deleteByUrl(url);
+    if (_selectedUrls.isNotEmpty) {
+      await _dao.deleteByUrls(_selectedUrls.toList());
     }
     _isBatchMode = false;
     _selectedUrls.clear();
+    await loadSources();
+  }
+
+  Future<void> batchSetEnabled(bool enabled) async {
+    for (final url in _selectedUrls) {
+      final s = await _dao.getByUrl(url);
+      if (s != null) {
+        s.enabled = enabled;
+        await _dao.upsert(s);
+      }
+    }
+    _isBatchMode = false;
+    _selectedUrls.clear();
+    await loadSources();
+  }
+
+  Future<void> moveSelectedToTop() async {
+    if (_selectedUrls.isEmpty) return;
+    final all = await _dao.getAll();
+    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+    final selected = all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
+    final rest = all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
+    final reordered = [...selected, ...rest];
+    await _dao.updateCustomOrder(reordered);
+    _isBatchMode = false;
+    _selectedUrls.clear();
+    await loadSources();
+  }
+
+  Future<void> moveSelectedToBottom() async {
+    if (_selectedUrls.isEmpty) return;
+    final all = await _dao.getAll();
+    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+    final selected = all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
+    final rest = all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
+    final reordered = [...rest, ...selected];
+    await _dao.updateCustomOrder(reordered);
+    _isBatchMode = false;
+    _selectedUrls.clear();
+    await loadSources();
+  }
+
+  Future<void> moveToTop(String url) async {
+    final all = await _dao.getAll();
+    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+    final idx = all.indexWhere((s) => s.bookSourceUrl == url);
+    if (idx <= 0) return;
+    final item = all.removeAt(idx);
+    all.insert(0, item);
+    await _dao.updateCustomOrder(all);
+    await loadSources();
+  }
+
+  Future<void> moveToBottom(String url) async {
+    final all = await _dao.getAll();
+    all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+    final idx = all.indexWhere((s) => s.bookSourceUrl == url);
+    if (idx < 0 || idx == all.length - 1) return;
+    final item = all.removeAt(idx);
+    all.add(item);
+    await _dao.updateCustomOrder(all);
     await loadSources();
   }
 
@@ -307,8 +386,21 @@ class SourceManagerProvider with ChangeNotifier {
     await loadSources();
   }
 
+  static const _invalidTags = ['搜尋失效', '目錄失效', '正文失效', '校驗超時', '網站失效'];
+
   Future<void> clearInvalidSources() async {
-    // 實作清理無效書源邏輯
+    final all = await _dao.getAll();
+    final urlsToDelete = <String>[];
+    for (final s in all) {
+      final group = s.bookSourceGroup ?? '';
+      if (_invalidTags.any((tag) => group.contains(tag))) {
+        urlsToDelete.add(s.bookSourceUrl);
+      }
+    }
+    if (urlsToDelete.isNotEmpty) {
+      await _dao.deleteByUrls(urlsToDelete);
+      await loadSources();
+    }
   }
 
   Future<void> checkAllSources() async {
@@ -317,22 +409,64 @@ class SourceManagerProvider with ChangeNotifier {
     await loadSources();
   }
 
+  /// 解析 JSON 字串為書源列表 (不匯入)
+  List<BookSource> parseSources(String jsonStr) {
+    final decoded = jsonDecode(jsonStr);
+    final List<dynamic> list = decoded is List ? decoded : [decoded];
+    final result = <BookSource>[];
+    for (final e in list) {
+      if (e is! Map<String, dynamic>) continue;
+      final source = BookSource.fromJson(e);
+      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) continue;
+      result.add(source);
+    }
+    return result;
+  }
+
+  /// 預覽匯入：分類為新增、更新、無變化
+  Future<ImportPreviewResult> previewImport(List<BookSource> incoming) async {
+    final newSources = <BookSource>[];
+    final updatedSources = <BookSource>[];
+    final unchangedSources = <BookSource>[];
+
+    for (final s in incoming) {
+      final existing = await _dao.getByUrl(s.bookSourceUrl);
+      if (existing == null) {
+        newSources.add(s);
+      } else if (existing.lastUpdateTime != s.lastUpdateTime) {
+        updatedSources.add(s);
+      } else {
+        unchangedSources.add(s);
+      }
+    }
+
+    return ImportPreviewResult(
+      newSources: newSources,
+      updatedSources: updatedSources,
+      unchangedSources: unchangedSources,
+    );
+  }
+
+  /// 直接匯入書源列表（跳過預覽）
+  Future<int> importSources(List<BookSource> sources) async {
+    if (sources.isEmpty) return 0;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _dao.insertOrUpdateAll(sources);
+      await loadSources();
+      return sources.length;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<int> importFromJson(String jsonStr) async {
     _isLoading = true;
     notifyListeners();
     try {
-      final decoded = jsonDecode(jsonStr);
-      final List<dynamic> list = decoded is List ? decoded : [decoded];
-      final sources = <BookSource>[];
-      for (final e in list) {
-        if (e is! Map<String, dynamic>) continue;
-        final source = BookSource.fromJson(e);
-        // 驗證必要欄位
-        if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
-          continue;
-        }
-        sources.add(source);
-      }
+      final sources = parseSources(jsonStr);
       if (sources.isEmpty) return 0;
       await _dao.insertOrUpdateAll(sources);
       await loadSources();

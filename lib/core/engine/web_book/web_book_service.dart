@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:legado_reader/core/exception/app_exception.dart';
 import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/models/search_book.dart';
@@ -9,9 +10,7 @@ import 'package:legado_reader/core/engine/web_book/book_list_parser.dart';
 import 'package:legado_reader/core/engine/web_book/book_info_parser.dart';
 import 'package:legado_reader/core/engine/web_book/chapter_list_parser.dart';
 import 'package:legado_reader/core/engine/web_book/content_parser.dart';
-import 'package:legado_reader/core/exception/app_exception.dart';
 import 'package:legado_reader/core/services/app_log_service.dart';
-import 'package:legado_reader/core/services/book_source_service.dart';
 import 'package:legado_reader/core/network/str_response.dart';
 
 /// WebBook - 書源抓取業務調度 (對標 Android model/webBook/WebBook.kt)
@@ -39,7 +38,6 @@ class WebBook {
       throw SourceException('搜尋 URL 不能為空', sourceUrl: source.bookSourceUrl);
     }
 
-    _checkSourceAccess(source);
 
     final analyzeUrl = AnalyzeUrl(
       searchUrl,
@@ -71,7 +69,6 @@ class WebBook {
     String url, {
     int? page = 1,
   }) async {
-    _checkSourceAccess(source);
 
     final analyzeUrl = AnalyzeUrl(url, source: source, page: page);
     var res = await analyzeUrl.getStrResponse();
@@ -92,7 +89,6 @@ class WebBook {
     Book book, {
     bool canReName = true,
   }) async {
-    _checkSourceAccess(source);
 
     if (book.infoHtml != null && book.infoHtml!.isNotEmpty) {
       return BookInfoParser.parse(
@@ -122,7 +118,6 @@ class WebBook {
     BookSource source,
     Book book,
   ) async {
-    _checkSourceAccess(source);
 
     final rule = AnalyzeRule(source: source, ruleData: book);
     await rule.preUpdateToc();
@@ -167,7 +162,6 @@ class WebBook {
     BookChapter chapter, {
     String? nextChapterUrl,
   }) async {
-    _checkSourceAccess(source);
 
     final contentParts = <String>[];
     final visitedUrls = <String>{};
@@ -198,12 +192,6 @@ class WebBook {
     return contentParts.join('\n');
   }
 
-  /// 檢查書源是否允許訪問 (18+ 過濾)
-  static void _checkSourceAccess(BookSource source) {
-    if (BookSourceService.is18Plus(source.bookSourceUrl)) {
-      throw AdultContentException('該網址為 18+ 網站，禁止訪問。');
-    }
-  }
 
   /// 執行登入檢查 JS Hook (統一抽取)
   static StrResponse _runLoginCheckJs(BookSource source, StrResponse res, {dynamic ruleData}) {

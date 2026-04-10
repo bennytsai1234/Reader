@@ -9,6 +9,7 @@ import 'qr_scan_page.dart';
 import 'explore_sources_page.dart';
 import 'source_group_manage_page.dart';
 import 'package:legado_reader/core/models/book_source_part.dart';
+import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
 import 'widgets/source_filter_bar.dart';
 import 'widgets/source_batch_toolbar.dart';
@@ -22,6 +23,14 @@ class SourceManagerPage extends StatefulWidget {
 }
 
 class _SourceManagerPageState extends State<SourceManagerPage> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final nav = Navigator.of(context);
@@ -46,22 +55,44 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
         ),
         body: Column(children: [
           if (provider.checkService.isChecking) SourceCheckStatusBar(provider: provider, onTap: () => SourceManagerDialogs.showCheckLog(context, provider)),
+          if (!provider.isBatchMode) Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: '搜尋書源名稱、網址',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchController.clear(); provider.setSearchQuery(''); })
+                    : null,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onChanged: provider.setSearchQuery,
+            ),
+          ),
           if (!provider.isBatchMode) SourceFilterBar(provider: provider),
           Expanded(child: _buildMainContent(provider)),
         ]),
-        bottomNavigationBar: provider.isBatchMode ? SourceBatchToolbar(provider: provider, onGroup: () => SourceManagerDialogs.showBatchGroup(context, provider), 
-          onExport: () async { 
+        bottomNavigationBar: provider.isBatchMode ? SourceBatchToolbar(provider: provider, onGroup: () => SourceManagerDialogs.showBatchGroup(context, provider),
+          onExport: () async {
             final messenger = ScaffoldMessenger.of(context);
-            await provider.exportSelected(); 
-            if (!mounted) return; 
-            messenger.showSnackBar(const SnackBar(content: Text('已複製至剪貼簿'))); 
-          }, 
-          onDelete: () async { 
+            await provider.exportSelected();
+            if (!mounted) return;
+            messenger.showSnackBar(const SnackBar(content: Text('已複製至剪貼簿')));
+          },
+          onDelete: () async {
             final messenger = ScaffoldMessenger.of(context);
-            await provider.deleteSelected(); 
-            if (!mounted) return; 
-            messenger.showSnackBar(const SnackBar(content: Text('已刪除選定書源'))); 
-          }) : null,
+            await provider.deleteSelected();
+            if (!mounted) return;
+            messenger.showSnackBar(const SnackBar(content: Text('已刪除選定書源')));
+          },
+          onEnable: () => provider.batchSetEnabled(true),
+          onDisable: () => provider.batchSetEnabled(false),
+          onMoveToTop: () => provider.moveSelectedToTop(),
+          onMoveToBottom: () => provider.moveSelectedToBottom(),
+        ) : null,
       );
     });
   }
@@ -164,8 +195,39 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
           nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: full))); 
         }
       }),
+      ListTile(leading: const Icon(Icons.vertical_align_top), title: const Text('移至頂部'), onTap: () async {
+        Navigator.pop(ctx);
+        await p.moveToTop(s.bookSourceUrl);
+      }),
+      ListTile(leading: const Icon(Icons.vertical_align_bottom), title: const Text('移至底部'), onTap: () async {
+        Navigator.pop(ctx);
+        await p.moveToBottom(s.bookSourceUrl);
+      }),
       ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text('刪除書源', style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(ctx); p.deleteSource(s); }),
     ])));
+  }
+
+  Future<void> _importWithPreview(BuildContext context, String jsonStr) async {
+    final p = context.read<SourceManagerProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final parsed = p.parseSources(jsonStr);
+      if (parsed.isEmpty) {
+        messenger.showSnackBar(const SnackBar(content: Text('未解析到有效書源')));
+        return;
+      }
+      final preview = await p.previewImport(parsed);
+      if (!context.mounted) return;
+      final confirmed = await showImportPreviewDialog(context, preview);
+      if (confirmed != null && confirmed.isNotEmpty) {
+        final count = await p.importSources(confirmed);
+        if (context.mounted) {
+          messenger.showSnackBar(SnackBar(content: Text('成功匯入 $count 個書源')));
+        }
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+    }
   }
 
   void _showImportDialog(BuildContext context, bool isUrl) {
@@ -175,11 +237,13 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
       ElevatedButton(onPressed: () async {
         final p = context.read<SourceManagerProvider>();
         final input = ctrl.text.trim();
-        if (input.isNotEmpty) {
-          isUrl ? await p.importFromUrl(input) : await p.importFromText(input);
-          if (ctx.mounted) Navigator.pop(ctx);
+        if (input.isEmpty) { Navigator.pop(ctx); return; }
+        Navigator.pop(ctx);
+        if (isUrl) {
+          await p.importFromUrl(input);
         } else {
-          Navigator.pop(ctx);
+          if (!context.mounted) return;
+          await _importWithPreview(context, input);
         }
       }, child: const Text('匯入')),
     ]));
@@ -194,20 +258,19 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
   }
 
   Future<void> _importFromFile(BuildContext context) async {
-    final p = context.read<SourceManagerProvider>();
     try {
       final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json', 'txt', 'legado']);
-      if (res?.files.single.path != null) {
-        await p.importFromText(await File(res!.files.single.path!).readAsString());
+      if (res?.files.single.path != null && context.mounted) {
+        final content = await File(res!.files.single.path!).readAsString();
+        if (context.mounted) await _importWithPreview(context, content);
       }
     } catch (_) {}
   }
 
   Future<void> _importFromClipboard(BuildContext context) async {
-    final p = context.read<SourceManagerProvider>();
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null) {
-      await p.importFromText(data!.text!);
+    if (data?.text != null && context.mounted) {
+      await _importWithPreview(context, data!.text!);
     }
   }
 }

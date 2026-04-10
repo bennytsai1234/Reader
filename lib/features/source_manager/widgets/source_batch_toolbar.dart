@@ -6,6 +6,10 @@ class SourceBatchToolbar extends StatelessWidget {
   final VoidCallback onGroup;
   final VoidCallback onExport;
   final VoidCallback onDelete;
+  final VoidCallback? onEnable;
+  final VoidCallback? onDisable;
+  final VoidCallback? onMoveToTop;
+  final VoidCallback? onMoveToBottom;
 
   const SourceBatchToolbar({
     super.key,
@@ -13,6 +17,10 @@ class SourceBatchToolbar extends StatelessWidget {
     required this.onGroup,
     required this.onExport,
     required this.onDelete,
+    this.onEnable,
+    this.onDisable,
+    this.onMoveToTop,
+    this.onMoveToBottom,
   });
 
   @override
@@ -23,9 +31,10 @@ class SourceBatchToolbar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
+          _buildItem(context, Icons.toggle_on_outlined, '啟用', () => onEnable?.call()),
+          _buildItem(context, Icons.toggle_off_outlined, '禁用', () => onDisable?.call()),
+          _buildItem(context, Icons.vertical_align_top, '置頂', () => onMoveToTop?.call()),
           _buildItem(context, Icons.drive_file_move_outlined, '移動', onGroup),
-          _buildItem(context, Icons.share_outlined, '分享', () => provider.shareSelectedSources()),
-          _buildItem(context, Icons.copy_all_outlined, '複製', onExport),
           _buildItem(context, Icons.playlist_add_check, '校驗', () => provider.checkSelectedSources()),
           _buildItem(context, Icons.delete_outline, '刪除', onDelete, isDanger: true),
         ],

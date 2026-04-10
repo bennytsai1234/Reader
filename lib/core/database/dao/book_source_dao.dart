@@ -30,6 +30,9 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase> with _$BookSourceDaoMi
   Future<void> deleteByUrl(String url) =>
       (delete(bookSources)..where((t) => t.bookSourceUrl.equals(url))).go();
 
+  Future<void> deleteByUrls(List<String> urls) =>
+      (delete(bookSources)..where((t) => t.bookSourceUrl.isIn(urls))).go();
+
   Future<List<BookSource>> getAllPart() => getAll();
   Future<List<BookSource>> getAllFull() => getAll();
 

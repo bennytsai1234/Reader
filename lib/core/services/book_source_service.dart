@@ -45,14 +45,6 @@ class BookSourceService {
     );
   }
 
-  /// 檢查是否為 18+ 網站
-  static bool is18Plus(String? url) {
-    if (url == null) return false;
-    // 這裡暫時實作簡單判斷，完整功能需讀取 18PlusList.txt
-    final lowerUrl = url.toLowerCase();
-    return lowerUrl.contains('18plus') || lowerUrl.contains('nsfw') || lowerUrl.contains('sex');
-  }
-
   Future<List<Book>> importBookshelf(String url) async {
     // 實作從網址匯入書架邏輯 (例如：backup url or legacy share url)
     return [];
