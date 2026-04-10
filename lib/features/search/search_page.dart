@@ -5,7 +5,10 @@ import 'package:legado_reader/core/models/book_source.dart';
 import 'widgets/search_app_bar.dart';
 import 'widgets/search_history_view.dart';
 import 'widgets/search_result_item.dart';
+import 'widgets/search_scope_sheet.dart';
 
+/// SearchPage - 搜尋頁面
+/// (對標 Legado SearchActivity)
 class SearchPage extends StatelessWidget {
   final String? initialQuery;
   final BookSource? initialSource;
@@ -43,7 +46,7 @@ class _SearchPageContentState extends State<_SearchPageContent> {
         final provider = context.read<SearchProvider>();
         if (widget.initialSource != null) {
           provider.searchInSource(widget.initialSource!, _controller.text);
-        } else {
+        } else if (_controller.text.isNotEmpty) {
           provider.search(_controller.text);
         }
       });
@@ -62,20 +65,47 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     }
   }
 
+  void _openScopeSheet() {
+    final provider = context.read<SearchProvider>();
+    SearchScopeSheet.show(
+      context,
+      currentScope: provider.searchScope,
+      groups: provider.sourceGroups,
+      onScopeChanged: (newScope) {
+        provider.updateSearchScope(newScope);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SearchProvider>(
       builder: (context, provider, child) {
         return Scaffold(
-          appBar: SearchAppBar(controller: _controller, provider: provider, onSearch: _onSearch),
+          appBar: SearchAppBar(
+            controller: _controller,
+            provider: provider,
+            onSearch: _onSearch,
+            onScopePressed: _openScopeSheet,
+          ),
           body: Column(
             children: [
+              // 搜尋進度
               if (provider.isSearching) ...[
-                LinearProgressIndicator(value: provider.progress, backgroundColor: Colors.transparent, valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue)),
+                LinearProgressIndicator(
+                  value: provider.progress,
+                  backgroundColor: Colors.transparent,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
                 _buildCurrentSourcePanel(provider),
               ],
-              if (!provider.isSearching && provider.failedSources > 0) _buildFailedSourcesPanel(provider),
-              if (provider.precisionSearch || provider.selectedGroup != '全部') _buildFilterStatusPanel(provider),
+              // 失敗書源提示
+              if (!provider.isSearching && provider.failedSources > 0)
+                _buildFailedSourcesPanel(provider),
+              // 篩選狀態提示
+              if (provider.precisionSearch || !provider.searchScope.isAll)
+                _buildFilterStatusPanel(provider),
+              // 主體內容
               Expanded(
                 child: provider.results.isEmpty && !provider.isSearching
                     ? _buildEmptyOrHistory(provider)
@@ -83,10 +113,16 @@ class _SearchPageContentState extends State<_SearchPageContent> {
               ),
             ],
           ),
-          floatingActionButton: provider.lastSearchKey.isNotEmpty ? FloatingActionButton(
-            onPressed: () => provider.isSearching ? provider.stopSearch() : provider.search(provider.lastSearchKey),
-            child: Icon(provider.isSearching ? Icons.stop : Icons.refresh),
-          ) : null,
+          // FAB 開始/停止搜尋 (對標 Legado fb_start_stop)
+          floatingActionButton: provider.lastSearchKey.isNotEmpty
+              ? FloatingActionButton(
+                  mini: true,
+                  onPressed: () => provider.isSearching
+                      ? provider.stopSearch()
+                      : provider.search(provider.lastSearchKey),
+                  child: Icon(provider.isSearching ? Icons.stop : Icons.refresh),
+                )
+              : null,
         );
       },
     );
@@ -101,9 +137,19 @@ class _SearchPageContentState extends State<_SearchPageContent> {
             const Text('找不到相關書籍', style: TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 16),
             if (provider.precisionSearch)
-              ElevatedButton(onPressed: () => provider.togglePrecisionSearch(), child: const Text('關閉精準搜尋並重試')),
-            if (provider.selectedGroup != '全部')
-              TextButton(onPressed: () => provider.setGroup('全部'), child: const Text('切換至全部分組')),
+              ElevatedButton(
+                onPressed: () => provider.togglePrecisionSearch(),
+                child: const Text('關閉精準搜尋並重試'),
+              ),
+            if (!provider.searchScope.isAll) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => provider.updateSearchScope(
+                  provider.searchScope..updateAll(),
+                ),
+                child: Text('「${provider.searchScope.display}」結果為空，切換至全部書源'),
+              ),
+            ],
           ],
         ),
       );
@@ -129,7 +175,12 @@ class _SearchPageContentState extends State<_SearchPageContent> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         width: double.infinity,
         color: Colors.blue.withValues(alpha: 0.05),
-        child: Text('正在搜尋: ${p.currentSource}', style: const TextStyle(fontSize: 11, color: Colors.blueGrey), maxLines: 1, overflow: TextOverflow.ellipsis),
+        child: Text(
+          '正在搜尋: ${p.currentSource}  (${p.progress * 100 ~/ 1}%)',
+          style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       );
 
   Widget _buildFilterStatusPanel(SearchProvider p) => Container(
@@ -138,17 +189,23 @@ class _SearchPageContentState extends State<_SearchPageContent> {
         child: Row(children: [
           Icon(Icons.filter_alt, size: 14, color: Colors.orange.shade800),
           const SizedBox(width: 8),
-          Text(
-            '已開啟: ${p.precisionSearch ? "精準搜尋" : ""} ${p.selectedGroup != "全部" ? "分組(${p.selectedGroup})" : ""}',
-            style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+          Expanded(
+            child: Text(
+              '已開啟: ${p.precisionSearch ? "精準搜尋" : ""} ${!p.searchScope.isAll ? "範圍(${p.searchScope.display})" : ""}',
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+            ),
           ),
-          const Spacer(),
           GestureDetector(
             onTap: () {
               if (p.precisionSearch) p.togglePrecisionSearch();
-              p.setGroup('全部');
+              if (!p.searchScope.isAll) {
+                p.updateSearchScope(SearchScope());
+              }
             },
-            child: Text('全部重設', style: TextStyle(fontSize: 12, color: Colors.orange.shade900, fontWeight: FontWeight.bold)),
+            child: Text(
+              '全部重設',
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+            ),
           ),
         ]),
       );
@@ -156,7 +213,16 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   Widget _buildResults(SearchProvider p) => ListView.separated(
         itemCount: p.results.length,
         separatorBuilder: (ctx, i) => const Divider(height: 1),
-        itemBuilder: (ctx, i) => SearchResultItem(result: p.results[i]),
+        itemBuilder: (ctx, i) {
+          final book = p.results[i];
+          return SearchResultItem(
+            result: AggregatedSearchBook(
+              book: book,
+              sources: book.origins.isNotEmpty
+                  ? book.origins.map((o) => book.originName ?? o).toList()
+                  : [book.originName ?? '未知來源'],
+            ),
+          );
+        },
       );
 }
-
