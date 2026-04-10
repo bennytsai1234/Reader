@@ -239,7 +239,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
                     return ListTile(
                       leading: Radio<String>(
                         value: source.bookSourceUrl,
+                        // ignore: deprecated_member_use
                         groupValue: isSelected ? source.bookSourceUrl : null,
+                        // ignore: deprecated_member_use
                         onChanged: (_) {
                           setState(() {
                             _selectedSource = source;
