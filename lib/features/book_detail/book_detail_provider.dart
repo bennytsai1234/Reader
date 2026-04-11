@@ -59,6 +59,7 @@ class BookDetailProvider extends ChangeNotifier {
       _isInBookshelf = true;
     }
     await _loadSource();
+    await _loadBookInfo();
     await _loadChapters();
     _isLoading = false;
     notifyListeners();
@@ -66,6 +67,26 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<void> _loadSource() async {
     _currentSource = await _sourceDao.getByUrl(_book.origin);
+  }
+
+  /// 載入書籍詳情 (對標 Android BookInfoViewModel.loadBookInfo)
+  /// 從書源獲取完整書籍資訊，包含 tocUrl、簡介、封面等
+  Future<void> _loadBookInfo() async {
+    if (_currentSource == null) return;
+    try {
+      final updatedBook = await _service.getBookInfo(_currentSource!, _book);
+      _book = updatedBook;
+      if (_isInBookshelf) {
+        await _bookDao.upsert(_book);
+      }
+    } catch (e) {
+      AppLog.e('加載書籍詳情失敗: $e', error: e);
+      // 即使加載詳情失敗，仍嘗試用已有資訊載入目錄
+      // 若 tocUrl 為空，以 bookUrl 作為備用
+      if (_book.tocUrl.isEmpty) {
+        _book.tocUrl = _book.bookUrl;
+      }
+    }
   }
 
   Future<void> _loadChapters() async {

@@ -1,6 +1,6 @@
 # Reader Project Roadmap
 
-更新日期：2026-04-05（M5 完成）
+更新日期：2026-04-10
 
 這份 roadmap 不是零碎待辦清單，而是專案在 `0.1.6` 之後的優先級約束。原則只有一個：先讓已經存在的核心能力變穩，再決定要不要擴張功能面。
 
@@ -25,6 +25,11 @@ M1 與 M2 的主要工作已完成：
 目前狀態：363 tests 全通過，`flutter analyze` 零問題。
 
 **M5 完成（2026-04-05）**：全域 Widget 層 DAO 呼叫消除。所有 widget 層直接 `getIt<*Dao>()` 呼叫已消除，改由 Provider getter 或 Service 方法代理。同時刪除兩個死碼檔（`bookmark_list_page.dart`、`local_book_provider.dart`），廢棄的 settings 擴展 mixin（3 個檔案）合併進 `SettingsProvider`，`HttpTtsProvider` 提取為獨立 provider。
+
+**發現頁功能修復（2026-04-10）**：修復發現頁三個核心缺陷：
+- **亂碼修復**：`AnalyzeUrl.getStrResponse()` 從 `ResponseType.plain`（Dio 預設 UTF-8 解碼）改為 `ResponseType.bytes` + 多層 charset 偵測（書源 charset → HTTP Content-Type → HTML meta → EncodingDetect 自動偵測），對標 Legado 的 `ResponseBody.text()` 邏輯
+- **「暫無章節」修復**：`BookDetailProvider._init()` 新增 `_loadBookInfo()` 步驟，在載入目錄前先抓取書籍詳情頁取得 `tocUrl`，對標 Legado 的 `loadBookInfo() → loadChapter()` 流程；同時在 `BookInfoParser` 與 `WebBook.getChapterListAwait()` 加入 `tocUrl` 為空時以 `bookUrl` 作為備用的防護
+- **載入失敗改善**：上述兩項修復同步解決了因編碼錯誤或 `tocUrl` 為空導致的探索書籍載入失敗
 
 ---
 
@@ -117,7 +122,18 @@ M1 與 M2 的主要工作已完成：
 
 ## 明確不做的事
 
-在上述主線完成前，不建議：
+以下功能確定不納入本專案範圍（對標 Legado 功能清單，逐項評估後排除）：
+
+- **RSS 閱讀器**：Legado 的 RSS 是獨立功能線（RssSource / RssArticle / RssStar + 專屬 UI），與核心閱讀體驗無關，維護成本高且使用率低，不做
+- **Web 遠端服務**：Legado 內建 HTTP/WebSocket 伺服器供遠端存取書架，屬於進階便利功能，不屬於閱讀器核心能力，不做
+- **WebDAV 備份/還原**：備份/還原已有本地 ZIP 方案，WebDAV 涉及伺服器相容性、憑證管理與衝突處理，複雜度與收益不成比例，不做
+- **仿真翻頁動畫**：Legado 的仿真翻頁 (Simulation) 需要自繪貝塞爾曲線翻頁效果，開發成本高，現有三種模式（翻頁/滾動/滑動）已覆蓋主要使用場景，不做
+- **加密備份 (AES)**：本地備份已足夠，加密需求可由使用者自行處理（加密壓縮等），不做
+- **應用內更新檢查**：Flutter 跨平台發版管道多元（TestFlight / APK 側載 / GitHub Release），內建更新檢查維護成本高且各平台行為不一致，不做
+- **硬體按鍵翻頁**：Legado 的硬體按鍵（音量鍵等）翻頁是 Android 專屬功能，Flutter 跨平台定位下優先級低，不做
+- **Cronet HTTP 引擎**：Legado 用 Cronet 繞過 Android 網路限制並優化效能，Flutter 的 Dio (dart:io HttpClient) 已跨平台且穩定，整合 Cronet 需額外 FFI 綁定，維護成本高收益低，不做
+
+在上述主線完成前，也不建議：
 
 - 引入新的狀態管理框架
 - 引入第二套資料層抽象

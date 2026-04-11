@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:legado_reader/core/services/source_verification_service.dart';
+import 'package:legado_reader/features/association/association_handler_service.dart';
 import 'browser_params.dart';
 import 'browser_provider.dart';
 
@@ -61,7 +62,14 @@ class _BrowserPageState extends State<BrowserPage> {
           },
           onNavigationRequest: (NavigationRequest request) {
             if (request.url.startsWith('legado://') || request.url.startsWith('yuedu://')) {
-              // TODO: 呼叫 AssociationHandlerService 處理自定義協議
+              final uri = Uri.tryParse(request.url);
+              if (uri != null && context.mounted) {
+                AssociationHandlerService().handleUri(
+                  context,
+                  uri,
+                  AssociationHandlerService().showImportDialog,
+                );
+              }
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;

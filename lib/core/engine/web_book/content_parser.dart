@@ -1,72 +1,112 @@
+import 'package:legado_reader/core/models/book.dart';
 import 'package:legado_reader/core/models/book_source.dart';
+import 'package:legado_reader/core/models/chapter.dart';
 import 'package:legado_reader/core/engine/analyze_rule.dart';
+import 'package:legado_reader/core/utils/html_formatter.dart';
+import 'package:legado_reader/core/utils/network_utils.dart';
 
 /// 正文解析結果
 class ContentResult {
   final String content;
-  final String? nextUrl;
 
-  const ContentResult({required this.content, this.nextUrl});
+  /// 下一頁正文 URL 清單 (對標 Android BookContent.analyzeContent 返回的 nextUrlList)
+  /// - 長度 0：沒有下一頁
+  /// - 長度 1：daisy-chain
+  /// - 長度 > 1：可並發
+  final List<String> nextUrls;
+
+  const ContentResult({required this.content, this.nextUrls = const []});
 }
 
 class ContentParser {
   /// 解析正文頁，返回正文內容與下一頁 URL
-  static ContentResult parse({
+  /// (對標 Android BookContent.analyzeContent)
+  static Future<ContentResult> parse({
     required BookSource source,
+    Book? book,
+    BookChapter? chapter,
     required String body,
     required String baseUrl,
     String? nextChapterUrl,
-  }) {
-    final rule = AnalyzeRule(source: source)
+  }) async {
+    final rule = AnalyzeRule(source: source, ruleData: book)
         .setContent(body, baseUrl: baseUrl)
+        .setChapter(chapter)
         .setNextChapterUrl(nextChapterUrl);
+
     final contentRule = source.ruleContent;
     if (contentRule == null) return ContentResult(content: body);
 
-    // 取得正文內容
-    var content = rule.getString(contentRule.content ?? '');
+    // 取得正文內容 (關鍵: unescape=false 與 Android 一致)
+    // 因為 HtmlFormatter.formatKeepImg 之後才做 HTML 實體反轉義
+    var content = await rule.getStringAsync(
+      contentRule.content ?? '',
+      unescape: false,
+    );
 
-    // 套用正文淨化規則 (replaceRegex) (對標 Android ContentRule.replaceRegex)
-    if (contentRule.replaceRegex != null && contentRule.replaceRegex!.isNotEmpty) {
-      content = _applyReplaceRegex(content, contentRule.replaceRegex!);
+    // HTML 清理並保留 <img>，同時將相對路徑圖片補成絕對
+    content = HtmlFormatter.formatKeepImg(content, baseUrl: baseUrl);
+
+    // 若仍包含 HTML 實體，做一次反轉義 (對標 Android StringEscapeUtils.unescapeHtml4)
+    if (content.contains('&')) {
+      content = AnalyzeRuleBase.htmlUnescape.convert(content);
     }
 
-    // 解析下一頁正文 URL (對標 Android nextContentUrl)
-    String? nextUrl;
-    if (contentRule.nextContentUrl != null && contentRule.nextContentUrl!.isNotEmpty) {
-      nextUrl = rule.getString(contentRule.nextContentUrl!, isUrl: true);
-      // 避免指向自身或下一章造成無限迴圈
-      if (nextUrl == baseUrl || nextUrl.isEmpty) {
-        nextUrl = null;
-      }
-      if (nextUrl != null && nextChapterUrl != null && nextUrl == nextChapterUrl) {
-        nextUrl = null;
+    // 解析下一頁正文 URL 清單 (對標 Android nextContentUrl, getStringList)
+    final nextUrls = <String>[];
+    if (contentRule.nextContentUrl != null &&
+        contentRule.nextContentUrl!.isNotEmpty) {
+      final list = await rule.getStringListAsync(
+        contentRule.nextContentUrl!,
+        isUrl: true,
+      );
+      for (final u in list) {
+        if (u.isEmpty || u == baseUrl) continue;
+        // 避免跳到下一章 (對標 Android NetworkUtils.getAbsoluteURL 比對)
+        if (nextChapterUrl != null) {
+          final absNext = NetworkUtils.getAbsoluteURL(baseUrl, u);
+          final absChapter = NetworkUtils.getAbsoluteURL(
+            baseUrl,
+            nextChapterUrl,
+          );
+          if (absNext == absChapter) continue;
+        }
+        nextUrls.add(u);
       }
     }
 
-    return ContentResult(content: content, nextUrl: nextUrl);
+    return ContentResult(content: content, nextUrls: nextUrls);
   }
 
-  /// 套用 replaceRegex 淨化正文
-  /// 格式: "regex##replacement" 或多條以 "&&" 分隔
-  static String _applyReplaceRegex(String content, String replaceRegex) {
-    if (content.isEmpty) return content;
+  /// 多頁正文合併後的最終替換清理 (對標 Android BookContent.analyzeContent 尾段)
+  /// replaceRegex 走 AnalyzeRule.getStringAsync 以支援內嵌 @js: / {{js}} 等表達式
+  static Future<String> finalizeContent({
+    required BookSource source,
+    Book? book,
+    BookChapter? chapter,
+    required String contentStr,
+    String? baseUrl,
+  }) async {
+    final replaceRegex = source.ruleContent?.replaceRegex;
+    if (replaceRegex == null || replaceRegex.isEmpty) return contentStr;
 
-    final rules = replaceRegex.split('&&');
-    var result = content;
-    for (final rule in rules) {
-      if (rule.trim().isEmpty) continue;
-      final parts = rule.split('##');
-      if (parts.isEmpty) continue;
-      try {
-        final pattern = RegExp(parts[0], multiLine: true, dotAll: true);
-        final replacement = parts.length > 1 ? parts[1] : '';
-        result = result.replaceAll(pattern, replacement);
-      } catch (_) {
-        // 跳過無效的正則
-      }
+    // 拆行 trim (對標 Android LFRegex split+trim)
+    var str = contentStr
+        .split(RegExp(r'\r?\n'))
+        .map((e) => e.trim())
+        .join('\n');
+
+    try {
+      final rule = AnalyzeRule(source: source, ruleData: book)
+          .setContent(str, baseUrl: baseUrl)
+          .setChapter(chapter);
+      str = await rule.getStringAsync(replaceRegex);
+    } catch (_) {
+      // 若規則解析失敗則保留 trim 後的原文
     }
-    return result;
+
+    // 段落縮排 (對標 Android "　　$it" join)
+    str = str.split(RegExp(r'\r?\n')).map((e) => '　　$e').join('\n');
+    return str;
   }
 }
-

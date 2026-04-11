@@ -29,7 +29,7 @@ class DictService {
       }
     }
 
-    final analyzeUrl = AnalyzeUrl(url, key: word);
+    final analyzeUrl = await AnalyzeUrl.create(url, key: word);
     final body = await analyzeUrl.getResponseBody();
     
     if (rule.showRule.isEmpty) {

@@ -35,8 +35,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           });
         }
 
-        sourceRule.makeUpRule(result, this);
-        final rule = sourceRule.rule;
+        final rule = sourceRule.makeUpRule(result, this);
         log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
         dynamic tempResult;
@@ -107,8 +106,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           });
         }
 
-        sourceRule.makeUpRule(result, this);
-        final rule = sourceRule.rule;
+        final rule = sourceRule.makeUpRule(result, this);
         log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
         dynamic tempResult;

@@ -12,13 +12,39 @@ import 'package:legado_reader/core/utils/ttf_parser.dart';
 extension AnalyzeRuleScript on AnalyzeRuleBase {
   dynamic evalJS(String jsStr, dynamic result) {
     jsEngine ??= JsEngine(source: source);
-    if (AnalyzeRuleBase.scriptCache.containsKey(jsStr) && result == null) return AnalyzeRuleBase.scriptCache[jsStr];
-    dynamic sourceMap;
-    try { sourceMap = source?.toJson(); } catch (_) { sourceMap = source; }
-    dynamic chapterMap;
-    try { chapterMap = chapter?.toJson(); } catch (_) { chapterMap = chapter; }
+    if (AnalyzeRuleBase.scriptCache.containsKey(jsStr) && result == null) {
+      return AnalyzeRuleBase.scriptCache[jsStr];
+    }
+    final context = _buildJsContext(result);
+    final evalResult = jsEngine!.evaluate(jsStr, context: context);
+    if (result == null) AnalyzeRuleBase.scriptCache[jsStr] = evalResult;
+    return evalResult;
+  }
 
-    final context = {
+  /// Promise bridge 版本的 evalJS — 支援 rule JS 中的 `java.ajax` 等 async 呼叫。
+  ///
+  /// 不做 scriptCache：async rule 的結果可能隨 HTTP 回應改變，quiety 快取容易
+  /// 誤命中；同步 rule 仍由 [evalJS] 的 scriptCache 保留既有行為。
+  Future<dynamic> evalJSAsync(String jsStr, dynamic result) async {
+    jsEngine ??= JsEngine(source: source);
+    final context = _buildJsContext(result);
+    return jsEngine!.evaluateAsync(jsStr, context: context);
+  }
+
+  Map<String, dynamic> _buildJsContext(dynamic result) {
+    dynamic sourceMap;
+    try {
+      sourceMap = source?.toJson();
+    } catch (_) {
+      sourceMap = source;
+    }
+    dynamic chapterMap;
+    try {
+      chapterMap = chapter?.toJson();
+    } catch (_) {
+      chapterMap = chapter;
+    }
+    return {
       'java': this,
       'cookie': CookieStore(),
       'cache': CacheManager(),
@@ -33,10 +59,6 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       'page': page,
       'src': content,
     };
-
-    final evalResult = jsEngine!.evaluate(jsStr, context: context);
-    if (result == null) AnalyzeRuleBase.scriptCache[jsStr] = evalResult;
-    return evalResult;
   }
 
   /// 供 JS 調用的 TTF 解析 (原 Android JsExtensions.queryTTF)

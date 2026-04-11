@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:legado_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
@@ -7,6 +8,8 @@ import 'package:legado_reader/core/models/base_source.dart';
 import 'package:legado_reader/core/engine/analyze_rule.dart';
 import 'package:legado_reader/core/services/http_client.dart';
 import 'package:legado_reader/core/services/rate_limiter.dart';
+import 'package:legado_reader/core/services/encoding_detect.dart';
+import 'package:legado_reader/core/services/cookie_store.dart';
 import 'package:legado_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:legado_reader/core/network/str_response.dart';
 
@@ -31,6 +34,12 @@ class AnalyzeUrl {
   String? webJs;
   int webViewDelayTime = 0;
 
+  /// **注意**：這個同步建構子只能處理純同步的 rule JS（不含
+  /// `java.ajax` / `cache.get` 等 async 呼叫）。書源實務上若規則內含 async
+  /// `@js:` 片段，請改用 [create] async factory。
+  ///
+  /// 保留同步版本是為了兼容 JS handler 內部用 plain URL 字串建構
+  /// `AnalyzeUrl` 的路徑——那些呼叫沒有 rule JS 可以執行，不需要 bridge。
   AnalyzeUrl(
     this.rawUrl, {
     this.key,
@@ -44,6 +53,49 @@ class AnalyzeUrl {
     _init();
   }
 
+  /// 不跑 JS 初始化的私有建構子；供 [create] factory 使用。
+  AnalyzeUrl._bare(
+    this.rawUrl, {
+    this.key,
+    this.page,
+    this.speakText,
+    this.speakSpeed,
+    this.baseUrl = '',
+    this.source,
+    this.ruleData,
+  });
+
+  /// 以 async pipeline 建構 AnalyzeUrl。支援 rule JS 內的 `java.ajax`/
+  /// `cache.get` 等 Promise bridge 方法。
+  ///
+  /// 呼叫路徑：
+  /// 1. 建立 bare 實例（僅儲存欄位）
+  /// 2. 執行 `_initAsync` → 注入 source headers → await `@js:`/`<js>` 評估
+  ///    → await `{{js}}` 表達式替換 → 解析 URL options
+  static Future<AnalyzeUrl> create(
+    String rawUrl, {
+    String? key,
+    int? page,
+    String? speakText,
+    int? speakSpeed,
+    String baseUrl = '',
+    BaseSource? source,
+    dynamic ruleData,
+  }) async {
+    final instance = AnalyzeUrl._bare(
+      rawUrl,
+      key: key,
+      page: page,
+      speakText: speakText,
+      speakSpeed: speakSpeed,
+      baseUrl: baseUrl,
+      source: source,
+      ruleData: ruleData,
+    );
+    await instance._initAsync();
+    return instance;
+  }
+
   void _init() {
     // 0. 注入 BookSource.header
     _initSourceHeaders();
@@ -53,6 +105,14 @@ class AnalyzeUrl {
     // 2. 替換 {{js}} 和 <page,page>
     _replaceKeyPageJs();
     // 3. 解析 URL 選項 (如 ,{"method": "POST"})
+    _analyzeUrlOptions();
+  }
+
+  Future<void> _initAsync() async {
+    _initSourceHeaders();
+    ruleUrl = rawUrl;
+    await _analyzeJsAsync();
+    await _replaceKeyPageJsAsync();
     _analyzeUrlOptions();
   }
 
@@ -116,6 +176,75 @@ class AnalyzeUrl {
     });
 
     // 替換 <page1,page2,page3>
+    if (page != null) {
+      final pageRegex = RegExp(r'<(.*?)>');
+      ruleUrl = ruleUrl.replaceAllMapped(pageRegex, (match) {
+        final pages = match.group(1)!.split(',');
+        if (page! <= pages.length) {
+          return pages[page! - 1].trim();
+        }
+        return pages.last.trim();
+      });
+    }
+  }
+
+  /// async 版本的 [_analyzeJs] — 支援 rule JS 內含 `java.ajax` 等 Promise
+  /// bridge 方法。邏輯與同步版本一致，只是改用 [AnalyzeRule.evalJSAsync]。
+  Future<void> _analyzeJsAsync() async {
+    final jsRegex = RegExp(
+      r'@js:([\s\S]*?)$|<js>([\s\S]*?)</js>',
+      caseSensitive: false,
+    );
+    var result = ruleUrl;
+    final matches = jsRegex.allMatches(ruleUrl).toList();
+    if (matches.isEmpty) return;
+
+    for (final match in matches) {
+      final jsStr = match.group(1) ?? match.group(2) ?? '';
+      final rule = AnalyzeRule(source: source, ruleData: ruleData);
+      rule.key = key;
+      rule.page = page ?? 1;
+      final evalRes = await rule.evalJSAsync(jsStr, result);
+      result = evalRes?.toString() ?? '';
+    }
+    ruleUrl = result;
+  }
+
+  /// async 版本的 [_replaceKeyPageJs] — `{{js}}` 表達式改走 [AnalyzeRule.evalJSAsync]。
+  Future<void> _replaceKeyPageJsAsync() async {
+    if (key != null) {
+      ruleUrl = ruleUrl.replaceAll('{{key}}', _encodeKey(key!));
+    }
+    if (page != null) {
+      ruleUrl = ruleUrl.replaceAll('{{page}}', page.toString());
+    }
+    if (speakText != null) {
+      ruleUrl = ruleUrl.replaceAll('{{speakText}}', speakText!);
+    }
+    if (speakSpeed != null) {
+      ruleUrl = ruleUrl.replaceAll('{{speakSpeed}}', speakSpeed!.toString());
+    }
+
+    // `replaceAllMapped` 不支援 async mapper，手動用 StringBuffer 處理
+    final innerJsRegex = RegExp(r'\{\{([\s\S]*?)\}\}');
+    final matches = innerJsRegex.allMatches(ruleUrl).toList();
+    if (matches.isNotEmpty) {
+      final sb = StringBuffer();
+      var lastEnd = 0;
+      for (final m in matches) {
+        sb.write(ruleUrl.substring(lastEnd, m.start));
+        final jsStr = m.group(1)!;
+        final rule = AnalyzeRule(source: source, ruleData: ruleData);
+        rule.key = key;
+        rule.page = page ?? 1;
+        final v = await rule.evalJSAsync(jsStr, null);
+        sb.write(v?.toString() ?? '');
+        lastEnd = m.end;
+      }
+      sb.write(ruleUrl.substring(lastEnd));
+      ruleUrl = sb.toString();
+    }
+
     if (page != null) {
       final pageRegex = RegExp(r'<(.*?)>');
       ruleUrl = ruleUrl.replaceAllMapped(pageRegex, (match) {
@@ -196,16 +325,34 @@ class AnalyzeUrl {
   }
 
   /// 獲取回應內容 (對標 Android AnalyzeUrl.getStrResponseAwait)
+  ///
+  /// 使用 ResponseType.bytes 取得原始位元組，再根據以下優先順序解碼：
+  /// 1. 書源規則指定的 charset
+  /// 2. HTTP Content-Type 標頭中的 charset
+  /// 3. HTML <meta> 標籤中的 charset
+  /// 4. 自動偵測 (UTF-8 / GBK)
   Future<StrResponse> getStrResponse({CancelToken? cancelToken}) async {
     final limiter = ConcurrentRateLimiter(source is BaseSource ? source as BaseSource : null);
 
     return limiter.withLimit(() async {
-      String finalBody = '';
-      Response? rawResponse;
+      // 注入站點 Cookie (對標 Android AnalyzeUrl.getProxyClient + CookieStore)
+      // 若使用者規則已指定 Cookie，則合併保留使用者設定
+      final storedCookie = await CookieStore().getCookie(url);
+      if (storedCookie.isNotEmpty) {
+        final userCookie = headerMap['Cookie'] ?? headerMap['cookie'];
+        if (userCookie == null || userCookie.isEmpty) {
+          headerMap['Cookie'] = storedCookie;
+        } else {
+          final merged = CookieStore().cookieToMap(storedCookie)
+            ..addAll(CookieStore().cookieToMap(userCookie));
+          headerMap['Cookie'] = CookieStore().mapToCookie(merged);
+        }
+        headerMap.remove('cookie');
+      }
 
       // 如果開啟了 WebView 抓取模式
       if (useWebView) {
-        finalBody = await HeadlessWebViewService().getRenderedHtml(
+        final finalBody = await HeadlessWebViewService().getRenderedHtml(
           url: url,
           headers: headerMap,
           js: webJs,
@@ -223,22 +370,110 @@ class AnalyzeUrl {
       final options = Options(
         method: method,
         headers: headerMap,
-        responseType: ResponseType.plain,
+        responseType: ResponseType.bytes,
       );
 
-      if (method == 'POST') {
-        rawResponse = await httpClient.client.post(url, data: body, options: options, cancelToken: cancelToken);
-      } else {
-        rawResponse = await httpClient.client.get(url, options: options, cancelToken: cancelToken);
+      // 網路連線類錯誤重試：最多 3 次 (初次 + 2 retries)，指數退避 300ms / 900ms
+      // 對標 Android OkHttp RetryAndFollowUpInterceptor 行為
+      Response<List<int>> rawResponse;
+      const int maxAttempts = 3;
+      for (var attempt = 1; ; attempt++) {
+        try {
+          if (method == 'POST') {
+            rawResponse = await httpClient.client.post<List<int>>(url, data: body, options: options, cancelToken: cancelToken);
+          } else {
+            rawResponse = await httpClient.client.get<List<int>>(url, options: options, cancelToken: cancelToken);
+          }
+          break;
+        } on DioException catch (e) {
+          if (attempt >= maxAttempts || !_isRetryable(e)) rethrow;
+          AppLog.d('AnalyzeUrl: 請求失敗 (${e.type}) → 第 $attempt 次重試: $url');
+          await Future.delayed(Duration(milliseconds: 300 * attempt * attempt));
+        }
       }
+
+      final responseBytes = Uint8List.fromList(rawResponse.data ?? []);
+      final decodedBody = _decodeResponseBody(responseBytes, rawResponse);
 
       return StrResponse(
         url: rawResponse.realUri.toString(),
-        body: rawResponse.data?.toString() ?? '',
+        body: decodedBody,
         headers: rawResponse.headers.map,
         raw: rawResponse,
       );
     });
+  }
+
+  /// 判斷 Dio 錯誤是否屬於可重試的暫時性網路故障
+  /// (connectionTimeout / sendTimeout / receiveTimeout / connectionError / 未知 SocketException)
+  /// 不重試: cancel、badResponse (HTTP 4xx/5xx)、badCertificate
+  bool _isRetryable(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.unknown:
+        // Socket 層級故障也算暫時性
+        return e.error != null;
+      case DioExceptionType.cancel:
+      case DioExceptionType.badCertificate:
+      case DioExceptionType.badResponse:
+        return false;
+    }
+  }
+
+  /// 依優先順序解碼回應位元組 (對標 Android OkHttpUtils.ResponseBody.text())
+  String _decodeResponseBody(Uint8List bytes, Response response) {
+    if (bytes.isEmpty) return '';
+
+    // 移除 UTF-8 BOM
+    Uint8List cleanBytes = bytes;
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      cleanBytes = bytes.sublist(3);
+    }
+
+    // 1. 書源規則指定的 charset (最高優先)
+    if (charset != null && charset!.isNotEmpty) {
+      return _decodeWithCharset(cleanBytes, charset!);
+    }
+
+    // 2. HTTP Content-Type 標頭中的 charset
+    final contentType = response.headers.value('content-type');
+    if (contentType != null) {
+      final ctCharset = _extractCharsetFromContentType(contentType);
+      if (ctCharset != null) {
+        return _decodeWithCharset(cleanBytes, ctCharset);
+      }
+    }
+
+    // 3. HTML meta 標籤 + 自動偵測 (EncodingDetect.getHtmlEncode)
+    final detected = EncodingDetect.getHtmlEncode(cleanBytes);
+    return _decodeWithCharset(cleanBytes, detected);
+  }
+
+  /// 從 Content-Type 標頭提取 charset
+  String? _extractCharsetFromContentType(String contentType) {
+    final match = RegExp(r'charset=([a-zA-Z0-9_-]+)', caseSensitive: false)
+        .firstMatch(contentType);
+    return match?.group(1);
+  }
+
+  /// 根據 charset 名稱解碼位元組
+  String _decodeWithCharset(Uint8List bytes, String charsetName) {
+    final upper = charsetName.toUpperCase();
+    if (upper == 'GBK' || upper == 'GB2312' || upper == 'GB18030') {
+      try {
+        return gbk.decode(bytes);
+      } catch (_) {
+        return utf8.decode(bytes, allowMalformed: true);
+      }
+    }
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   /// 獲取回應內容的 body (兼容舊代碼)
@@ -252,6 +487,11 @@ class AnalyzeUrl {
     final limiter = ConcurrentRateLimiter(source is BaseSource ? source as BaseSource : null);
 
     return limiter.withLimit(() async {
+      // 注入站點 Cookie
+      final storedCookie = await CookieStore().getCookie(url);
+      if (storedCookie.isNotEmpty && (headerMap['Cookie'] == null || headerMap['Cookie']!.isEmpty)) {
+        headerMap['Cookie'] = storedCookie;
+      }
       final httpClient = HttpClient();
       final options = Options(
         method: method,

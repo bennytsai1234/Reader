@@ -5,12 +5,13 @@ import 'package:legado_reader/core/services/book_source_service.dart';
 
 // 導入拆分後的模組
 import 'analyze_rule/analyze_rule_base.dart';
-import 'analyze_rule/analyze_rule_core.dart';
+import 'analyze_rule/analyze_rule_element.dart';
+import 'analyze_rule/analyze_rule_regex_helper.dart';
 import 'analyze_rule/analyze_rule_script.dart';
+import 'analyze_rule/analyze_rule_string.dart';
 
 export 'analyze_rule/analyze_rule_base.dart';
 export 'analyze_rule/analyze_rule_support.dart';
-export 'analyze_rule/analyze_rule_core.dart';
 export 'analyze_rule/analyze_rule_script.dart';
 export 'analyze_rule/analyze_rule_element.dart';
 export 'analyze_rule/analyze_rule_string.dart';
@@ -63,11 +64,16 @@ class AnalyzeRule extends AnalyzeRuleBase with AnalyzeRuleRegexHelper, AnalyzeRu
     return AnalyzeRuleScript(this).evalJS(jsStr, result);
   }
 
+  @override
+  Future<dynamic> evalJSAsync(String jsStr, dynamic result) {
+    return AnalyzeRuleScript(this).evalJSAsync(jsStr, result);
+  }
+
   Future<void> checkLogin() async {
     if (source is! BookSource) return;
     final checkJs = (source as BookSource).loginCheckJs;
     if (checkJs != null && checkJs.isNotEmpty) {
-      evalJS(checkJs, null);
+      await evalJSAsync(checkJs, null);
     }
   }
 
@@ -75,7 +81,7 @@ class AnalyzeRule extends AnalyzeRuleBase with AnalyzeRuleRegexHelper, AnalyzeRu
     if (source is! BookSource) return;
     final js = (source as BookSource).ruleToc?.preUpdateJs;
     if (js != null && js.isNotEmpty) {
-      evalJS(js, null);
+      await evalJSAsync(js, null);
     }
   }
 

@@ -122,8 +122,13 @@ class SourceRule {
     }
   }
 
-  void makeUpRule(dynamic result, dynamic analyzer) {
-    if (!isDynamic) return;
+  /// 動態組合規則字串 (對標 Android SourceRule.makeUpRule)
+  ///
+  /// 重要：本方法不得 mutate `this.rule`，因為 SourceRule 實例會被
+  /// stringRuleCache 靜態快取跨呼叫共用。mutate 後會造成 race condition
+  /// 或把動態組合後的字串寫回快取，污染後續使用者。
+  String makeUpRule(dynamic result, dynamic analyzer) {
+    if (!isDynamic) return rule;
     final buffer = StringBuffer();
     for (var i = 0; i < ruleType.length; i++) {
       final type = ruleType[i];
@@ -138,7 +143,7 @@ class SourceRule {
             trimmed.startsWith('//')) {
           buffer.write(analyzer.getString(trimmed));
         } else {
-          buffer.write(analyzer.evalJS(param, result));
+          buffer.write(analyzer.evalJS(param, result) ?? '');
         }
       } else if (type == getRuleType) {
         buffer.write(analyzer.get(param));
@@ -146,17 +151,15 @@ class SourceRule {
         final val = getAnalyzeByJSonPath(analyzer, result).getString(param);
         buffer.write(val);
       } else {
-        // Handle regex groups ($1, $2, etc.)
-        if (result is List<String> && type < result.length) {
-          buffer.write(result[type]);
-        } else if (result is String) {
-          // If result is string, we might need the groups from AnalyzeByRegex.getElement
-          // For now, write the param as is if not a list
-          buffer.write(param);
+        // 反向引用 $1..$N —— 對應 _splitRegex 取出的 `$N` 標記
+        // 僅在前一階段結果是 List (regex group) 時有效；對 String 結果
+        // 直接寫入空字串，避免把字面 "$1" 寫回造成解析錯亂。
+        if (result is List && type > 0 && type <= result.length) {
+          buffer.write(result[type - 1]?.toString() ?? '');
         }
       }
     }
-    rule = buffer.toString();
+    return buffer.toString();
   }
 
   // 延遲載入解析器

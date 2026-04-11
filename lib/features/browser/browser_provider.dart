@@ -28,11 +28,11 @@ class BrowserProvider extends BaseProvider {
           ? await getIt<BookSourceDao>().getByUrl(params.sourceOrigin!) 
           : null;
       
-      final analyzeUrl = AnalyzeUrl(
+      final analyzeUrl = await AnalyzeUrl.create(
         params.url,
         source: source,
       );
-      
+
       _baseUrl = analyzeUrl.url;
       _headerMap = analyzeUrl.headerMap.cast<String, String>();
       
@@ -58,7 +58,7 @@ class BrowserProvider extends BaseProvider {
     await runTask(() async {
       if (params.refetchAfterSuccess) {
         final source = await getIt<BookSourceDao>().getByUrl(params.sourceOrigin!);
-        final analyzeUrl = AnalyzeUrl(
+        final analyzeUrl = await AnalyzeUrl.create(
           params.url,
           source: source,
         );

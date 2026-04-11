@@ -8,7 +8,12 @@ class HeadlessWebViewService {
   HeadlessWebViewService._internal();
 
   WebViewController? _controller;
-  Completer<void>? _mutex;
+
+  /// 串列化鎖：指向目前正在處理 (或等待中的最後一個) 的 Future。
+  /// 每次 acquire 會把自己接在鏈尾，確保任何時刻只有一個 getRenderedHtml 在實際執行。
+  /// 相較於原本的 `while (_mutex != null)` 輪詢，這個實作不會在 release 瞬間
+  /// 讓多個等待者同時看到 null 而爆發 race。
+  Future<void> _tail = Future.value();
 
   /// 獲取網頁渲染後的 HTML
   Future<String> getRenderedHtml({
@@ -18,12 +23,31 @@ class HeadlessWebViewService {
     String? js,
     int delayTime = 0,
   }) async {
-    // Serialize concurrent requests
-    while (_mutex != null) {
-      await _mutex!.future;
+    // 串列化：把自己接在鏈尾，等前一個任務完成再執行。
+    final previous = _tail;
+    final gate = Completer<void>();
+    _tail = gate.future;
+    try {
+      await previous;
+      return await _runRender(
+        url: url,
+        headers: headers,
+        userAgent: userAgent,
+        js: js,
+        delayTime: delayTime,
+      );
+    } finally {
+      gate.complete();
     }
-    _mutex = Completer<void>();
+  }
 
+  Future<String> _runRender({
+    required String url,
+    Map<String, String>? headers,
+    String? userAgent,
+    String? js,
+    int delayTime = 0,
+  }) async {
     final completer = Completer<String>();
 
     _controller = WebViewController()
@@ -81,8 +105,6 @@ class HeadlessWebViewService {
       rethrow;
     } finally {
       _controller = null;
-      _mutex?.complete();
-      _mutex = null;
     }
   }
 }
