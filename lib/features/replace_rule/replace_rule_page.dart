@@ -62,7 +62,7 @@ class ReplaceRulePage extends StatelessWidget {
       ReplaceRule rule, int index) {
     return ListTile(
       key: ValueKey(rule.id),
-      title: Text(rule.name),
+      title: Text(rule.name, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text(
         '${rule.pattern} -> ${rule.replacement}',
         maxLines: 1,
@@ -76,11 +76,11 @@ class ReplaceRulePage extends StatelessWidget {
             onChanged: (_) => provider.toggleEnabled(rule),
           ),
           IconButton(
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit_outlined, size: 20),
             onPressed: () => _navigateToEdit(context, provider, rule: rule),
           ),
           IconButton(
-            icon: const Icon(Icons.delete),
+            icon: const Icon(Icons.delete_outline, size: 20),
             onPressed: () => _showDeleteConfirm(context, provider, rule),
           ),
         ],

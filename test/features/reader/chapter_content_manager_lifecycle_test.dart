@@ -65,9 +65,11 @@ void main() {
       manager.prioritize([2, 3, 4], centerIndex: 3);
       manager.warmChaptersAround(3, radius: 1);
 
-      expect(manager.targetWindow, {2, 3, 4});
-    });
-
+      expect(manager.isChapterInWindow(2), isTrue);
+      expect(manager.isChapterInWindow(3), isTrue);
+      expect(manager.isChapterInWindow(4), isTrue);
+      expect(manager.isChapterInWindow(5), isFalse);
+      });
     test('evictOutside 會驅逐保留集合之外的快取', () async {
       final manager = buildManager(
         chapters: buildChapters(5),

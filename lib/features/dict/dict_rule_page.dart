@@ -36,14 +36,15 @@ class _DictRulePageState extends State<DictRulePage> {
       body: Consumer<DictProvider>(
         builder: (context, provider, child) {
           if (provider.allRules.isEmpty) {
-            return const Center(child: Text('無字典規則，請點擊右上角新增'));
+            return const Center(child: Text('暫無規則'));
           }
-          return ListView.builder(
+          return ListView.separated(
             itemCount: provider.allRules.length,
+            separatorBuilder: (context, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final rule = provider.allRules[index];
               return ListTile(
-                title: Text(rule.name),
+                title: Text(rule.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(rule.urlRule, maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -53,11 +54,11 @@ class _DictRulePageState extends State<DictRulePage> {
                       onChanged: (val) => provider.toggleRule(rule),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.edit),
+                      icon: const Icon(Icons.edit_outlined, size: 20),
                       onPressed: () => _showEditDialog(context, rule: rule),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
+                      icon: const Icon(Icons.delete_outline, size: 20),
                       onPressed: () => provider.deleteRule(rule),
                     ),
                   ],

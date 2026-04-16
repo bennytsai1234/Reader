@@ -1,50 +1,51 @@
-import 'dart:async';
+import 'package:flutter/scheduler.dart';
 
 class ReaderAutoPageCoordinator {
   bool isActive = false;
   bool isPaused = false;
   double speed = 30.0;
 
-  Timer? _timer;
+  Ticker? _ticker;
+  Duration _lastTickTime = Duration.zero;
 
-  void start({
+  void attachTicker(
+    Ticker Function(TickerCallback) createTicker, {
     required bool Function() shouldTick,
-    required void Function() onTick,
-    required void Function(double progress) onProgress,
+    required void Function(double dtSeconds) onTick,
   }) {
-    _timer?.cancel();
-    onProgress(0.0);
-    _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-      if (!isActive || isPaused || !shouldTick()) return;
-      final delta = 0.016 / speed.clamp(1.0, 600.0);
-      onTick();
-      onProgress(delta);
+    _ticker?.stop();
+    _ticker?.dispose();
+    _lastTickTime = Duration.zero;
+    _ticker = createTicker((elapsed) {
+      if (!isActive || isPaused || !shouldTick()) {
+        _lastTickTime = Duration.zero;
+        return;
+      }
+      if (_lastTickTime == Duration.zero) {
+        _lastTickTime = elapsed;
+        return;
+      }
+      final dtSeconds =
+          (elapsed.inMicroseconds - _lastTickTime.inMicroseconds) / 1000000.0;
+      _lastTickTime = elapsed;
+      onTick(dtSeconds);
     });
+    _ticker!.start();
   }
 
-  void stop(void Function(double progress) onProgress) {
+  void detachTicker() {
+    _ticker?.stop();
+    _ticker?.dispose();
+    _ticker = null;
+    _lastTickTime = Duration.zero;
+  }
+
+  void stop() {
     isActive = false;
     isPaused = false;
-    _timer?.cancel();
-    _timer = null;
-    onProgress(0.0);
-  }
-
-  void restart({
-    required bool Function() shouldTick,
-    required void Function() onTick,
-    required void Function(double progress) onProgress,
-  }) {
-    if (!isActive) return;
-    start(
-      shouldTick: shouldTick,
-      onTick: onTick,
-      onProgress: onProgress,
-    );
   }
 
   void dispose() {
-    _timer?.cancel();
-    _timer = null;
+    detachTicker();
   }
 }

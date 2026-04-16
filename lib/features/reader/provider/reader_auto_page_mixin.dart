@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_auto_page_coordinator.dart';
@@ -15,11 +16,22 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
 
   bool get isAutoPaging => _autoPageCoordinator.isActive;
   double get autoPageSpeed => _autoPageCoordinator.speed; // 單位：秒/頁
-  bool get _isAutoPagePaused => _autoPageCoordinator.isPaused;
+  bool get isAutoPagePaused => _autoPageCoordinator.isPaused;
 
-  bool get isAutoPagePaused => _isAutoPagePaused;
   double scrollDeltaPerFrame(Size viewSize, double dtSeconds) {
     return (viewSize.height / autoPageSpeed.clamp(1.0, 600.0)) * dtSeconds;
+  }
+
+  void attachAutoPageTicker(Ticker Function(TickerCallback) createTicker) {
+    _autoPageCoordinator.attachTicker(
+      createTicker,
+      shouldTick: () => !TTSService().isPlaying,
+      onTick: _onAutoPageTick,
+    );
+  }
+
+  void detachAutoPageTicker() {
+    _autoPageCoordinator.detachTicker();
   }
 
   void toggleAutoPage() {
@@ -28,8 +40,6 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
       // 自動翻頁與 TTS 互斥
       if (TTSService().isPlaying) TTSService().stop();
       _autoPageCoordinator.isPaused = false;
-      _startAutoPage();
-      // 這裡可以呼叫 WakelockPlus 保持螢幕常亮
     } else {
       stopAutoPage();
     }
@@ -38,7 +48,7 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
 
   /// 手動操作時暫停 (對標 Android onMenuShow/onTouch)
   void pauseAutoPage() {
-    if (isAutoPaging && !_isAutoPagePaused) {
+    if (isAutoPaging && !isAutoPagePaused) {
       _autoPageCoordinator.isPaused = true;
       notifyListeners();
     }
@@ -46,49 +56,59 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
 
   /// 手動操作結束後恢復
   void resumeAutoPage() {
-    if (isAutoPaging && _isAutoPagePaused) {
+    if (isAutoPaging && isAutoPagePaused) {
       _autoPageCoordinator.isPaused = false;
       notifyListeners();
     }
   }
 
-  void _startAutoPage() {
-    _autoPageCoordinator.start(
-      shouldTick: () => !TTSService().isPlaying,
-      onTick: () {
-        if (pageTurnMode != PageAnim.scroll &&
-            autoPageProgressNotifier.value >= 1.0) {
-          autoPageProgressNotifier.value = 0.0;
-          nextPage(reason: ReaderCommandReason.autoPage);
-        }
-      },
-      onProgress: (delta) {
-        if (pageTurnMode != PageAnim.scroll) {
-          autoPageProgressNotifier.value += delta;
-          return;
-        }
-        final viewSize = this.viewSize;
-        if (viewSize == null) return;
-        final deltaPixels = scrollDeltaPerFrame(viewSize, 0.016);
-        final pageBasis = viewSize.height <= 0 ? 1.0 : viewSize.height;
-        autoPageProgressNotifier.value =
-            ((autoPageProgressNotifier.value * pageBasis) + deltaPixels) %
-                pageBasis /
-                pageBasis;
-      },
-    );
+  void _onAutoPageTick(double dtSeconds) {
+    if (pageTurnMode != PageAnim.scroll) {
+      final delta = dtSeconds / autoPageSpeed.clamp(1.0, 600.0);
+      autoPageProgressNotifier.value += delta;
+      if (autoPageProgressNotifier.value >= 1.0) {
+        autoPageProgressNotifier.value = 0.0;
+        nextPage(reason: ReaderCommandReason.autoPage);
+      }
+      return;
+    }
+
+    final viewSize = this.viewSize;
+    if (viewSize == null) return;
+
+    final step =
+        contentCallbacksRef.evaluateScrollAutoPageStep?.call(dtSeconds);
+    if (step != null) {
+      if (!step.advanceChapter &&
+          step.chapterIndex != null &&
+          step.localOffset != null) {
+        contentCallbacksRef.jumpToChapterLocalOffset?.call(
+          chapterIndex: step.chapterIndex!,
+          localOffset: step.localOffset!,
+          alignment: 0.0,
+          reason: ReaderCommandReason.autoPage,
+        );
+      } else if (step.advanceChapter) {
+        nextChapter(reason: ReaderCommandReason.autoPage);
+      }
+    }
+
+    final deltaPixels = scrollDeltaPerFrame(viewSize, dtSeconds);
+    final pageBasis = viewSize.height <= 0 ? 1.0 : viewSize.height;
+    autoPageProgressNotifier.value =
+        ((autoPageProgressNotifier.value * pageBasis) + deltaPixels) %
+            pageBasis /
+            pageBasis;
   }
 
   void setAutoPageSpeed(double speed) {
     _autoPageCoordinator.speed = speed;
-    if (isAutoPaging) _startAutoPage();
     notifyListeners();
   }
 
   void stopAutoPage() {
-    _autoPageCoordinator.stop((progress) {
-      autoPageProgressNotifier.value = progress;
-    });
+    _autoPageCoordinator.stop();
+    autoPageProgressNotifier.value = 0.0;
     notifyListeners();
   }
 

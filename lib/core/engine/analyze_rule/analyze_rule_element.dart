@@ -4,6 +4,7 @@ import 'analyze_rule_regex_helper.dart';
 import '../parsers/analyze_by_regex.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/css/analyze_by_css_core.dart';
+import 'package:inkpage_reader/core/exception/app_exception.dart';
 
 /// AnalyzeRule 的元素解析擴展
 mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
@@ -39,27 +40,37 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
         dynamic tempResult;
-        switch (sourceRule.mode) {
-          case Mode.regex:
-            final elements = AnalyzeByRegex.getElement(
-              result.toString(),
-              rule.split('&&').where((s) => s.isNotEmpty).toList(),
-            );
-            tempResult = elements?.join('');
-            break;
-          case Mode.json:
-            tempResult = sourceRule.getAnalyzeByJSonPath(this, result).getObject(rule);
-            break;
-          case Mode.xpath:
-            final elements = sourceRule.getAnalyzeByXPath(this, result).getElements(rule);
-            tempResult = elements.isNotEmpty ? elements.first : null;
-            break;
-          case Mode.js:
-            tempResult = evalJS(rule, result);
-            break;
-          default:
-            final elements = sourceRule.getAnalyzeByJSoup(this, result).getElements(rule);
-            tempResult = elements.isNotEmpty ? elements.first : null;
+        try {
+          switch (sourceRule.mode) {
+            case Mode.regex:
+              final elements = AnalyzeByRegex.getElement(
+                result.toString(),
+                rule.split('&&').where((s) => s.isNotEmpty).toList(),
+              );
+              tempResult = elements?.join('');
+              break;
+            case Mode.json:
+              tempResult = sourceRule.getAnalyzeByJSonPath(this, result).getObject(rule);
+              break;
+            case Mode.xpath:
+              final elements = sourceRule.getAnalyzeByXPath(this, result).getElements(rule);
+              tempResult = elements.isNotEmpty ? elements.first : null;
+              break;
+            case Mode.js:
+              tempResult = evalJS(rule, result);
+              break;
+            default:
+              final elements = sourceRule.getAnalyzeByJSoup(this, result).getElements(rule);
+              tempResult = elements.isNotEmpty ? elements.first : null;
+          }
+        } catch (e) {
+          throw ParsingException(
+            e.toString(),
+            rule: rule,
+            mode: sourceRule.mode.name,
+            url: baseUrl,
+            originalError: e,
+          );
         }
 
         if (sourceRule.isDynamic && (tempResult == null || tempResult.toString().isEmpty)) {
@@ -110,24 +121,34 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
         log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
         dynamic tempResult;
-        switch (sourceRule.mode) {
-          case Mode.regex:
-            tempResult = AnalyzeByRegex.getElements(
-              result.toString(),
-              rule.split('&&').where((s) => s.isNotEmpty).toList(),
-            );
-            break;
-          case Mode.json:
-            tempResult = sourceRule.getAnalyzeByJSonPath(this, result).getElements(rule);
-            break;
-          case Mode.xpath:
-            tempResult = sourceRule.getAnalyzeByXPath(this, result).getElements(rule);
-            break;
-          case Mode.js:
-            tempResult = evalJS(rule, result);
-            break;
-          default:
-            tempResult = sourceRule.getAnalyzeByJSoup(this, result).getElements(rule);
+        try {
+          switch (sourceRule.mode) {
+            case Mode.regex:
+              tempResult = AnalyzeByRegex.getElements(
+                result.toString(),
+                rule.split('&&').where((s) => s.isNotEmpty).toList(),
+              );
+              break;
+            case Mode.json:
+              tempResult = sourceRule.getAnalyzeByJSonPath(this, result).getElements(rule);
+              break;
+            case Mode.xpath:
+              tempResult = sourceRule.getAnalyzeByXPath(this, result).getElements(rule);
+              break;
+            case Mode.js:
+              tempResult = evalJS(rule, result);
+              break;
+            default:
+              tempResult = sourceRule.getAnalyzeByJSoup(this, result).getElements(rule);
+          }
+        } catch (e) {
+          throw ParsingException(
+            e.toString(),
+            rule: rule,
+            mode: sourceRule.mode.name,
+            url: baseUrl,
+            originalError: e,
+          );
         }
 
         if (sourceRule.isDynamic &&

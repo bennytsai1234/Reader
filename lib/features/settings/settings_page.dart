@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'settings_provider.dart';
 
@@ -9,8 +8,10 @@ import 'package:inkpage_reader/features/dict/dict_rule_page.dart';
 import 'package:inkpage_reader/features/read_record/read_record_page.dart';
 import 'package:inkpage_reader/features/bookmark/bookmark_page.dart';
 import 'package:inkpage_reader/features/txt_toc_rule/txt_toc_rule_page.dart';
+import 'appearance_settings_page.dart';
+import 'reading_settings_page.dart';
+import 'tts_settings_page.dart';
 import 'backup_settings_page.dart';
-import 'theme_settings_page.dart';
 import 'other_settings_page.dart';
 import 'package:inkpage_reader/features/about/about_page.dart';
 
@@ -29,98 +30,91 @@ class SettingsPage extends StatelessWidget {
           return ListView(
             children: [
               // --- 核心管理 ---
+              _buildCategoryHeader(context, '書源與規則'),
               _buildListTile(
                 context,
                 icon: Icons.source_outlined,
                 title: '書源管理',
-                summary: '管理閱讀書源',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SourceManagerPage())),
               ),
               _buildListTile(
                 context,
                 icon: Icons.format_list_bulleted,
-                title: '本地TXT目錄規則',
-                summary: '管理本地TXT的目錄解析規則',
+                title: '本地目錄規則',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TxtTocRulePage())),
               ),
               _buildListTile(
                 context,
                 icon: Icons.find_replace,
                 title: '替換淨化',
-                summary: '管理替換淨化規則',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReplaceRulePage())),
               ),
               _buildListTile(
                 context,
                 icon: Icons.translate,
                 title: '字典規則',
-                summary: '管理字典規則',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DictRulePage())),
               ),
               
-              // --- 顯示與服務 ---
-              _buildThemeModeTile(context, settings),
-
+              const Divider(),
               // --- 設定分類 ---
-              _buildCategoryHeader(context, '設定'),
+              _buildCategoryHeader(context, '個人化設定'),
+              _buildListTile(
+                context,
+                icon: Icons.palette_outlined,
+                title: '外觀與主題',
+                summary: '介面佈局、顏色、桌面圖標',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppearanceSettingsPage())),
+              ),
+              _buildListTile(
+                context,
+                icon: Icons.chrome_reader_mode_outlined,
+                title: '閱讀設定',
+                summary: '翻頁、排版、系統適配',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReadingSettingsPage())),
+              ),
+              _buildListTile(
+                context,
+                icon: Icons.volume_up_outlined,
+                title: '朗讀與語音',
+                summary: 'TTS 參數、語音引擎管理',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TtsSettingsPage())),
+              ),
               _buildListTile(
                 context,
                 icon: Icons.backup_outlined,
                 title: '備份與還原',
-                summary: 'WebDAV / 本地備份',
+                summary: '本地備份、數據遷移',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupSettingsPage())),
               ),
-              _buildListTile(
-                context,
-                icon: Icons.palette_outlined,
-                title: '主題設定',
-                summary: '設定App主題顏色及外觀',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ThemeSettingsPage())),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.settings_outlined,
-                title: '其他設定',
-                summary: '更多進階設定選項',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OtherSettingsPage())),
-              ),
 
-              // --- 其他分類 ---
-              _buildCategoryHeader(context, '其他'),
+              const Divider(),
+              // --- 其他工具 ---
+              _buildCategoryHeader(context, '工具與其他'),
               _buildListTile(
                 context,
                 icon: Icons.bookmark_border,
-                title: '書籤',
-                summary: '查看所有書籤',
+                title: '書籤管理',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookmarkPage())),
               ),
               _buildListTile(
                 context,
                 icon: Icons.history,
                 title: '閱讀紀錄',
-                summary: '查看閱讀歷史',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReadRecordPage())),
               ),
               _buildListTile(
                 context,
-                icon: Icons.folder_open,
-                title: '檔案管理',
-                summary: '管理本地快取與下載檔案',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('開發中')));
-                },
+                icon: Icons.settings_outlined,
+                title: '其他設定',
+                summary: '語言、UA、快取清理',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OtherSettingsPage())),
               ),
               _buildListTile(
                 context,
                 icon: Icons.info_outline,
-                title: '關於',
+                title: '關於墨頁',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage())),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.exit_to_app,
-                title: '退出',
-                onTap: () => SystemChannels.platform.invokeMethod('SystemNavigator.pop'),
               ),
               const SizedBox(height: 24),
             ],
@@ -150,43 +144,6 @@ class SettingsPage extends StatelessWidget {
       title: Text(title, style: const TextStyle(fontSize: 16)),
       subtitle: summary != null ? Text(summary, style: const TextStyle(fontSize: 13)) : null,
       onTap: onTap,
-    );
-  }
-
-  Widget _buildThemeModeTile(BuildContext context, SettingsProvider settings) {
-    final modes = ['跟隨系統', '白天模式', '夜間模式'];
-    final currentMode = settings.themeMode == ThemeMode.system ? 0 : (settings.themeMode == ThemeMode.light ? 1 : 2);
-    
-    return ListTile(
-      leading: Icon(Icons.brightness_medium, color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7)),
-      title: const Text('主題模式', style: TextStyle(fontSize: 16)),
-      subtitle: Text(modes[currentMode], style: const TextStyle(fontSize: 13)),
-      onTap: () {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('主題模式'),
-            content: RadioGroup<int>(
-              groupValue: currentMode,
-              onChanged: (val) {
-                if (val == null) return;
-                final mode = val == 0 ? ThemeMode.system : (val == 1 ? ThemeMode.light : ThemeMode.dark);
-                settings.setThemeMode(mode);
-                Navigator.pop(ctx);
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: List.generate(3, (index) {
-                  return RadioListTile<int>(
-                    title: Text(modes[index]),
-                    value: index,
-                  );
-                }),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

@@ -44,7 +44,9 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   double visibleChapterLocalOffset = 0.0;
   Size? viewSize;
 
-  final Map<int, List<TextPage>> chapterPagesCache = {};
+  final Map<int, List<TextPage>> _chapterPagesCache = {};
+  Map<int, List<TextPage>> get chapterPagesCache => _chapterPagesCache;
+
   List<TextPage> slidePages = [];
   final Set<int> loadingChapters = {};
   bool get isLoading => loadingChapters.isNotEmpty;

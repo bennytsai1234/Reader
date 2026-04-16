@@ -57,8 +57,29 @@ class NetworkException extends AppException {
 
 /// ParsingException - 解析規則執行失敗
 class ParsingException extends AppException {
-  final String? ruleName;
-  ParsingException(super.message, {this.ruleName});
+  final String? rule;
+  final String? mode;
+  final String? url;
+  final dynamic originalError;
+
+  ParsingException(
+    super.message, {
+    this.rule,
+    this.mode,
+    this.url,
+    this.originalError,
+  });
+
+  @override
+  String toString() {
+    final buffer = StringBuffer();
+    if (mode != null) buffer.write('[$mode] ');
+    buffer.write(message);
+    if (rule != null) buffer.write('\n規則: $rule');
+    if (url != null) buffer.write('\nURL: $url');
+    if (originalError != null) buffer.write('\n原始錯誤: $originalError');
+    return buffer.toString();
+  }
 }
 
 /// LoginCheckException - 書源登入驗證失敗

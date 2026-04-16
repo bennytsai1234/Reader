@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import 'storage_management_provider.dart';
 
+import 'package:inkpage_reader/features/cache_manager/download_manager_page.dart';
+
 class StorageManagementPage extends StatelessWidget {
   const StorageManagementPage({super.key});
 
@@ -15,18 +17,11 @@ class StorageManagementPage extends StatelessWidget {
         builder: (context, provider, child) {
           return Scaffold(
             appBar: AppBar(
-              title: const Text('儲存空間管理'),
+              title: const Text('存儲與下載'),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: provider.isLoading ? null : provider.load,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep_outlined),
-                  onPressed:
-                      provider.isLoading
-                          ? null
-                          : () => _confirmClearAll(context, provider),
                 ),
               ],
             ),
@@ -35,31 +30,61 @@ class StorageManagementPage extends StatelessWidget {
                     ? const Center(child: CircularProgressIndicator())
                     : RefreshIndicator(
                       onRefresh: provider.load,
-                      child: ListView.separated(
+                      child: ListView(
                         padding: const EdgeInsets.all(16),
-                        itemCount: provider.entries.length + 1,
-                        separatorBuilder:
-                            (context, index) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return _buildHeader(context, provider);
-                          }
+                        children: [
+                          _buildHeader(context, provider),
+                          const SizedBox(height: 24),
+                          
+                          _buildSectionTitle(context, '下載任務'),
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.download_for_offline_outlined),
+                              title: const Text('下載管理'),
+                              subtitle: const Text('查看並管理進行中的離線下載任務'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const DownloadManagerPage()),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
 
-                          final entry = provider.entries[index - 1];
-                          return _StorageEntryCard(
-                            entry: entry,
-                            onClear:
-                                () => _confirmClearEntry(
-                                  context,
-                                  provider,
-                                  entry,
-                                ),
-                          );
-                        },
+                          _buildSectionTitle(context, '本地快取'),
+                          ...provider.entries.map((entry) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _StorageEntryCard(
+                              entry: entry,
+                              onClear: () => _confirmClearEntry(context, provider, entry),
+                            ),
+                          )),
+                          
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.delete_sweep_outlined),
+                            label: const Text('清理所有快取資料'),
+                            onPressed: provider.isLoading ? null : () => _confirmClearAll(context, provider),
+                          ),
+                        ],
                       ),
                     ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 12),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }

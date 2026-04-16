@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/cache_manager/storage_management_page.dart';
 import 'package:provider/provider.dart';
 import 'settings_provider.dart';
-import 'widgets/settings_group_interface.dart';
-import 'widgets/settings_group_advanced.dart';
-import 'widgets/settings_group_system.dart';
 
 class OtherSettingsPage extends StatelessWidget {
   const OtherSettingsPage({super.key});
@@ -17,6 +14,7 @@ class OtherSettingsPage extends StatelessWidget {
         builder: (context, settings, child) {
           return ListView(
             children: [
+              _buildSectionTitle('區域與環境'),
               ListTile(
                 title: const Text('語言 (Language)'),
                 subtitle: Text(_getLanguageName(settings.locale)),
@@ -24,28 +22,26 @@ class OtherSettingsPage extends StatelessWidget {
                 onTap: () => _showLanguageDialog(context, settings),
               ),
               const Divider(),
+
+              _buildSectionTitle('存儲與數據'),
               ListTile(
-                title: const Text('清理快取'),
-                subtitle: const Text('管理正文、圖片、搜尋歷史、匯出暫存與字體'),
-                leading: const Icon(Icons.delete_sweep_outlined),
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const StorageManagementPage(),
-                      ),
-                    ),
+                title: const Text('存儲與下載'),
+                subtitle: const Text('管理下載任務、清理快取空間'),
+                leading: const Icon(Icons.storage_outlined),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const StorageManagementPage()),
+                ),
               ),
               const Divider(),
-              SettingsGroupInterface(
-                settings: settings,
-                showComingSoon: _showComingSoon,
-              ),
-              const Divider(),
+
+              _buildSectionTitle('網路與搜尋'),
               ListTile(
                 title: const Text('User Agent'),
                 subtitle: Text(
                   settings.userAgent.isEmpty ? '預設' : settings.userAgent,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onTap: () => _showUserAgentDialog(context, settings),
               ),
@@ -57,18 +53,57 @@ class OtherSettingsPage extends StatelessWidget {
                 onTap: () => _showAdvancedCoverConfig(context, settings),
               ),
               const Divider(),
-              SettingsGroupAdvanced(
-                settings: settings,
-                showComingSoon: _showComingSoon,
+
+              _buildSectionTitle('進階與實驗性'),
+              SwitchListTile(
+                title: const Text('預設啟用替換規則'),
+                value: settings.replaceEnableDefault,
+                onChanged: (v) => settings.setReplaceEnableDefault(v),
               ),
+              SwitchListTile(
+                title: const Text('顯示加入書架提示'),
+                value: settings.showAddToShelfAlert,
+                onChanged: (v) => settings.setShowAddToShelfAlert(v),
+              ),
+              SwitchListTile(
+                title: const Text('顯示漫畫 UI (測試)'),
+                value: settings.showMangaUi,
+                onChanged: (v) => settings.setShowMangaUi(v),
+              ),
+              
               const Divider(),
-              SettingsGroupSystem(
-                settings: settings,
-                showComingSoon: _showComingSoon,
+              _buildSectionTitle('系統診斷'),
+              ListTile(
+                title: const Text('記錄運行日誌'),
+                subtitle: const Text('開發者調試使用'),
+                trailing: Switch(
+                  value: settings.recordLog,
+                  onChanged: (v) => _showComingSoon(context),
+                ),
               ),
+              ListTile(
+                title: const Text('並行下載線程數'),
+                subtitle: Text('${settings.threadCount}'),
+                onTap: () => _showComingSoon(context),
+              ),
+              const SizedBox(height: 24),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.blue,
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
       ),
     );
   }
@@ -121,6 +156,8 @@ class OtherSettingsPage extends StatelessWidget {
                           (lang) => RadioListTile<String>(
                             title: Text(lang['label']!),
                             value: lang['value']!,
+                            groupValue: null,
+                            onChanged: null,
                           ),
                         )
                         .toList(),

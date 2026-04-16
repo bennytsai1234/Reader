@@ -59,7 +59,12 @@ void main() {
       await manager.getChapterPages(6);
 
       manager.updateWindow(1);
-      expect(manager.targetWindow, {0, 1, 2, 3, 4});
+      expect(manager.isChapterInWindow(0), isTrue);
+      expect(manager.isChapterInWindow(1), isTrue);
+      expect(manager.isChapterInWindow(2), isTrue);
+      expect(manager.isChapterInWindow(3), isTrue);
+      expect(manager.isChapterInWindow(4), isTrue);
+      expect(manager.isChapterInWindow(5), isFalse);
 
       final evicted = manager.evictOutsideWindow();
       expect(evicted, {6});
@@ -286,7 +291,9 @@ void main() {
       manager.enableWholeBookPreload(startIndex: 3);
 
       expect(manager.wholeBookPreloadEnabled, isTrue);
-      expect(manager.targetWindow, {0, 1, 2, 3, 4, 5});
+      for (int i = 0; i < 6; i++) {
+        expect(manager.isChapterInWindow(i), isTrue);
+      }
       expect(fetchOrder, isNotEmpty);
       expect(fetchOrder.first, anyOf(2, 4));
 

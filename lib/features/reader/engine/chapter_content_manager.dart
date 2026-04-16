@@ -190,6 +190,10 @@ class ChapterContentManager {
   /// 非阻塞快取查詢
   List<TextPage>? getCachedPages(int index) => _paginatedCache[index];
 
+  /// 取得分頁結果快取（唯讀）
+  Map<int, List<TextPage>> get paginatedCache =>
+      Map.unmodifiable(_paginatedCache);
+
   void seedPages(int index, List<TextPage> pages) {
     if (_disposed || index < 0 || index >= _chapters.length || pages.isEmpty) {
       return;
@@ -330,10 +334,10 @@ class ChapterContentManager {
     warmupWindow(centerChapterIndex, preloadRadius: radius);
   }
 
-  /// 取得目標視窗
-  Set<int> get targetWindow => Set.unmodifiable(_targetWindow);
+  /// 檢查章節是否在目前目標視窗內
+  bool isChapterInWindow(int index) => _targetWindow.contains(index);
 
-  /// 對目前視窗做額外暖機預載，不改變 targetWindow 本身
+  /// 對目前視窗做額外暖機預載，不改變視窗中心本身
   void warmupWindow(int centerChapterIndex, {int preloadRadius = 2}) {
     if (_targetWindow.isEmpty) return;
     if (_wholeBookPreloadEnabled) {
@@ -571,6 +575,7 @@ class ChapterContentManager {
       if (_disposed) return;
       if (pages.isNotEmpty) {
         _paginatedCache[idx] = pages;
+        _onChapterReadyController.add(idx);
       } else {
         _paginatedCache.remove(idx);
       }

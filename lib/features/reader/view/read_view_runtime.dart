@@ -52,7 +52,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   final ScrollRestoreRunner _scrollRestoreRunner = const ScrollRestoreRunner();
   final ReadViewRuntimeCoordinator _coordinator =
       const ReadViewRuntimeCoordinator();
-  late final ScrollAutoPageDriver _scrollAutoPageDriver;
   late final ScrollRuntimeExecutor _scrollRuntimeExecutor;
 
   @override
@@ -72,21 +71,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       },
       viewportHeight: () => context.size?.height ?? 0.0,
     );
-    _scrollAutoPageDriver = ScrollAutoPageDriver(
-      createTicker: createTicker,
-      isMounted: () => mounted,
-      scrollToChapterLocalOffset: ({
-        required int chapterIndex,
-        required double localOffset,
-        required bool animate,
-      }) {
-        _scrollRuntimeExecutor.scrollToChapterLocalOffset(
-          chapterIndex: chapterIndex,
-          localOffset: localOffset,
-          animate: animate,
-        );
-      },
-    );
+    widget.provider.attachAutoPageTicker(createTicker);
     _fadeCtrl = AnimationController(
       duration: const Duration(milliseconds: 150),
       vsync: this,
@@ -108,7 +93,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
     _fadeCtrl.dispose();
     widget.provider.removeListener(_onProviderStateChanged);
     _itemPositionsListener.itemPositions.removeListener(_handleItemPositionsChanged);
-    _scrollAutoPageDriver.stop();
+    widget.provider.detachAutoPageTicker();
     _userScrollResetTimer?.cancel();
     widget.provider.setScrollInteractionActive(false);
     super.dispose();
@@ -125,8 +110,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
 
     final p = widget.provider;
     p.reconcileVisibleScrollLoads();
-
-    _scrollAutoPageDriver.sync(p);
 
     final pendingScrollAction = _coordinator.consumePendingScrollAction(p);
     if (pendingScrollAction != null) {

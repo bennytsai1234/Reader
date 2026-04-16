@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'settings_provider.dart';
 
+import 'click_action_config_page.dart';
+
 class ReadingSettingsPage extends StatelessWidget {
   const ReadingSettingsPage({super.key});
 
@@ -13,48 +15,30 @@ class ReadingSettingsPage extends StatelessWidget {
         builder: (context, settings, child) {
           return ListView(
             children: [
+              _buildSectionTitle('介面控制'),
               ListTile(
-                title: const Text('螢幕方向'),
-                subtitle: const Text('跟隨系統 / 橫向 / 直向'),
-                leading: const Icon(Icons.screen_rotation),
-                onTap: () => _showComingSoon(context),
-              ),
-              ListTile(
-                title: const Text('螢幕常亮時間'),
-                subtitle: const Text('設定閱讀時螢幕多久後休眠'),
-                leading: const Icon(Icons.timer_outlined),
-                onTap: () => _showComingSoon(context),
+                title: const Text('點擊區域設定 (打點區)'),
+                subtitle: const Text('自訂螢幕各點擊區塊的對應行為'),
+                leading: const Icon(Icons.touch_app),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ClickActionConfigPage()),
+                ),
               ),
               SwitchListTile(
-                title: const Text('隱藏狀態欄'),
-                value: settings.hideStatusBar,
-                onChanged: (v) => settings.setHideStatusBar(v),
+                title: const Text('音量鍵翻頁'),
+                value: settings.volumeKeyPage,
+                onChanged: (v) => settings.setVolumeKeyPage(v),
               ),
               SwitchListTile(
-                title: const Text('隱藏導航欄'),
-                value: settings.hideNavigationBar,
-                onChanged: (v) => settings.setHideNavigationBar(v),
+                title: const Text('滑鼠滾輪翻頁'),
+                value: settings.mouseWheelPage,
+                onChanged: (v) => settings.setMouseWheelPage(v),
               ),
-              SwitchListTile(
-                title: const Text('正文支援連字 (Ligature)'),
-                value: settings.readBodyToLh,
-                onChanged: (v) => settings.setReadBodyToLh(v),
-              ),
-              SwitchListTile(
-                title: const Text('適配挖孔螢幕 (留出邊距)'),
-                value: settings.paddingDisplayCutouts,
-                onChanged: (v) => settings.setPaddingDisplayCutouts(v),
-              ),
-              ListTile(
-                title: const Text('橫向雙頁顯示'),
-                subtitle: const Text('平板或橫螢幕狀態下的雙頁排版'),
-                onTap: () => _showComingSoon(context),
-              ),
-              ListTile(
-                title: const Text('進度條行為'),
-                subtitle: const Text('按章節進度或按全書百分比顯示'),
-                onTap: () => _showComingSoon(context),
-              ),
+              
+              const Divider(),
+              _buildSectionTitle('全域排版'),
               SwitchListTile(
                 title: const Text('使用中文獨立排版'),
                 subtitle: const Text('強迫套用中文排版規則'),
@@ -66,94 +50,36 @@ class ReadingSettingsPage extends StatelessWidget {
                 value: settings.textFullJustify,
                 onChanged: (v) => settings.setTextFullJustify(v),
               ),
+              
+              const Divider(),
+              _buildSectionTitle('系統相容性'),
               SwitchListTile(
-                title: const Text('文字底部對齊'),
-                value: settings.textBottomJustify,
-                onChanged: (v) => settings.setTextBottomJustify(v),
-              ),
-              SwitchListTile(
-                title: const Text('滑鼠滾輪翻頁'),
-                value: settings.mouseWheelPage,
-                onChanged: (v) => settings.setMouseWheelPage(v),
+                title: const Text('隱藏狀態欄'),
+                value: settings.hideStatusBar,
+                onChanged: (v) => settings.setHideStatusBar(v),
               ),
               SwitchListTile(
-                title: const Text('音量鍵翻頁'),
-                value: settings.volumeKeyPage,
-                onChanged: (v) => settings.setVolumeKeyPage(v),
+                title: const Text('隱藏導航欄'),
+                value: settings.hideNavigationBar,
+                onChanged: (v) => settings.setHideNavigationBar(v),
               ),
               SwitchListTile(
-                title: const Text('播放音訊時使用音量鍵翻頁'),
-                value: settings.volumeKeyPageOnPlay,
-                onChanged: (v) => settings.setVolumeKeyPageOnPlay(v),
+                title: const Text('適配挖孔螢幕 (留出邊距)'),
+                value: settings.paddingDisplayCutouts,
+                onChanged: (v) => settings.setPaddingDisplayCutouts(v),
               ),
-              SwitchListTile(
-                title: const Text('長按翻頁'),
-                value: settings.keyPageOnLongPress,
-                onChanged: (v) => settings.setKeyPageOnLongPress(v),
-              ),
-              ListTile(
-                title: const Text('翻頁觸控滑動距離 (Slop)'),
-                onTap: () => _showComingSoon(context),
-              ),
+
+              const Divider(),
+              _buildSectionTitle('進階'),
               SwitchListTile(
                 title: const Text('自動替換書源 (來源失效時)'),
                 value: settings.autoChangeSource,
                 onChanged: (v) => settings.setAutoChangeSource(v),
               ),
               SwitchListTile(
-                title: const Text('可長按選取文字'),
-                value: settings.selectText,
-                onChanged: (v) => settings.setSelectText(v),
-              ),
-              SwitchListTile(
-                title: const Text('顯示亮度調節面板'),
-                value: settings.showBrightnessView,
-                onChanged: (v) => settings.setShowBrightnessView(v),
-              ),
-              SwitchListTile(
-                title: const Text('關閉點擊翻頁動畫 (無動畫翻頁)'),
-                value: settings.noAnimScrollPage,
-                onChanged: (v) => settings.setNoAnimScrollPage(v),
-              ),
-              SwitchListTile(
-                title: const Text('點擊預覽圖片'),
-                value: settings.previewImageByClick,
-                onChanged: (v) => settings.setPreviewImageByClick(v),
-              ),
-              SwitchListTile(
-                title: const Text('啟動渲染最佳化'),
-                value: settings.optimizeRender,
-                onChanged: (v) => settings.setOptimizeRender(v),
-              ),
-              ListTile(
-                title: const Text('點擊區域設定 (打點區)'),
-                subtitle: const Text('自訂螢幕各點擊區塊的對應行為'),
-                leading: const Icon(Icons.touch_app),
-                onTap: () => _showComingSoon(context),
-              ),
-              SwitchListTile(
-                title: const Text('停用返回鍵'),
-                value: settings.disableReturnKey,
-                onChanged: (v) => settings.setDisableReturnKey(v),
-              ),
-              ListTile(
-                title: const Text('自訂實體翻頁按鍵'),
-                onTap: () => _showComingSoon(context),
-              ),
-              SwitchListTile(
-                title: const Text('展開文字選單'),
-                value: settings.expandTextMenu,
-                onChanged: (v) => settings.setExpandTextMenu(v),
-              ),
-              SwitchListTile(
-                title: const Text('標題與副標題附加顯示'),
-                value: settings.showReadTitleAddition,
-                onChanged: (v) => settings.setShowReadTitleAddition(v),
-              ),
-              SwitchListTile(
-                title: const Text('底部欄跟隨頁面模式'),
-                value: settings.readBarStyleFollowPage,
-                onChanged: (v) => settings.setReadBarStyleFollowPage(v),
+                title: const Text('圖片抗鋸齒'),
+                value: settings.antiAlias,
+                onChanged: (v) => settings.setAntiAlias(v),
               ),
             ],
           );
@@ -162,9 +88,17 @@ class ReadingSettingsPage extends StatelessWidget {
     );
   }
 
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('功能開發中 (Work in Progress)')),
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.blue,
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
+      ),
     );
   }
 }

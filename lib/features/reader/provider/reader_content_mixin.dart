@@ -45,6 +45,8 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   final ReaderContentCoordinator _contentCoordinator =
       const ReaderContentCoordinator();
 
+  List<String> _chapterDisplayTitles = const [];
+
   /// Inject typed callbacks from ReadBookController.
   set contentCallbacks(ContentCallbacks callbacks) => _contentCallbacks = callbacks;
 
@@ -56,6 +58,45 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
 
   List<TextPage> get currentChapterPages =>
       chapterPagesCache[currentChapterIndex] ?? const <TextPage>[];
+
+  String displayChapterTitleAt(int index) {
+    if (index < 0 || index >= chapters.length) return '';
+    if (index < _chapterDisplayTitles.length &&
+        _chapterDisplayTitles[index].isNotEmpty) {
+      return _chapterDisplayTitles[index];
+    }
+    return chapters[index].title;
+  }
+
+  Future<void> refreshChapterDisplayTitles({bool notify = true}) async {
+    if (chapters.isEmpty) {
+      _chapterDisplayTitles = const [];
+      if (notify && !isDisposed) {
+        _contentCallbacks.refreshAllChapterRuntime?.call();
+        notifyListeners();
+      }
+      return;
+    }
+
+    final titleRules =
+        (await replaceDao.getEnabled())
+            .where((rule) => rule.isEnabled && rule.scopeTitle)
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+
+    final titles = chapters
+        .map((chapter) => chapter.getDisplayTitle(
+              replaceRules: titleRules,
+              chineseConvertType: chineseConvert,
+            ))
+        .toList();
+    if (isDisposed) return;
+    _chapterDisplayTitles = titles;
+    _contentCallbacks.refreshAllChapterRuntime?.call();
+    if (notify && !isDisposed) {
+      notifyListeners();
+    }
+  }
 
   bool get _isLocalScrollMode =>
       pageTurnMode == PageAnim.scroll && book.origin == 'local';
@@ -157,12 +198,11 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       updatePaginationConfig();
       chapterPagesCache.clear();
       slidePages = [];
-      final repaginateTargets = await contentManager.repaginateForDisplay(
+      await contentManager.repaginateForDisplay(
         centerChapterIndex: targetChapter,
         isScrollMode: _isScrollMode,
         scrollRadius: _scrollPreloadRadius,
       );
-      _syncRepaginatedTargets(repaginateTargets, ensureTargetChapter: targetChapter);
       _refreshSlidePages();
       _restoreDisplayPositionAfterRepaginate(
         targetChapter: targetChapter,
@@ -882,23 +922,6 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       currentPageIndex,
       reason: reason,
     );
-  }
-
-  void _syncRepaginatedTargets(
-    Set<int> chapterIndexes, {
-    required int ensureTargetChapter,
-  }) {
-    for (final entry in chapterIndexes) {
-      final pages = contentManager.getCachedPages(entry);
-      if (pages == null || pages.isEmpty) continue;
-      chapterPagesCache[entry] = pages;
-      _contentCallbacks.refreshChapterRuntime?.call(entry);
-    }
-    final targetPages = contentManager.getCachedPages(ensureTargetChapter);
-    if (targetPages != null && targetPages.isNotEmpty) {
-      chapterPagesCache[ensureTargetChapter] = targetPages;
-      _contentCallbacks.refreshChapterRuntime?.call(ensureTargetChapter);
-    }
   }
 
   void _restoreDisplayPositionAfterRepaginate({
