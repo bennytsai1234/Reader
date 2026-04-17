@@ -32,12 +32,15 @@ import 'package:inkpage_reader/shared/theme/app_theme.dart';
 
 import 'package:inkpage_reader/features/reader/provider/reader_tts_mixin.dart';
 
+import 'package:inkpage_reader/features/reader/provider/reader_battery_mixin.dart';
+
 class ReadBookController extends ReaderProviderBase
     with
         ReaderSettingsMixin,
         ReaderContentMixin,
         ReaderAutoPageMixin,
         ReaderTtsMixin,
+        ReaderBatteryMixin,
         WidgetsBindingObserver {
   final Map<int, ReaderChapter> _chapterRuntimeCache = {};
   final ReaderChapterProvider _chapterProvider = const ReaderChapterProvider();
@@ -46,6 +49,8 @@ class ReadBookController extends ReaderProviderBase
   final ReaderProgressStore _progressStore = ReaderProgressStore();
   final ReaderScrollVisibilityCoordinator _scrollVisibility =
       ReaderScrollVisibilityCoordinator();
+  final ReaderDisplayCoordinator _displayCoordinator =
+      const ReaderDisplayCoordinator();
   late final ReaderProgressCoordinator _progressCoordinator;
   late final ReaderSessionState _sessionState;
   late final ReaderSessionCoordinator _sessionCoordinator;
@@ -380,60 +385,7 @@ class ReadBookController extends ReaderProviderBase
     lifecycle = ReaderLifecycle.loading;
     _sessionCoordinator.updatePhase(ReaderSessionPhase.bootstrapping);
 
-    // Wire typed callbacks (replaces `this as dynamic` casts)
-    contentCallbacks = ContentCallbacks(
-      refreshChapterRuntime: refreshChapterRuntime,
-      refreshAllChapterRuntime: refreshAllChapterRuntime,
-      buildSlideRuntimePages: buildSlideRuntimePages,
-      jumpToSlidePage:
-          (pageIndex, {required reason}) =>
-              jumpToSlidePage(pageIndex, reason: reason as ReaderCommandReason),
-      jumpToChapterLocalOffset:
-          ({
-            required chapterIndex,
-            required localOffset,
-            required alignment,
-            required reason,
-          }) => jumpToChapterLocalOffset(
-            chapterIndex: chapterIndex,
-            localOffset: localOffset,
-            alignment: alignment,
-            reason: reason as ReaderCommandReason,
-          ),
-      jumpToChapterCharOffset:
-          ({
-            required chapterIndex,
-            required charOffset,
-            required reason,
-            bool isRestoringJump = false,
-          }) => jumpToChapterCharOffset(
-            chapterIndex: chapterIndex,
-            charOffset: charOffset,
-            reason: reason as ReaderCommandReason,
-            isRestoringJump: isRestoringJump,
-          ),
-      // Progress-related callbacks (used by ReaderProgressMixin)
-      chapterAt: chapterAt,
-      pagesForChapter: pagesForChapter,
-      progressStore: _progressStore,
-      shouldPersistVisiblePosition: shouldPersistVisiblePosition,
-      currentSessionLocation: () => sessionLocation,
-      updateSessionLocation: _updateSessionLocation,
-      persistCurrentProgress:
-          ({required chapterIndex, int? pageIndex, required reason}) =>
-              persistCurrentProgress(
-                chapterIndex: chapterIndex,
-                pageIndex: pageIndex,
-                reason: reason as ReaderCommandReason,
-              ),
-      evaluateScrollAutoPageStep: evaluateScrollAutoPageStep,
-      clearNavigationReason: (reason) => _navigation.clear(reason as ReaderCommandReason),
-      canMoveToNextSlidePage: _canMoveToNextSlidePage,
-      canMoveToPrevSlidePage: _canMoveToPrevSlidePage,
-      globalPageIndexFor: ({required chapterIndex, required localPageIndex}) => 
-          pageFactory.globalPageIndexFor(chapterIndex: chapterIndex, localPageIndex: localPageIndex),
-    );
-    contentCallbacksRef.debugAssertComplete();
+    _wireCallbacks();
 
     // ── Phase 1: PREPARE (parallel data loading, no UI updates) ──
     await Future.wait([
@@ -490,7 +442,7 @@ class ReadBookController extends ReaderProviderBase
     });
 
     // ── Phase 3: WARMUP (background, non-blocking) ──
-    _startHeartbeat();
+    startBatteryHeartbeat();
     readAloudController.attach();
     scheduleDeferredWindowWarmup(currentChapterIndex);
     if (pageTurnMode == PageAnim.scroll) {
@@ -499,15 +451,64 @@ class ReadBookController extends ReaderProviderBase
     }
   }
 
-  Timer? _heartbeatTimer;
-  void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      batteryLevelNotifier.value = (batteryLevelNotifier.value - 1).clamp(
-        0,
-        100,
-      );
-    });
+  void _wireCallbacks() {
+    contentCallbacks = ContentCallbacks(
+      refreshChapterRuntime: refreshChapterRuntime,
+      refreshAllChapterRuntime: refreshAllChapterRuntime,
+      buildSlideRuntimePages: buildSlideRuntimePages,
+      jumpToSlidePage:
+          (pageIndex, {required reason}) =>
+              jumpToSlidePage(pageIndex, reason: reason as ReaderCommandReason),
+      jumpToChapterLocalOffset:
+          ({
+            required chapterIndex,
+            required localOffset,
+            required alignment,
+            required reason,
+          }) => jumpToChapterLocalOffset(
+            chapterIndex: chapterIndex,
+            localOffset: localOffset,
+            alignment: alignment,
+            reason: reason as ReaderCommandReason,
+          ),
+      jumpToChapterCharOffset:
+          ({
+            required chapterIndex,
+            required charOffset,
+            required reason,
+            bool isRestoringJump = false,
+          }) => jumpToChapterCharOffset(
+            chapterIndex: chapterIndex,
+            charOffset: charOffset,
+            reason: reason as ReaderCommandReason,
+            isRestoringJump: isRestoringJump,
+          ),
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
+      progressStore: _progressStore,
+      shouldPersistVisiblePosition: shouldPersistVisiblePosition,
+      currentSessionLocation: () => sessionLocation,
+      updateSessionLocation: _updateSessionLocation,
+      persistCurrentProgress:
+          ({required chapterIndex, int? pageIndex, required reason}) =>
+              persistCurrentProgress(
+                chapterIndex: chapterIndex,
+                pageIndex: pageIndex,
+                reason: reason as ReaderCommandReason,
+              ),
+      evaluateScrollAutoPageStep: evaluateScrollAutoPageStep,
+      clearNavigationReason:
+          (reason) => _navigation.clear(reason as ReaderCommandReason),
+      canMoveToNextSlidePage: _canMoveToNextSlidePage,
+      canMoveToPrevSlidePage: _canMoveToPrevSlidePage,
+      globalPageIndexFor:
+          ({required chapterIndex, required localPageIndex}) =>
+              pageFactory.globalPageIndexFor(
+                chapterIndex: chapterIndex,
+                localPageIndex: localPageIndex,
+              ),
+    );
+    contentCallbacksRef.debugAssertComplete();
   }
 
   Future<void> _loadChapters() async {
@@ -522,7 +523,6 @@ class ReadBookController extends ReaderProviderBase
   }
 
   double textPadding = 16.0;
-  int get batteryLevel => batteryLevelNotifier.value;
   double get autoPageProgress => autoPageProgressNotifier.value;
 
   void setViewSize(Size size) {
@@ -623,7 +623,7 @@ class ReadBookController extends ReaderProviderBase
     _persistSessionProgress();
     _sessionCoordinator.updatePhase(ReaderSessionPhase.disposed);
     _progressCoordinator.dispose();
-    _heartbeatTimer?.cancel();
+    stopBatteryHeartbeat();
     disposeAutoPageCoordinator();
     readAloudController.dispose();
     disposeContentManager();
@@ -669,9 +669,10 @@ class ReadBookController extends ReaderProviderBase
   String get currentChapterUrl =>
       chapters.isNotEmpty ? chapters[currentChapterIndex].url : '';
   String get displayChapterPercentLabel {
-    if (chapters.isEmpty) return '0.0%';
-    final chapterIndex = _displayPageChapterIndex.clamp(0, chapters.length - 1);
-    return '${(chapterIndex / chapters.length * 100).toStringAsFixed(1)}%';
+    return _displayCoordinator.formatChapterPercent(
+      _displayPageChapterIndex,
+      chapters.length,
+    );
   }
 
   int get displayPageCount {
@@ -710,10 +711,10 @@ class ReadBookController extends ReaderProviderBase
   }
 
   String get displayPageLabel {
-    final count = displayPageCount;
-    if (count <= 0) return '0/0';
-    final page = (displayPageIndex + 1).clamp(1, count);
-    return '$page/$count';
+    return _displayCoordinator.formatPageLabel(
+      displayPageIndex,
+      displayPageCount,
+    );
   }
 
   int get _displayPageChapterIndex {
@@ -756,7 +757,10 @@ class ReadBookController extends ReaderProviderBase
   }
 
   void onScrubbing(dynamic value) {
-    final targetIndex = _resolveScrubChapterIndex(value);
+    final targetIndex = _displayCoordinator.resolveScrubChapterIndex(
+      value: value,
+      totalChapters: chapters.length,
+    );
     if (scrubIndex != targetIndex) {
       scrubIndex = targetIndex;
       notifyListeners();
@@ -765,7 +769,10 @@ class ReadBookController extends ReaderProviderBase
 
   void onScrubEnd(dynamic value) {
     isScrubbing = false;
-    final targetIndex = _resolveScrubChapterIndex(value);
+    final targetIndex = _displayCoordinator.resolveScrubChapterIndex(
+      value: value,
+      totalChapters: chapters.length,
+    );
     unawaited(jumpToChapter(targetIndex));
     notifyListeners();
   }
@@ -781,7 +788,17 @@ class ReadBookController extends ReaderProviderBase
   }
 
   void addBookmark({String? content}) {
-    final bookmark = _buildBookmark(content: content);
+    final chapterIndex = _displayPageChapterIndex;
+    final bookmark = Bookmark(
+      time: DateTime.now().millisecondsSinceEpoch,
+      bookName: book.name,
+      bookAuthor: book.author,
+      bookUrl: book.bookUrl,
+      chapterIndex: chapterIndex,
+      chapterName: displayChapterTitleAt(chapterIndex),
+      chapterPos: _resolveCurrentCharOffset(),
+      bookText: content ?? '',
+    );
     bookmarkDao.upsert(bookmark);
     notifyListeners();
   }
@@ -901,36 +918,6 @@ class ReadBookController extends ReaderProviderBase
 
   void _notifyIfActive() {
     if (!isDisposed) notifyListeners();
-  }
-
-  void _updateTtsMediaInfo(String title, String author) {
-    TTSService().updateMediaInfo(
-      title: title.isEmpty ? book.name : title,
-      author: author.isEmpty ? book.author : author,
-    );
-  }
-
-  int _resolveScrubChapterIndex(dynamic value) {
-    final rawIndex =
-        value is double
-            ? (value * (chapters.length - 1)).round()
-            : value as int;
-    if (chapters.isEmpty) return 0;
-    return rawIndex.clamp(0, chapters.length - 1);
-  }
-
-  Bookmark _buildBookmark({String? content}) {
-    final chapterIndex = _displayPageChapterIndex;
-    return Bookmark(
-      time: DateTime.now().millisecondsSinceEpoch,
-      bookName: book.name,
-      bookAuthor: book.author,
-      bookUrl: book.bookUrl,
-      chapterIndex: chapterIndex,
-      chapterName: displayChapterTitleAt(chapterIndex),
-      chapterPos: _resolveCurrentCharOffset(),
-      bookText: content ?? '',
-    );
   }
 
   void _persistSetting(String key, dynamic value) {

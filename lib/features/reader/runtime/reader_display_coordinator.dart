@@ -103,4 +103,26 @@ class ReaderDisplayCoordinator {
       targetChapterIndex: currentChapterIndex,
     ).globalPageIndex;
   }
+
+  String formatChapterPercent(int chapterIndex, int totalChapters) {
+    if (totalChapters <= 0) return '0.0%';
+    final index = chapterIndex.clamp(0, totalChapters - 1);
+    return '${(index / totalChapters * 100).toStringAsFixed(1)}%';
+  }
+
+  String formatPageLabel(int pageIndex, int totalPages) {
+    if (totalPages <= 0) return '0/0';
+    final page = (pageIndex + 1).clamp(1, totalPages);
+    return '$page/$totalPages';
+  }
+
+  int resolveScrubChapterIndex({
+    required dynamic value,
+    required int totalChapters,
+  }) {
+    if (totalChapters <= 0) return 0;
+    final int rawIndex =
+        value is double ? (value * (totalChapters - 1)).round() : value as int;
+    return rawIndex.clamp(0, totalChapters - 1);
+  }
 }
