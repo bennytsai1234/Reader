@@ -1,8 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/local_book/local_book_formats.dart';
+import 'package:inkpage_reader/core/services/bookshelf_exchange_service.dart';
+import 'package:inkpage_reader/core/services/restore_service.dart';
 import 'package:inkpage_reader/core/widgets/book_cover_widget.dart';
 import 'package:inkpage_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:inkpage_reader/features/bookshelf/group_manage_page.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/search/search_page.dart';
@@ -214,19 +220,21 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         case 'add_local':
                           final result = await FilePicker.platform.pickFiles(
                             type: FileType.custom,
-                            allowedExtensions: ['txt', 'epub'],
+                            allowedExtensions:
+                                kSupportedLocalBookExtensions.toList()..sort(),
                           );
                           if (result != null &&
                               result.files.single.path != null) {
-                            await provider.importLocalBookPath(
+                            if (!context.mounted) break;
+                            await _importLocalBook(
+                              context,
+                              provider,
                               result.files.single.path!,
                             );
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('正在解析本地書籍...')),
-                              );
-                            }
                           }
+                          break;
+                        case 'add_url':
+                          await _showAddUrlDialog(context, provider);
                           break;
                         case 'manage':
                           setState(() {
@@ -234,9 +242,18 @@ class _BookshelfPageState extends State<BookshelfPage> {
                           });
                           break;
                         case 'group_manage':
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('分組管理開發中')),
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const GroupManagePage(),
+                            ),
                           );
+                          break;
+                        case 'import':
+                          await _handleBookshelfImport(context);
+                          break;
+                        case 'export':
+                          await _handleBookshelfExport(context, provider);
                           break;
                         case 'log':
                           Navigator.push(
@@ -270,6 +287,128 @@ class _BookshelfPageState extends State<BookshelfPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _importLocalBook(
+    BuildContext context,
+    BookshelfProvider provider,
+    String path,
+  ) async {
+    try {
+      final ok = await provider.importLocalBookPath(path);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? '匯入成功' : '匯入失敗')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+    }
+  }
+
+  Future<void> _showAddUrlDialog(
+    BuildContext context,
+    BookshelfProvider provider,
+  ) async {
+    final controller = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('從網址匯入'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '輸入匯入網址',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('匯入'),
+          ),
+        ],
+      ),
+    );
+    if (url == null || url.isEmpty || !context.mounted) return;
+    try {
+      await provider.importBookshelfFromUrl(url);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('網址匯入完成')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('網址匯入失敗: $e')));
+    }
+  }
+
+  Future<void> _handleBookshelfImport(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json', 'zip'],
+    );
+    if (result == null || result.files.single.path == null || !context.mounted) {
+      return;
+    }
+    final path = result.files.single.path!;
+    try {
+      if (path.toLowerCase().endsWith('.zip')) {
+        final restored = await RestoreService().restoreFromZip(File(path));
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              restored ? '備份還原完成，請重新開啟相關頁面確認資料' : '備份還原失敗',
+            ),
+          ),
+        );
+      } else {
+        final imported = await BookshelfExchangeService().importFromFile(
+          File(path),
+        );
+        if (!context.mounted) return;
+        context.read<BookshelfProvider>().loadBooks();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('匯入失敗: $e')));
+    }
+  }
+
+  Future<void> _handleBookshelfExport(
+    BuildContext context,
+    BookshelfProvider provider,
+  ) async {
+    try {
+      await BookshelfExchangeService().shareBookshelf(books: provider.books);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('書架已匯出')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
+    }
   }
 
   Widget _buildListView(BookshelfProvider provider) {

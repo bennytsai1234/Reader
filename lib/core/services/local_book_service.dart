@@ -7,7 +7,9 @@ import 'package:path/path.dart' as p;
 
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/local_book/local_book_formats.dart';
 import 'package:inkpage_reader/core/local_book/txt_parser.dart';
+import 'package:inkpage_reader/core/local_book/umd_parser.dart';
 import 'package:inkpage_reader/core/services/epub_service.dart';
 import 'package:inkpage_reader/core/services/resource_service.dart';
 import 'package:fast_gbk/fast_gbk.dart';
@@ -34,8 +36,12 @@ class LocalBookService {
     final file = File(path);
     if (!await file.exists()) return null;
 
-    final ext = path.split('.').last.toLowerCase();
+    final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
     final bookUrl = 'local://$path';
+
+    if (!isSupportedLocalBookExtension(ext)) {
+      throw UnsupportedError('不支援的本地格式: $ext');
+    }
 
     if (ext == 'txt') {
       final result = await compute((File f) async {
@@ -94,8 +100,39 @@ class LocalBookService {
       return LocalBookImportResult(book: book, chapters: chapters);
     }
 
-    AppLog.d('LocalBookService: 不支援的格式 $ext');
-    return null;
+    if (ext == 'umd') {
+      final parsed = await UmdParser(file).parse();
+      if (parsed.coverBytes != null && parsed.coverBytes!.isNotEmpty) {
+        await ResourceService().persistMemoryResource(
+          'memory://$bookUrl',
+          parsed.coverBytes!,
+        );
+      }
+      final book = Book(
+        bookUrl: bookUrl,
+        name: parsed.title,
+        author: parsed.author,
+        origin: 'local',
+        originName: '本地',
+        isInBookshelf: true,
+        type: 0,
+        coverUrl: parsed.coverBytes != null ? 'memory://$bookUrl' : null,
+        totalChapterNum: parsed.chapters.length,
+      );
+      final chapters = <BookChapter>[
+        for (var i = 0; i < parsed.chapters.length; i++)
+          BookChapter(
+            url: '$bookUrl#$i',
+            title: parsed.chapters[i].title,
+            bookUrl: bookUrl,
+            index: i,
+            content: parsed.chapters[i].content,
+          ),
+      ];
+      return LocalBookImportResult(book: book, chapters: chapters);
+    }
+
+    throw UnsupportedError('目前尚未支援 $ext 本地解析');
   }
 
   /// 獲取本地書籍章節內容
@@ -105,7 +142,7 @@ class LocalBookService {
     if (!await file.exists()) return '檔案不存在: $path';
 
 
-    final ext = path.split('.').last.toLowerCase();
+    final ext = p.extension(path).replaceFirst('.', '').toLowerCase();
     if (ext == 'txt') {
       // 根據章節索引 (start, end) 指標讀取 TXT 部分內容 (對標 Android ReadLocalBook.kt)
       if (chapter.start != null && chapter.end != null) {
@@ -124,6 +161,8 @@ class LocalBookService {
 
     } else if (ext == 'epub') {
       return await EpubService().getChapterContent(file, chapter.url);
+    } else if (ext == 'umd') {
+      return chapter.content ?? '';
     }
     return '不支援的本地格式: $ext';
   }
@@ -171,4 +210,3 @@ class LocalBookService {
     }
   }
 }
-

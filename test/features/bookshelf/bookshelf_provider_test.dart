@@ -108,6 +108,36 @@ void main() {
       p.setGroup(2);
       expect(p.currentGroupId, 2);
     });
+
+    test('createGroup 會分配下一個可用 bit mask', () async {
+      fakeGroupDao.groups = [
+        BookGroup(groupId: 1, groupName: 'A'),
+        BookGroup(groupId: 2, groupName: 'B'),
+      ];
+      final p = _makeProvider();
+      await Future.delayed(Duration.zero);
+      await p.createGroup('C');
+      expect(fakeGroupDao.groups.any((g) => g.groupId == 4), isTrue);
+    });
+
+    test('deleteGroup 會從書籍上移除對應 group mask', () async {
+      fakeGroupDao.groups = [BookGroup(groupId: 2, groupName: 'B')];
+      fakeBookDao.shelf = [
+        Book(
+          bookUrl: 'http://a.com',
+          name: 'A',
+          author: 'Au',
+          origin: 'o',
+          originName: 'on',
+          group: 2,
+          isInBookshelf: true,
+        ),
+      ];
+      final p = _makeProvider();
+      await Future.delayed(Duration.zero);
+      await p.deleteGroup(2);
+      expect(fakeBookDao.shelf.single.group, 0);
+    });
   });
 
   group('BookshelfProvider - 批次模式', () {

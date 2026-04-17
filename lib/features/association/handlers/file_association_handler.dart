@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:inkpage_reader/core/local_book/local_book_formats.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -20,7 +21,7 @@ mixin FileAssociationHandler on AssociationBase {
           return;
         }
         _handleSharedFile(context, file.path, showImportDialog, showForceImportDialog);
-      } else if (ext == '.txt' || ext == '.epub') {
+      } else if (isSupportedLocalBookExtension(ext)) {
         if (!context.mounted) {
           return;
         }
@@ -83,4 +84,3 @@ mixin FileAssociationHandler on AssociationBase {
     }
   }
 }
-

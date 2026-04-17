@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:inkpage_reader/core/local_book/local_book_formats.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -61,8 +62,7 @@ class _SmartScanPageState extends State<SmartScanPage> {
       final entities = <FileSystemEntity>[];
       await for (var entity in dir.list(recursive: true, followLinks: false)) {
         if (entity is File) {
-          final ext = p.extension(entity.path).toLowerCase();
-          if (ext == '.txt' || ext == '.epub') {
+          if (isSupportedLocalBookExtension(p.extension(entity.path))) {
             entities.add(entity);
           }
         }
@@ -149,7 +149,7 @@ class _SmartScanPageState extends State<SmartScanPage> {
             child: _isScanning
                 ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('正在搜尋電子書...')]))
                 : _files.isEmpty
-                    ? Center(child: Text(_currentPath == null ? '請點擊右上角圖示選擇掃描目錄' : '此目錄下未找到 txt 或 epub 檔案'))
+                    ? Center(child: Text(_currentPath == null ? '請點擊右上角圖示選擇掃描目錄' : '此目錄下未找到可匯入的電子書檔案'))
                     : ListView.builder(
                         itemCount: _files.length,
                         itemBuilder: (context, index) {
@@ -189,4 +189,3 @@ class _SmartScanPageState extends State<SmartScanPage> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
-

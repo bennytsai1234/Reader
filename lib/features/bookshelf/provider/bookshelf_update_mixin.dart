@@ -1,4 +1,5 @@
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:inkpage_reader/core/services/event_bus.dart';
 import 'bookshelf_provider_base.dart';
 
@@ -43,12 +44,8 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
   Future<void> importBookshelfFromUrl(String url) async {
     isLoading = true; notifyListeners();
     try {
-      final response = await service.importBookshelf(url);
-      if (response.isNotEmpty) {
-        await bookDao.upsertAll(response);
-        loadBooks();
-      }
+      await BookshelfExchangeService().importFromUrl(url);
+      await loadBooks();
     } finally { isLoading = false; notifyListeners(); }
   }
 }
-

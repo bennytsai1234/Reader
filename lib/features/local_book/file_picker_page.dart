@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
+import 'package:inkpage_reader/core/local_book/local_book_formats.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -65,8 +66,7 @@ class _FilePickerPageState extends State<FilePickerPage> {
     if (entity is Directory) {
       _navigateTo(entity);
     } else if (entity is File) {
-      final ext = p.extension(entity.path).toLowerCase();
-      if (ext == '.txt' || ext == '.epub') {
+      if (isSupportedLocalBookExtension(p.extension(entity.path))) {
         _showImportConfirm(entity);
       }
     }
@@ -156,8 +156,11 @@ class _FilePickerPageState extends State<FilePickerPage> {
                               final name = p.basename(entity.path);
                               
                               if (!isDir) {
-                                final ext = p.extension(entity.path).toLowerCase();
-                                if (ext != '.txt' && ext != '.epub') return const SizedBox.shrink();
+                                if (!isSupportedLocalBookExtension(
+                                  p.extension(entity.path),
+                                )) {
+                                  return const SizedBox.shrink();
+                                }
                               }
 
                               return ListTile(
@@ -178,4 +181,3 @@ class _FilePickerPageState extends State<FilePickerPage> {
     );
   }
 }
-

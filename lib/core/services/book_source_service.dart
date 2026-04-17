@@ -4,9 +4,11 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/engine/web_book/web_book_service.dart';
+import 'package:inkpage_reader/core/database/dao/book_dao.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
+import 'package:inkpage_reader/core/services/bookshelf_exchange_service.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
 class BookSourceService {
@@ -46,8 +48,9 @@ class BookSourceService {
   }
 
   Future<List<Book>> importBookshelf(String url) async {
-    // 實作從網址匯入書架邏輯 (例如：backup url or legacy share url)
-    return [];
+    final result = await BookshelfExchangeService().importFromUrl(url);
+    if (result.books <= 0) return [];
+    return getIt<BookDao>().getAllInBookshelf();
   }
 
   /// 儲存（新增或更新）書源
@@ -59,4 +62,3 @@ class BookSourceService {
   /// 取得書籍所有章節（用於不帶完整 provider 的頁面）
   Future<List<BookChapter>> getBookChapters(String bookUrl) => getIt<ChapterDao>().getChapters(bookUrl);
 }
-

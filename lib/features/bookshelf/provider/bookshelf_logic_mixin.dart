@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import 'bookshelf_provider_base.dart';
-import 'package:inkpage_reader/core/models/book_group.dart';
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/book_group.dart';
+import 'bookshelf_provider_base.dart';
 
 /// BookshelfProvider 的 UI 狀態與分組邏輯擴展
 mixin BookshelfLogicMixin on BookshelfProviderBase {
@@ -93,6 +93,7 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
   }
 
   Future<void> reorderGroups(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex -= 1;
     final item = groups.removeAt(oldIndex);
     groups.insert(newIndex, item);
     await groupDao.updateOrder(groups);
@@ -105,7 +106,10 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
   }
 
   Future<void> createGroup(String name) async {
-    await groupDao.upsert(BookGroup(groupId: 0, groupName: name, order: groups.length));
+    final nextMask = _nextGroupMask();
+    await groupDao.upsert(
+      BookGroup(groupId: nextMask, groupName: name, order: groups.length),
+    );
     await loadGroups();
   }
 
@@ -115,8 +119,27 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
   }
 
   Future<void> deleteGroup(int id) async {
+    final allBooks = await bookDao.getAllInBookshelf();
+    for (final book in allBooks) {
+      if (book.hasGroup(id)) {
+        book.removeGroup(id);
+        await bookDao.upsert(book);
+      }
+    }
     await groupDao.deleteById(id);
     await loadGroups();
+    await loadBooks();
+  }
+
+  int _nextGroupMask() {
+    final usedMasks = groups
+        .map((g) => g.groupId)
+        .where((id) => id > 0)
+        .toSet();
+    var candidate = 1;
+    while (usedMasks.contains(candidate)) {
+      candidate <<= 1;
+    }
+    return candidate;
   }
 }
-

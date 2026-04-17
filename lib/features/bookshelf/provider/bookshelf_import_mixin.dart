@@ -4,10 +4,10 @@ import 'bookshelf_provider_base.dart';
 
 /// BookshelfProvider 的本地書籍匯入邏輯擴展
 mixin BookshelfImportMixin on BookshelfProviderBase {
-  Future<void> importLocalBookPath(String path) async {
+  Future<bool> importLocalBookPath(String path) async {
     final bookUrl = 'local://$path';
     final existingBook = await bookDao.getByUrl(bookUrl);
-    if (existingBook != null && existingBook.isInBookshelf) return;
+    if (existingBook != null && existingBook.isInBookshelf) return true;
 
     isLoading = true;
     notifyListeners();
@@ -17,10 +17,13 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
       if (result != null) {
         await bookDao.upsert(result.book);
         await chapterDao.insertChapters(result.chapters);
-        loadBooks();
+        await loadBooks();
+        return true;
       }
+      return false;
     } catch (e) {
       AppLog.e('匯入本地書籍失敗: $e', error: e);
+      rethrow;
     } finally {
       isLoading = false;
       notifyListeners();
