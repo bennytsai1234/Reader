@@ -128,7 +128,9 @@ class AppearanceSettingsPage extends StatelessWidget {
                       return RadioListTile<int>(
                         title: Text(modes[index]),
                         value: index,
+                        // ignore: deprecated_member_use
                         groupValue: null, // Managed by RadioGroup
+                        // ignore: deprecated_member_use
                         onChanged: null, // Managed by RadioGroup
                       );
                     }),

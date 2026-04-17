@@ -156,7 +156,9 @@ class OtherSettingsPage extends StatelessWidget {
                           (lang) => RadioListTile<String>(
                             title: Text(lang['label']!),
                             value: lang['value']!,
+                            // ignore: deprecated_member_use
                             groupValue: null,
+                            // ignore: deprecated_member_use
                             onChanged: null,
                           ),
                         )

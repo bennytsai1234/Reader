@@ -4,7 +4,6 @@ import 'package:inkpage_reader/core/models/search_keyword.dart';
 import 'package:inkpage_reader/core/models/server.dart';
 import 'package:inkpage_reader/core/models/keyboard_assist.dart';
 import 'package:inkpage_reader/core/models/cache.dart';
-import 'dart:convert';
 
 void main() {
   group('System and Utility Models Tests', () {
@@ -24,14 +23,20 @@ void main() {
       expect(fromJson.usage, 10);
     });
 
-    test('Server and WebDavConfig serialization', () {
-      final webdav = WebDavConfig(url: 'http://dav.com', username: 'user', password: 'pwd');
-      final server = Server(id: 1, name: 'MyCloud', config: jsonEncode(webdav.toJson()));
-      
+    test('Server serialization', () {
+      final server = Server(
+        id: 1,
+        name: 'MyCloud',
+        type: 'WEBDAV',
+        config: '{"url":"http://dav.com","username":"user"}',
+      );
+
       final json = server.toJson();
       final fromJson = Server.fromJson(json);
+      expect(fromJson.id, 1);
       expect(fromJson.name, 'MyCloud');
-      expect(fromJson.webDavConfig?.username, 'user');
+      expect(fromJson.type, 'WEBDAV');
+      expect(fromJson.config, contains('url'));
     });
 
     test('KeyboardAssist serialization', () {

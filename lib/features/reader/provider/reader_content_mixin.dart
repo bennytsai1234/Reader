@@ -106,7 +106,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       pageTurnMode == PageAnim.scroll && book.origin == 'local';
   bool get _isLocalBook => book.origin == 'local';
   bool get _isScrollMode => pageTurnMode == PageAnim.scroll;
-  int get _defaultSlideWarmupRadius => _isLocalBook ? 1 : 2;
+  // 本地書 slide 模式的 warmup 半徑與網路書相同（disk I/O 無額外成本）。
+  // 僅 scroll 模式維持 1 避免過多章節同時持在記憶體中。
+  int get _defaultSlideWarmupRadius => 2;
   bool get isPaginatingContent => _isPaginating;
 
   bool get hasPendingSlideRecenter => _pendingRecenterChapterIndex != null;
@@ -430,7 +432,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     if (_isLocalScrollMode) return;
     _deferredWindowWarmupTimer?.cancel();
     _extendedWindowWarmupTimer?.cancel();
-    _deferredWindowWarmupTimer = Timer(delay, () {
+    // slide 模式不需要等 1500ms，立刻觸發以縮短相鄰章節備妥時間。
+    final effectiveDelay = _isScrollMode ? delay : const Duration(milliseconds: 150);
+    _deferredWindowWarmupTimer = Timer(effectiveDelay, () {
       if (!isDisposed && hasContentManager) {
         if (_isScrollMode && contentManager.userInteractionActive) {
           scheduleDeferredWindowWarmup(
@@ -823,7 +827,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   }
 
   int _effectivePreloadRadius(int requestedRadius) {
-    if (_isLocalBook) return 1;
+    // 本地書 scroll 模式維持 1 (scroll 從 activateWindow 管理，不需要大 radius);
+    // 本地書 slide 模式允許完整 radius — 沒有網路流量顧慮，磁碟讀取近乎免費。
+    if (_isLocalBook && _isScrollMode) return 1;
     if (_isScrollMode) {
       return requestedRadius.clamp(0, _scrollPreloadRadius).toInt();
     }
@@ -867,11 +873,15 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   }
 
   void _preloadSlideNeighbors(int chapterIndex, {required int preloadRadius}) {
-    for (final neighbor in [chapterIndex - 1, chapterIndex + 1]) {
-      if (preloadRadius <= 0 || neighbor < 0 || neighbor >= chapters.length) {
-        continue;
+    if (preloadRadius <= 0) return;
+    // 從近到遠依序觸發，讓鄰近章節優先拿到載入機會。
+    // 原本只抓 ±1 並忽略 preloadRadius，現改為正確展開整個半徑範圍。
+    for (int delta = 1; delta <= preloadRadius; delta++) {
+      for (final neighbor in [chapterIndex + delta, chapterIndex - delta]) {
+        if (neighbor < 0 || neighbor >= chapters.length) continue;
+        if (chapterPagesCache[neighbor]?.isNotEmpty ?? false) continue;
+        unawaited(_loadAndCacheChapter(neighbor, silent: true));
       }
-      unawaited(_loadAndCacheChapter(neighbor, silent: true));
     }
   }
 

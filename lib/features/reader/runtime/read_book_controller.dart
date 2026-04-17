@@ -422,10 +422,14 @@ class ReadBookController extends ReaderProviderBase
       await loadChapterWithPreloadRadius(
         currentChapterIndex,
         preloadRadius:
-            pageTurnMode == PageAnim.scroll ? initialPreloadRadius : 1,
+            // scroll mode: local=1, network=0 (controlled by window)
+            // slide mode: 2，讓啟動時立刻預載 N±1 和 N±2，
+            //             減少使用者在章節邊界等待的機率
+            pageTurnMode == PageAnim.scroll ? initialPreloadRadius : 2,
       );
       if (isDisposed) return;
     }
+
 
     // Apply restore position + transition to ready in ONE update
     batchUpdate(() {
@@ -611,6 +615,45 @@ class ReadBookController extends ReaderProviderBase
     }
     if (i >= slidePages.length - 2 && !isLoading) {
       triggerSilentPreload();
+    }
+
+    // 提前偵測章節邊界，在接近章節末/首頁時就 prioritize 相鄰章節預載，
+    // 避免使用者翻到最後一頁後才開始 fetch 下一章節而需要等待。
+    _prefetchSlideNeighborIfNearBoundary(i);
+  }
+
+  /// 當目前頁接近所在章節的末尾或開頭時，提前觸發相鄰章節的優先預載。
+  /// [lookAheadPages]：距邊界幾頁內開始預載（預設 3 頁）。
+  void _prefetchSlideNeighborIfNearBoundary(int globalPageIndex, {int lookAheadPages = 3}) {
+    if (!hasContentManager || slidePages.isEmpty) return;
+    if (globalPageIndex < 0 || globalPageIndex >= slidePages.length) return;
+
+    final page = slidePages[globalPageIndex];
+    final chapterIndex = page.chapterIndex;
+    final chapterPages = pagesForChapter(chapterIndex);
+    if (chapterPages.isEmpty) return;
+
+    final localIndex = page.index; // 此頁在本章節中的頁碼（0-based）
+    final chapterPageCount = chapterPages.length;
+
+    // 接近章節末尾 → 預載下一章節
+    if (localIndex >= chapterPageCount - 1 - lookAheadPages) {
+      final next = chapterIndex + 1;
+      if (next < chapters.length &&
+          !(chapterPagesCache[next]?.isNotEmpty ?? false) &&
+          !loadingChapters.contains(next)) {
+        contentManager.prioritizeChapter(next, preloadRadius: 1);
+      }
+    }
+
+    // 接近章節開頭 → 預載上一章節
+    if (localIndex <= lookAheadPages) {
+      final prev = chapterIndex - 1;
+      if (prev >= 0 &&
+          !(chapterPagesCache[prev]?.isNotEmpty ?? false) &&
+          !loadingChapters.contains(prev)) {
+        contentManager.prioritizeChapter(prev, preloadRadius: 1);
+      }
     }
   }
 
