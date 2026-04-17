@@ -1,6 +1,6 @@
 # 路線圖
 
-更新日期：2026-04-16
+更新日期：2026-04-17
 
 這份 roadmap 不是零碎待辦清單，而是墨頁在 `0.2.1` 之後的優先級約束。原則只有一個：**不再擴充新功能，持續優化既有的核心能力**。
 
@@ -22,7 +22,7 @@
 - `core/engine` 有完整 parser + source login + charset 偵測
 - Drift + DAO（schema v8）資料層骨架穩定
 - 備份、還原、匯出、下載、widget 等平台能力有基礎實作
-- 58 個測試檔覆蓋閱讀器主流程、parser、book source、JS extensions
+- 61 個測試檔覆蓋閱讀器主流程、parser、book source、JS extensions、bookshelf exchange
 
 **已完成的主要里程碑**：
 
@@ -38,21 +38,28 @@
 | M8 | 書源管理體驗升級（checkbox 預設、overflow menu、drag handle） | ✅ |
 | — | 發現頁亂碼 / 「暫無章節」修復（charset + tocUrl 備援） | ✅ |
 | — | JS Promise bridge（async 規則執行） | ✅ |
+| M9 | 閱讀器 Runtime 收斂與產品模組清理（TTS mixin 提取、settings 重組、scroll_auto_page_driver 刪除、battery mixin 提取） | ✅ |
+| M10 | 備份 / 還原能力補齊（RestoreService 實作、BackupSettingsPage UI、備份一致性優化、下載任務備份擴充） | ✅ |
+| M11 | 書架匯入匯出與本地格式管理（BookshelfExchangeService、LocalBookFormats 集中化、UMD parser 重寫） | ✅ |
 
 ## 長期目標
 
 `0.2.1` 之後，專案定位為**不再擴充新功能**，而是持續優化既有的 8 項基礎能力。每項基礎走完四個階段才算穩定：
 
-**8 項基礎能力**
+**8 項基礎能力與當前階段**
 
-1. 書架管理、分組、書籍詳情、章節列表
-2. 搜尋（支援全部 / 分類 / 單一書源）與探索頁
-3. 本地 TXT / EPUB / MOBI / PDF / UMD 匯入
-4. 網路書源解析、登入、WebView 抓取
-5. 兩種閱讀模式：平移 / 捲動
-6. 閱讀進度保存、還原與多點同步
-7. TTS 朗讀、章節跟隨、自動翻頁
-8. 備份 / 還原、匯出、分享導入
+| # | 基礎能力 | 設計 | 可用 | 流暢 | UI/UX | 備註 |
+|---|---------|------|------|------|-------|------|
+| 1 | 書架管理、分組、書籍詳情、章節列表 | ✅ | ✅ | — | — | M11 新增匯入匯出功能 |
+| 2 | 搜尋（全部 / 分類 / 單一書源）與探索頁 | ✅ | ✅ | — | — | M6 / M7 完成重構 |
+| 3 | 本地 TXT / EPUB / MOBI / PDF / UMD 匯入 | ✅ | ⚙️ | — | — | UMD parser 已重寫；LocalBookFormats 集中化 |
+| 4 | 網路書源解析、登入、WebView 抓取 | ✅ | ⚙️ | — | — | 錯誤追蹤尚未到 rule 層級 |
+| 5 | 兩種閱讀模式：平移 / 捲動 | ✅ | ✅ | — | — | scroll_auto_page_driver 已刪除、auto-page 統一 |
+| 6 | 閱讀進度保存、還原與多點同步 | ✅ | ✅ | — | — | RestoreService 已實作端到端還原 |
+| 7 | TTS 朗讀、章節跟隨、自動翻頁 | ✅ | ⚙️ | — | — | ReaderTtsMixin 已提取、TTS settings 獨立頁面 |
+| 8 | 備份 / 還原、匯出、分享導入 | ✅ | ✅ | — | — | BackupSettingsPage UI 到位、備份一致性優化完成 |
+
+> ✅ = 已達標 · ⚙️ = 進行中 · — = 尚未開始
 
 **四階段推進**
 
@@ -63,7 +70,7 @@
 | 流暢 | I/O 與排版耗時可預期、無明顯卡頓 |
 | UI / UX | 視覺、互動、操作手感對齊產品直覺 |
 
-順序上先把每項基礎的「設計」與「可用」做紮實，再整體向「流暢」與「UI/UX」推進。不跳階、不平行擴張。
+目前 8 項基礎的「設計」階段全數完成，多數已進入或達到「可用」。下一輪焦點是把 #3、#4、#7 的可用補齊，再整體向「流暢」與「UI/UX」推進。不跳階、不平行擴張。
 
 ## 主線優先級
 
@@ -71,16 +78,24 @@
 
 ### 1. 閱讀器 runtime 繼續收斂（最高）
 
-當前仍有：
+**近期進展（M9）**：
 
-- `ReadBookController` 偏大（~500 行以上）
-- `ReaderContentMixin` 歷史責任尚未完全退出
-- scroll 模式 auto-page ticker 仍在 `ReadViewRuntime` 層
-- `ChapterContentManager.targetWindow` 細節外洩
+- `ReadBookController` 從 ~1300 行降至 ~1076 行（第二輪瘦身）
+- `ReaderTtsMixin`（185 行）從 controller 提取為獨立 mixin
+- `ReaderBatteryMixin`（25 行）提取為獨立 mixin
+- `scroll_auto_page_driver.dart` 已刪除，auto-page 統一由 `reader_auto_page_coordinator` 驅動
+- `ReaderDisplayCoordinator` 接管顯示資訊投影職責
+- `ContentCallbacks` 新增，明確化內容回呼介面
 
-**目標**：把剩餘歷史包袱搬到 coordinator / manager 內部，ticker 邏輯統一交給 `reader_auto_page_coordinator`。
+**仍存在**：
 
-**完成標準**：`ReadBookController` 可讀性到「10 分鐘能讀懂責任鏈」、scroll / slide 兩條路徑共用同一個 auto-page 決策器。
+- `ReadBookController` 仍有 ~1076 行，目標降至 ~800 行
+- `ReaderContentMixin` 有 ~1001 行，歷史責任尚未完全退出
+- `ChapterContentManager._targetWindow` 細節仍未完全收回內部
+
+**目標**：繼續把 `ReaderContentMixin` 的責任移至 coordinator，`ReadBookController` 降到 800 行以下。
+
+**完成標準**：`ReadBookController` 可讀性到「10 分鐘能讀懂責任鏈」、mixin 鏈中每個 mixin 責任單一且不超過 300 行。
 
 ### 2. 書源引擎可預測性
 
@@ -110,9 +125,20 @@
 
 ### 4. 產品模組收尾
 
-- `settings/` 仍有些散落的細項子頁，下一輪整理可把同類合併
+**近期進展（M9 – M11）**：
+
+- `settings/` 已完成重組：舊的 `theme_settings_page`、`aloud_settings_page` 與三個 `settings_group_*.dart` widget 刪除
+- 新增 `appearance_settings_page.dart`（252 行）統一視覺設定、`tts_settings_page.dart`（112 行）獨立 TTS 設定
+- `reading_settings_page` 精簡、`settings_page` 入口頁大幅簡化
+- `BookshelfExchangeService`（177 行）提供書架匯入 / 匯出，整合至書架頁溢出選單
+- `LocalBookFormats` 集中管理所有本地書格式常數
+- `UmdParser` 重寫（261 行），新增 UMD 匯入測試
+
+**仍待處理**：
+
 - `cache_manager` 與 `download_manager` 責任仍有重疊，考慮統一入口
 - `dict`、`replace_rule`、`txt_toc_rule` 工具頁 UI 風格可對齊
+- `storage_management_page` 已初步重構但可進一步精簡
 
 ## 明確不做
 
