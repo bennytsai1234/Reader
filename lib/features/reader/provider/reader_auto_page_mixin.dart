@@ -9,7 +9,8 @@ import 'reader_content_mixin.dart';
 
 /// ReaderProvider 的自動翻頁擴展
 /// 對標 Android AutoPager：定時器驅動的自動翻頁 + 掃描線效果
-mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderContentMixin {
+mixin ReaderAutoPageMixin
+    on ReaderProviderBase, ReaderSettingsMixin, ReaderContentMixin {
   // --- 自動翻頁穩定版 (對標 Android AutoPager) ---
   final ReaderAutoPageCoordinator _autoPageCoordinator =
       ReaderAutoPageCoordinator();
@@ -43,6 +44,7 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
     } else {
       stopAutoPage();
     }
+    _autoPageCoordinator.syncTickerState();
     notifyListeners();
   }
 
@@ -50,6 +52,7 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
   void pauseAutoPage() {
     if (isAutoPaging && !isAutoPagePaused) {
       _autoPageCoordinator.isPaused = true;
+      _autoPageCoordinator.syncTickerState();
       notifyListeners();
     }
   }
@@ -58,6 +61,7 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
   void resumeAutoPage() {
     if (isAutoPaging && isAutoPagePaused) {
       _autoPageCoordinator.isPaused = false;
+      _autoPageCoordinator.syncTickerState();
       notifyListeners();
     }
   }
@@ -76,8 +80,9 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
     final viewSize = this.viewSize;
     if (viewSize == null) return;
 
-    final step =
-        contentCallbacksRef.evaluateScrollAutoPageStep?.call(dtSeconds);
+    final step = contentCallbacksRef.evaluateScrollAutoPageStep?.call(
+      dtSeconds,
+    );
     if (step != null) {
       if (!step.advanceChapter &&
           step.chapterIndex != null &&
@@ -97,8 +102,8 @@ mixin ReaderAutoPageMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderCont
     final pageBasis = viewSize.height <= 0 ? 1.0 : viewSize.height;
     autoPageProgressNotifier.value =
         ((autoPageProgressNotifier.value * pageBasis) + deltaPixels) %
-            pageBasis /
-            pageBasis;
+        pageBasis /
+        pageBasis;
   }
 
   void setAutoPageSpeed(double speed) {

@@ -68,9 +68,14 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Text(title,
-          style: const TextStyle(
-              fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue)),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.blue,
+        ),
+      ),
     );
   }
 
@@ -79,17 +84,21 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
     try {
       final file = await BackupService().createBackupZip();
       if (file != null && await file.exists()) {
-        await Share.shareXFiles([XFile(file.path)], text: '墨頁備份檔');
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(file.path)], text: '墨頁備份檔'),
+        );
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('建立備份失敗')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('建立備份失敗')));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('備份出錯: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('備份出錯: $e')));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -101,6 +110,7 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
       type: FileType.custom,
       allowedExtensions: ['zip'],
     );
+    if (!mounted) return;
 
     if (result != null && result.files.single.path != null) {
       final file = File(result.files.single.path!);
@@ -110,16 +120,19 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
         if (mounted) {
           if (success) {
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('還原成功，請重啟 App 以載入新資料')));
+              const SnackBar(content: Text('還原成功，請重啟 App 以載入新資料')),
+            );
           } else {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('還原失敗，備份檔格式不正確')));
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('還原失敗，備份檔格式不正確')));
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text('還原出錯: $e')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('還原出錯: $e')));
         }
       } finally {
         if (mounted) setState(() => _isProcessing = false);

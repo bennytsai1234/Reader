@@ -48,7 +48,8 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   List<String> _chapterDisplayTitles = const [];
 
   /// Inject typed callbacks from ReadBookController.
-  set contentCallbacks(ContentCallbacks callbacks) => _contentCallbacks = callbacks;
+  set contentCallbacks(ContentCallbacks callbacks) =>
+      _contentCallbacks = callbacks;
 
   /// Access typed callbacks (for mixins that depend on ReaderContentMixin).
   ContentCallbacks get contentCallbacksRef => _contentCallbacks;
@@ -84,12 +85,15 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order));
 
-    final titles = chapters
-        .map((chapter) => chapter.getDisplayTitle(
-              replaceRules: titleRules,
-              chineseConvertType: chineseConvert,
-            ))
-        .toList();
+    final titles =
+        chapters
+            .map(
+              (chapter) => chapter.getDisplayTitle(
+                replaceRules: titleRules,
+                chineseConvertType: chineseConvert,
+              ),
+            )
+            .toList();
     if (isDisposed) return;
     _chapterDisplayTitles = titles;
     _contentCallbacks.refreshAllChapterRuntime?.call();
@@ -157,13 +161,18 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       chapters: chapters,
     );
     _contentManager!.setProgressivePaginationEnabled(false);
-    _chapterReadySub = contentManager.onChapterReady.listen(_handleChapterReady);
+    _chapterReadySub = contentManager.onChapterReady.listen(
+      _handleChapterReady,
+    );
   }
 
   void updatePaginationConfig() {
     if (viewSize == null || !hasContentManager) return;
-    final currentTheme = AppTheme.readingThemes[
-        themeIndex.clamp(0, AppTheme.readingThemes.length - 1)];
+    final currentTheme =
+        AppTheme.readingThemes[themeIndex.clamp(
+          0,
+          AppTheme.readingThemes.length - 1,
+        )];
     final titleStyle = TextStyle(
       fontSize: fontSize + 4,
       fontWeight: FontWeight.bold,
@@ -203,6 +212,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
         isScrollMode: _isScrollMode,
         scrollRadius: _scrollPreloadRadius,
       );
+      _syncChapterPagesCacheFromContentManager();
       _refreshSlidePages();
       _restoreDisplayPositionAfterRepaginate(
         targetChapter: targetChapter,
@@ -240,17 +250,11 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     currentChapterIndex = index;
     visibleChapterIndex = index;
     final effectivePreloadRadius = _effectivePreloadRadius(preloadRadius);
-    _prepareChapterDisplayWindow(
-      index,
-      preloadRadius: effectivePreloadRadius,
-    );
+    _prepareChapterDisplayWindow(index, preloadRadius: effectivePreloadRadius);
 
     final pages = await _loadAndCacheChapter(index);
     if (pages.isEmpty || isDisposed) return;
-    _warmupAfterChapterLoad(
-      index,
-      preloadRadius: effectivePreloadRadius,
-    );
+    _warmupAfterChapterLoad(index, preloadRadius: effectivePreloadRadius);
     _presentLoadedChapter(
       index,
       pages: pages,
@@ -496,9 +500,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     }
 
     // ── Predictive preload based on scroll position ──
-    if (localOffset != null && visiblePages != null && visiblePages.isNotEmpty) {
-      final chapterHeight =
-          ChapterPositionResolver.chapterHeight(visiblePages);
+    if (localOffset != null &&
+        visiblePages != null &&
+        visiblePages.isNotEmpty) {
+      final chapterHeight = ChapterPositionResolver.chapterHeight(visiblePages);
       if (chapterHeight > 0) {
         final progress = localOffset / chapterHeight;
         // Approaching end → preload next
@@ -507,7 +512,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
           if (nextIdx < chapters.length &&
               !(chapterPagesCache[nextIdx]?.isNotEmpty ?? false) &&
               !loadingChapters.contains(nextIdx)) {
-            unawaited(ensureChapterCached(nextIdx, silent: true, prioritize: true));
+            unawaited(
+              ensureChapterCached(nextIdx, silent: true, prioritize: true),
+            );
           }
         }
         // Approaching start → preload prev
@@ -516,7 +523,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
           if (prevIdx >= 0 &&
               !(chapterPagesCache[prevIdx]?.isNotEmpty ?? false) &&
               !loadingChapters.contains(prevIdx)) {
-            unawaited(ensureChapterCached(prevIdx, silent: true, prioritize: true));
+            unawaited(
+              ensureChapterCached(prevIdx, silent: true, prioritize: true),
+            );
           }
         }
       }
@@ -581,7 +590,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       _pendingRecenterChapterIndex = newChapterIndex;
 
       // Begin preloading the new neighbor chapter in the background.
-      _preloadSlideNeighbors(newChapterIndex, preloadRadius: _defaultSlideWarmupRadius);
+      _preloadSlideNeighbors(
+        newChapterIndex,
+        preloadRadius: _defaultSlideWarmupRadius,
+      );
     } else {
       // Same chapter, just refresh without recentering
       _refreshSlidePages();
@@ -590,9 +602,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     notifyListeners();
   }
 
-  void nextPage({
-    ReaderCommandReason reason = ReaderCommandReason.user,
-  }) {
+  void nextPage({ReaderCommandReason reason = ReaderCommandReason.user}) {
     if (pageTurnMode == PageAnim.scroll) {
       final target = (visibleChapterIndex + 1).clamp(0, chapters.length - 1);
       if (target != visibleChapterIndex) {
@@ -602,19 +612,14 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     }
     if (currentPageIndex < slidePages.length - 1) {
       currentPageIndex++;
-      _contentCallbacks.jumpToSlidePage?.call(
-        currentPageIndex,
-        reason: reason,
-      );
+      _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
       notifyListeners();
     } else {
       unawaited(nextChapter(reason: reason));
     }
   }
 
-  void prevPage({
-    ReaderCommandReason reason = ReaderCommandReason.user,
-  }) {
+  void prevPage({ReaderCommandReason reason = ReaderCommandReason.user}) {
     if (pageTurnMode == PageAnim.scroll) {
       final target = (visibleChapterIndex - 1).clamp(0, chapters.length - 1);
       if (target != visibleChapterIndex) {
@@ -624,10 +629,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     }
     if (currentPageIndex > 0) {
       currentPageIndex--;
-      _contentCallbacks.jumpToSlidePage?.call(
-        currentPageIndex,
-        reason: reason,
-      );
+      _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
       notifyListeners();
     } else {
       unawaited(prevChapter(reason: reason));
@@ -689,10 +691,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
         (chapterIndex - currentChapterIndex).abs() <= _scrollPreloadRadius;
   }
 
-  void _scheduleAdjacentScrollLoad(
-    int centerIndex, {
-    bool immediate = false,
-  }) {
+  void _scheduleAdjacentScrollLoad(int centerIndex, {bool immediate = false}) {
     _localAdjacentLoadTimer?.cancel();
     final delay = immediate ? Duration.zero : const Duration(milliseconds: 280);
     _localAdjacentLoadTimer = Timer(delay, () {
@@ -702,9 +701,10 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   }
 
   Future<void> _loadAdjacentScrollChapters(int centerIndex) async {
-    final direction = _lastVisibleScrollChapter == -1
-        ? 1
-        : (centerIndex - _lastVisibleScrollChapter).sign;
+    final direction =
+        _lastVisibleScrollChapter == -1
+            ? 1
+            : (centerIndex - _lastVisibleScrollChapter).sign;
     _lastVisibleScrollChapter = centerIndex;
     final neighbors = <int>[
       if (direction >= 0) centerIndex + 1,
@@ -726,7 +726,8 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     if (isDisposed) return;
     final trace = Stopwatch()..start();
     final pages = contentManager.getCachedPages(chapterIndex);
-    final shouldNotify = pages != null &&
+    final shouldNotify =
+        pages != null &&
         pages.isNotEmpty &&
         (!_isScrollMode || _shouldNotifyChapterReady(chapterIndex));
     if (pages != null && pages.isNotEmpty) {
@@ -786,10 +787,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     final indexChanged = clampedIndex != currentPageIndex;
     currentPageIndex = clampedIndex;
     if (indexChanged) {
-      requestJumpToPage(
-        currentPageIndex,
-        reason: ReaderCommandReason.system,
-      );
+      requestJumpToPage(currentPageIndex, reason: ReaderCommandReason.system);
     }
   }
 
@@ -818,7 +816,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       pagesForChapter:
           (chapterIndex) =>
               (_contentCallbacks.pagesForChapter?.call(chapterIndex)
-                      as List<TextPage>?) ??
+                  as List<TextPage>?) ??
               chapterPagesCache[chapterIndex] ??
               const <TextPage>[],
     );
@@ -851,10 +849,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     );
   }
 
-  void _warmupAfterChapterLoad(
-    int chapterIndex, {
-    required int preloadRadius,
-  }) {
+  void _warmupAfterChapterLoad(int chapterIndex, {required int preloadRadius}) {
     if (preloadRadius <= 0) return;
     if (_isLocalScrollMode) {
       _scheduleAdjacentScrollLoad(chapterIndex, immediate: true);
@@ -871,14 +866,9 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     _warmSlideWindow(chapterIndex, radius: preloadRadius);
   }
 
-  void _preloadSlideNeighbors(
-    int chapterIndex, {
-    required int preloadRadius,
-  }) {
+  void _preloadSlideNeighbors(int chapterIndex, {required int preloadRadius}) {
     for (final neighbor in [chapterIndex - 1, chapterIndex + 1]) {
-      if (preloadRadius <= 0 ||
-          neighbor < 0 ||
-          neighbor >= chapters.length) {
+      if (preloadRadius <= 0 || neighbor < 0 || neighbor >= chapters.length) {
         continue;
       }
       unawaited(_loadAndCacheChapter(neighbor, silent: true));
@@ -918,10 +908,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     );
     _refreshSlidePages();
     currentPageIndex = presentation.slidePageIndex ?? 0;
-    _contentCallbacks.jumpToSlidePage?.call(
-      currentPageIndex,
-      reason: reason,
-    );
+    _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
   }
 
   void _restoreDisplayPositionAfterRepaginate({
@@ -955,10 +942,15 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       fromEnd: fromEnd,
     );
     currentPageIndex = presentation.slidePageIndex ?? 0;
-    _contentCallbacks.jumpToSlidePage?.call(
-      currentPageIndex,
-      reason: reason,
-    );
+    _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
+  }
+
+  void _syncChapterPagesCacheFromContentManager() {
+    if (!hasContentManager) return;
+    chapterPagesCache
+      ..clear()
+      ..addAll(contentManager.paginatedCache);
+    _contentCallbacks.refreshAllChapterRuntime?.call();
   }
 
   void _warmSlideWindow(int centerChapterIndex, {int? radius}) {
@@ -967,10 +959,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
       centerChapterIndex,
       preloadRadius: warmupRadius,
     );
-    contentManager.warmChaptersAround(
-      centerChapterIndex,
-      radius: warmupRadius,
-    );
+    contentManager.warmChaptersAround(centerChapterIndex, radius: warmupRadius);
   }
 
   void _activateScrollWindow(

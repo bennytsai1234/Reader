@@ -30,7 +30,22 @@ class ReaderAutoPageCoordinator {
       _lastTickTime = elapsed;
       onTick(dtSeconds);
     });
-    _ticker!.start();
+    syncTickerState();
+  }
+
+  void syncTickerState() {
+    final ticker = _ticker;
+    if (ticker == null) return;
+    if (isActive && !isPaused) {
+      if (!ticker.isActive) {
+        ticker.start();
+      }
+      return;
+    }
+    if (ticker.isActive) {
+      ticker.stop();
+    }
+    _lastTickTime = Duration.zero;
   }
 
   void detachTicker() {
@@ -43,6 +58,7 @@ class ReaderAutoPageCoordinator {
   void stop() {
     isActive = false;
     isPaused = false;
+    syncTickerState();
   }
 
   void dispose() {

@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// verify the manifest format and constants that BackupService uses.
 void main() {
   group('BackupService manifest', () {
-    // schemaVersion is still a constant in BackupService
+    // BackupService currently derives this from AppDatabase.schemaVersion.
     const schemaVersion = 8;
 
     test('manifest contains expected fields', () {
@@ -84,16 +84,18 @@ void main() {
         'bookGroup.json',
         'dictRule.json',
         'httpTts.json',
+        'downloadTask.json',
         'config.json',
       ];
 
-      expect(expectedFiles.length, 11);
+      expect(expectedFiles.length, 12);
       expect(expectedFiles, contains('manifest.json'));
       expect(expectedFiles, contains('bookshelf.json'));
       expect(expectedFiles, contains('bookSource.json'));
       expect(expectedFiles, contains('bookGroup.json'));
       expect(expectedFiles, contains('dictRule.json'));
       expect(expectedFiles, contains('httpTts.json'));
+      expect(expectedFiles, contains('downloadTask.json'));
       expect(expectedFiles, contains('config.json'));
     });
   });

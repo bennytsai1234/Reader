@@ -21,7 +21,11 @@ import 'package:inkpage_reader/core/models/read_record.dart';
 import 'package:inkpage_reader/core/models/book_group.dart';
 import 'package:inkpage_reader/core/models/http_tts.dart';
 import 'package:inkpage_reader/core/models/txt_toc_rule.dart';
+import 'package:inkpage_reader/core/models/download_task.dart';
+import 'package:inkpage_reader/core/database/app_database.dart';
+import 'package:inkpage_reader/core/database/dao/download_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
+import 'package:path/path.dart' as p;
 
 /// RestoreService - 統一恢復調度器
 /// (原 Android help/storage/Restore.kt)
@@ -39,33 +43,65 @@ class RestoreService {
   final DictRuleDao _dictRuleDao = getIt<DictRuleDao>();
   final HttpTtsDao _httpTtsDao = getIt<HttpTtsDao>();
   final TxtTocRuleDao _txtTocRuleDao = getIt<TxtTocRuleDao>();
+  final DownloadDao _downloadDao = getIt<DownloadDao>();
 
   /// 從備份包 (ZIP) 恢復所有數據
   Future<bool> restoreFromZip(File zipFile) async {
     try {
       final bytes = await zipFile.readAsBytes();
       final archive = ZipDecoder().decodeBytes(bytes);
+      final files = archive.where((file) => file.isFile).toList();
+      if (files.isEmpty) return false;
 
-      for (final file in archive) {
-        if (!file.isFile) continue;
-        final data = utf8.decode(file.content as List<int>, allowMalformed: true);
-        try {
-          final dynamic decoded = jsonDecode(data);
-          if (decoded is List) {
-            await _importData(file.name, decoded);
-          }
-        } catch (e) {
-          AppLog.e('Restore failed for ${file.name}: $e', error: e);
+      Map<String, dynamic>? manifest;
+      for (final file in files) {
+        if (_normalizedFileName(file.name) != 'manifest.json') continue;
+        final data = utf8.decode(
+          file.content as List<int>,
+          allowMalformed: true,
+        );
+        final decoded = jsonDecode(data);
+        if (decoded is Map<String, dynamic>) {
+          manifest = decoded;
+          break;
         }
       }
-      return true;
+      if (!_isManifestCompatible(manifest)) {
+        AppLog.w('Restore aborted: missing or incompatible manifest');
+        return false;
+      }
+
+      var restoredAny = false;
+      for (final file in files) {
+        final fileName = _normalizedFileName(file.name);
+        if (fileName == 'manifest.json') continue;
+        final data = utf8.decode(
+          file.content as List<int>,
+          allowMalformed: true,
+        );
+        try {
+          final dynamic decoded = jsonDecode(data);
+          if (decoded is List<dynamic>) {
+            await _importListData(fileName, decoded);
+            restoredAny = true;
+          } else if (fileName == 'config.json' &&
+              decoded is Map<String, dynamic>) {
+            await _restorePreferences(decoded);
+            restoredAny = true;
+          }
+        } catch (e) {
+          AppLog.e('Restore failed for $fileName: $e', error: e);
+          return false;
+        }
+      }
+      return restoredAny;
     } catch (e) {
       AppLog.e('Restore from ZIP failed: $e', error: e);
       return false;
     }
   }
 
-  Future<void> _importData(String fileName, List<dynamic> list) async {
+  Future<void> _importListData(String fileName, List<dynamic> list) async {
     for (var item in list) {
       if (item is Map<String, dynamic>) {
         switch (fileName) {
@@ -102,25 +138,42 @@ class RestoreService {
           case 'txtTocRule.json':
             await _txtTocRuleDao.upsert(TxtTocRule.fromJson(item));
             break;
-          case 'config.json':
-            final prefs = await SharedPreferences.getInstance();
-            for (final key in item.keys) {
-              dynamic val = item[key];
-              if (val is String) {
-                await prefs.setString(key, val);
-              } else if (val is int) {
-                await prefs.setInt(key, val);
-              } else if (val is bool) {
-                await prefs.setBool(key, val);
-              } else if (val is double) {
-                await prefs.setDouble(key, val);
-              }
-            }
+          case 'downloadTask.json':
+          case 'downloadTasks.json':
+            await _downloadDao.upsert(DownloadTask.fromJson(item));
             break;
         }
       }
     }
   }
+
+  Future<void> _restorePreferences(Map<String, dynamic> values) async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final entry in values.entries) {
+      final val = entry.value;
+      if (val is String) {
+        await prefs.setString(entry.key, val);
+      } else if (val is int) {
+        await prefs.setInt(entry.key, val);
+      } else if (val is bool) {
+        await prefs.setBool(entry.key, val);
+      } else if (val is double) {
+        await prefs.setDouble(entry.key, val);
+      } else if (val is List) {
+        final strings = val.whereType<String>().toList();
+        if (strings.length == val.length) {
+          await prefs.setStringList(entry.key, strings);
+        }
+      }
+    }
+  }
+
+  String _normalizedFileName(String path) => p.basename(path);
+
+  bool _isManifestCompatible(Map<String, dynamic>? manifest) {
+    if (manifest == null) return false;
+    final schemaVersion = manifest['schemaVersion'];
+    if (schemaVersion is! int) return false;
+    return schemaVersion <= AppDatabase().schemaVersion;
+  }
 }
-
-
