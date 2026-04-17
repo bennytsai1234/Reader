@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
+import 'package:inkpage_reader/shared/widgets/app_bottom_sheet.dart';
 import 'provider/change_source_provider.dart';
 import 'widgets/change_source_filter_bar.dart';
 import 'widgets/change_source_item.dart';
 import 'reader_provider.dart';
 import 'reader_page.dart';
-import 'audio_player_page.dart';
 
 class ChangeChapterSourceSheet extends StatefulWidget {
   final Book book;
@@ -40,24 +40,88 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return ChangeNotifierProvider(
       create: (_) => ChangeSourceProvider(widget.book),
       child: Consumer<ChangeSourceProvider>(
         builder: (context, provider, child) {
-          return Container(
+          return SizedBox(
             height: MediaQuery.of(context).size.height * 0.85,
-            decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-            child: Column(
+            child: AppBottomSheet(
+              title: '單章換源',
+              icon: Icons.find_replace_rounded,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(provider.checkAuthor ? Icons.person : Icons.person_off, size: 20),
+                    onPressed: provider.toggleCheckAuthor,
+                    tooltip: '校驗作者',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 20),
+                    onPressed: provider.startSearch,
+                    tooltip: '重新搜尋',
+                  ),
+                ],
+              ),
               children: [
-                _buildHandle(),
-                _buildHeader(provider),
-                ChangeSourceFilterBar(provider: provider, filterController: _filterController),
-                if (provider.isSearching) const LinearProgressIndicator(),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(provider.status, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bookmark_outline, size: 14, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '目標章節: ${widget.chapterTitle}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Expanded(child: _buildSourceList(provider)),
+                const SizedBox(height: 12),
+                ChangeSourceFilterBar(provider: provider, filterController: _filterController),
+                
+                if (provider.isSearching) 
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  )
+                else
+                  const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider()),
+                
+                Row(
+                  children: [
+                    Text(provider.status, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    const Spacer(),
+                    if (provider.filteredResults.isNotEmpty)
+                      Text('共 ${provider.filteredResults.length} 個來源', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+                
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
+                    ),
+                    child: _buildSourceList(provider),
+                  ),
+                ),
+                SizedBox(height: bottomPadding),
               ],
             ),
           );
@@ -66,39 +130,14 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
     );
   }
 
-  Widget _buildHandle() {
-    return Center(child: Container(margin: const EdgeInsets.symmetric(vertical: 12), width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))));
-  }
-
-  Widget _buildHeader(ChangeSourceProvider provider) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('單章換源', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('目標章節: ${widget.chapterTitle}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              ],
-            ),
-          ),
-          IconButton(icon: Icon(provider.checkAuthor ? Icons.person : Icons.person_off), onPressed: provider.toggleCheckAuthor),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: provider.startSearch),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSourceList(ChangeSourceProvider provider) {
     if (provider.filteredResults.isEmpty && !provider.isSearching) {
-      return const Center(child: Text('無搜尋結果'));
+      return const Center(child: Text('無搜尋結果', style: TextStyle(color: Colors.grey)));
     }
     return ListView.separated(
+      padding: EdgeInsets.zero,
       itemCount: provider.filteredResults.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
+      separatorBuilder: (_, __) => const Divider(height: 1, indent: 16, endIndent: 16),
       itemBuilder: (context, index) => ChangeSourceItem(
         searchBook: provider.filteredResults[index],
         onTap: () => _handleSourceSelected(context, provider, provider.filteredResults[index]),
@@ -113,9 +152,7 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
 
     final source = await provider.findSourceByUrl(searchBook.origin);
     if (!context.mounted) return;
-    if (source == null) {
-      return;
-    }
+    if (source == null) return;
 
     showDialog(context: context, barrierDismissible: false, builder: (ctx) => const Center(child: CircularProgressIndicator()));
 
@@ -128,27 +165,21 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
       }
 
       if (!mounted) return;
+      nav.pop(); // Pop loading
       
       if (targetIndex != -1) {
         final content = await provider.service.getContent(source, tempBook, chapters[targetIndex]);
         if (!mounted) return;
-        
-        // Pop loading dialog
-        nav.pop();
         
         if (tempBook.type != widget.book.type) {
           if (!context.mounted) return;
           _showMigrationDialog(context, widget.book.migrateTo(tempBook, chapters));
         } else {
           readerProvider.replaceChapterSource(widget.chapterIndex, source, content);
-          // Pop sheet
-          nav.pop();
+          nav.pop(); // Pop sheet
         }
       } else {
-        if (mounted) {
-          nav.pop();
-          messenger.showSnackBar(const SnackBar(content: Text('找不到對應章節')));
-        }
+        messenger.showSnackBar(const SnackBar(content: Text('找不到對應章節')));
       }
     } catch (e) {
       if (mounted) {
@@ -173,7 +204,7 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
               if (!mounted) return;
               nav.pop();
               nav.pushReplacement(
-                MaterialPageRoute(builder: (_) => newBook.type == 2 ? AudioPlayerPage(book: newBook, chapterIndex: newBook.durChapterIndex) : ReaderPage(book: newBook)),
+                MaterialPageRoute(builder: (_) => ReaderPage(book: newBook)),
               );
             },
             child: const Text('遷移並跳轉'),
@@ -183,4 +214,3 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
     );
   }
 }
-

@@ -51,13 +51,6 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
                 onChanged: (v) => settings.setOnlyLatestBackup(v),
               ),
               const SizedBox(height: 24),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  '註：WebDAV 雲端同步功能已於精簡版中移除。',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ),
             ],
           );
         },

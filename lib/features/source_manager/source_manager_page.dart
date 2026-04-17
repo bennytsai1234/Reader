@@ -178,29 +178,64 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
 
   void _showSourceMenu(BuildContext context, SourceManagerProvider p, BookSourcePart s) {
     final nav = Navigator.of(context);
-    showModalBottomSheet(context: context, builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      ListTile(leading: const Icon(Icons.bug_report), title: const Text('調試書源'), onTap: () async {
-        Navigator.pop(ctx);
-        final full = await p.getFullSource(s.bookSourceUrl);
-        if (full != null && context.mounted) SourceManagerDialogs.showDebugInput(context, full);
-      }),
-      ListTile(leading: const Icon(Icons.edit), title: const Text('編輯書源'), onTap: () async {
-        Navigator.pop(ctx);
-        final full = await p.getFullSource(s.bookSourceUrl);
-        if (full != null && mounted) {
-          nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)));
-        }
-      }),
-      ListTile(leading: const Icon(Icons.vertical_align_top), title: const Text('移至頂部'), onTap: () async {
-        Navigator.pop(ctx);
-        await p.moveToTop(s.bookSourceUrl);
-      }),
-      ListTile(leading: const Icon(Icons.vertical_align_bottom), title: const Text('移至底部'), onTap: () async {
-        Navigator.pop(ctx);
-        await p.moveToBottom(s.bookSourceUrl);
-      }),
-      ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: const Text('刪除書源', style: TextStyle(color: Colors.red)), onTap: () { Navigator.pop(ctx); p.deleteSource(s); }),
-    ])));
+    AppBottomSheet.show(
+      context: context,
+      title: s.bookSourceName,
+      icon: Icons.source_rounded,
+      children: [
+        ListTile(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          leading: const Icon(Icons.bug_report_outlined),
+          title: const Text('調試書源', style: TextStyle(fontSize: 14)),
+          onTap: () async {
+            Navigator.pop(context);
+            final full = await p.getFullSource(s.bookSourceUrl);
+            if (full != null && context.mounted) SourceManagerDialogs.showDebugInput(context, full);
+          },
+        ),
+        ListTile(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          leading: const Icon(Icons.edit_outlined),
+          title: const Text('編輯書源', style: TextStyle(fontSize: 14)),
+          onTap: () async {
+            Navigator.pop(context);
+            final full = await p.getFullSource(s.bookSourceUrl);
+            if (full != null && mounted) {
+              nav.push(MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)));
+            }
+          },
+        ),
+        const Divider(indent: 16, endIndent: 16),
+        ListTile(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          leading: const Icon(Icons.vertical_align_top_rounded),
+          title: const Text('移至最頂', style: TextStyle(fontSize: 14)),
+          onTap: () async {
+            Navigator.pop(context);
+            await p.moveToTop(s.bookSourceUrl);
+          },
+        ),
+        ListTile(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          leading: const Icon(Icons.vertical_align_bottom_rounded),
+          title: const Text('移至最底', style: TextStyle(fontSize: 14)),
+          onTap: () async {
+            Navigator.pop(context);
+            await p.moveToBottom(s.bookSourceUrl);
+          },
+        ),
+        const Divider(indent: 16, endIndent: 16),
+        ListTile(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          leading: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
+          title: const Text('刪除書源', style: TextStyle(fontSize: 14, color: Colors.red)),
+          onTap: () {
+            Navigator.pop(context);
+            p.deleteSource(s);
+          },
+        ),
+      ],
+    );
   }
 
   /// 確認刪除選中書源 (對標 legado onClickSelectBarMainAction)

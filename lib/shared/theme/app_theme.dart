@@ -17,12 +17,95 @@ class AppTheme {
     useMaterial3: true,
     brightness: Brightness.light,
     colorSchemeSeed: primaryColor,
+    scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: Color(0xFF1F2937),
+      elevation: 0,
+      centerTitle: true,
+      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+    ),
+    cardTheme: CardTheme(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: Colors.white,
+    ),
+    dialogTheme: DialogTheme(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      backgroundColor: Colors.white,
+      titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 4,
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+    ),
+    dividerTheme: const DividerThemeData(
+      thickness: 1,
+      space: 1,
+      color: Color(0xFFF3F4F6),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFFF3F4F6),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    ),
   );
 
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     colorSchemeSeed: primaryColor,
+    scaffoldBackgroundColor: const Color(0xFF0F172A),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Color(0xFF1E293B),
+      foregroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: true,
+      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+    ),
+    cardTheme: CardTheme(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: const Color(0xFF1E293B),
+    ),
+    dialogTheme: DialogTheme(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      backgroundColor: const Color(0xFF1E293B),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 8,
+      backgroundColor: const Color(0xFF1E293B),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      backgroundColor: Color(0xFF1E293B),
+    ),
+    dividerTheme: const DividerThemeData(
+      thickness: 1,
+      space: 1,
+      color: Color(0xFF334155),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFF1E293B),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    ),
   );
 
   /// 閱讀排版配置清單 (原 Android configList)
@@ -60,9 +143,13 @@ class AppTheme {
   }
 
   static final List<ReadingTheme> _fallbackThemes = [
-    ReadingTheme(name: '預設', backgroundColor: const Color(0xFFFFFFFF), textColor: const Color(0xFF1A1A1A)),
-    ReadingTheme(name: '護眼', backgroundColor: const Color(0xFFC7EDCC), textColor: const Color(0xFF2D4A32)),
-    ReadingTheme(name: '夜間', backgroundColor: const Color(0xFF1A1A2E), textColor: const Color(0xFFB0B0B0)),
+    ReadingTheme(name: '簡約白', backgroundColor: const Color(0xFFFFFFFF), textColor: const Color(0xFF1A1A1A), lineSpacing: 1.6),
+    ReadingTheme(name: '羊皮紙', backgroundColor: const Color(0xFFF4F1E8), textColor: const Color(0xFF244739), lineSpacing: 1.65, paragraphSpacing: 1.2),
+    ReadingTheme(name: '嫩草綠', backgroundColor: const Color(0xFFE3EDCD), textColor: const Color(0xFF2D4A32), lineSpacing: 1.6),
+    ReadingTheme(name: '雅緻褐', backgroundColor: const Color(0xFFD8C8A8), textColor: const Color(0xFF3E2723), lineSpacing: 1.6),
+    ReadingTheme(name: '深海藍', backgroundColor: const Color(0xFF0F1D19), textColor: const Color(0xFFB9D7C2), lineSpacing: 1.6),
+    ReadingTheme(name: '夜間', backgroundColor: const Color(0xFF1A1A1A), textColor: const Color(0xFF999999), lineSpacing: 1.6),
+    ReadingTheme(name: '極黑', backgroundColor: const Color(0xFF000000), textColor: const Color(0xFF777777), lineSpacing: 1.6),
   ];
 }
 
