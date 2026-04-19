@@ -20,15 +20,13 @@ class AnalyzeByXPath {
     if (doc is XPathNode) {
       final node = doc.node;
       if (node is Element) {
-        _domRoot = node;
-        _xpath = HtmlXPath.node(node);
+        _initFromElement(node);
       } else {
         final prepared = _prepareHtml(doc.toString());
         _initFromHtml(prepared);
       }
     } else if (doc is Element) {
-      _domRoot = doc;
-      _xpath = HtmlXPath.node(doc);
+      _initFromElement(doc);
     } else if (doc is String) {
       final prepared = _prepareHtml(doc);
       _initFromHtml(prepared);
@@ -43,6 +41,15 @@ class AnalyzeByXPath {
     _domRoot = document.documentElement ?? document.body!;
     _bodyCompatRoot = _buildBodyCompatRoot(html);
     _xpath = HtmlXPath.html(html);
+  }
+
+  void _initFromElement(Element element) {
+    final wrapper = Element.tag('div');
+    final fragment = html_parser.parseFragment(element.outerHtml);
+    wrapper.nodes.addAll(fragment.nodes);
+    _domRoot = wrapper;
+    _bodyCompatRoot = wrapper;
+    _xpath = HtmlXPath.html(wrapper.outerHtml);
   }
 
   Element? _buildBodyCompatRoot(String html) {

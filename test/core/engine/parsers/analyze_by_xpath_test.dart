@@ -175,5 +175,31 @@ void main() {
         );
       },
     );
+
+    test(
+      'element context keeps self-matching absolute xpath selections',
+      () {
+        const searchHtml = '''
+          <ul class="list">
+            <li>
+              <a href="/book/1/">Book 1</a>
+              <p class="bookname"><a>Book 1</a></p>
+            </li>
+            <li>
+              <a href="/book/2/">Book 2</a>
+              <p class="bookname"><a>Book 2</a></p>
+            </li>
+          </ul>
+        ''';
+        final analyzer = AnalyzeByXPath(searchHtml);
+        final elements = analyzer.getElements('//ul[@class="list"]/li');
+
+        expect(elements, hasLength(2));
+
+        final itemAnalyzer = AnalyzeByXPath(elements.first);
+        expect(itemAnalyzer.getString('//li/a[1]/@href'), '/book/1/');
+        expect(itemAnalyzer.getString('//li/p[@class="bookname"]/a/text()'), 'Book 1');
+      },
+    );
   });
 }

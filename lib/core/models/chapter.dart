@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:inkpage_reader/core/models/rule_data_interface.dart';
 import 'replace_rule.dart';
 import '../services/chinese_utils.dart';
 
 /// BookChapter - 章節模型
 /// (原 Android data/entities/BookChapter.kt)
-class BookChapter {
+class BookChapter implements RuleDataInterface {
   String url; // 章節地址
   String title; // 章節名稱
   bool isVolume; // 是否為卷標題
@@ -54,6 +55,20 @@ class BookChapter {
     }
   }
 
+  @override
+  void putVariable(String key, String? value) {
+    final map = variableMap;
+    if (value == null) {
+      map.remove(key);
+    } else {
+      map[key] = value;
+    }
+    variable = map.isEmpty ? null : jsonEncode(map);
+  }
+
+  @override
+  String getVariable(String key) => variableMap[key] ?? '';
+
   /// 獲取顯示標題 (原 Android getDisplayTitle)
   String getDisplayTitle({
     List<ReplaceRule>? replaceRules,
@@ -75,9 +90,15 @@ class BookChapter {
         if (rule.pattern.isNotEmpty) {
           try {
             if (rule.isRegex) {
-              displayTitle = displayTitle.replaceAll(RegExp(rule.pattern), rule.replacement);
+              displayTitle = displayTitle.replaceAll(
+                RegExp(rule.pattern),
+                rule.replacement,
+              );
             } else {
-              displayTitle = displayTitle.replaceAll(rule.pattern, rule.replacement);
+              displayTitle = displayTitle.replaceAll(
+                rule.pattern,
+                rule.replacement,
+              );
             }
           } catch (e) {
             // 忽略錯誤的正則
@@ -113,9 +134,13 @@ class BookChapter {
       return url;
     }
   }
+
   /// 獲取緩存文件名 (原 Android getFileName)
   String getFileName({String suffix = 'nb'}) {
-    final titleMD5 = md5.convert(utf8.encode(title)).toString().substring(0, 16);
+    final titleMD5 = md5
+        .convert(utf8.encode(title))
+        .toString()
+        .substring(0, 16);
     final idxStr = index.toString().padLeft(5, '0');
     return '$idxStr-$titleMD5.$suffix';
   }
@@ -204,4 +229,3 @@ class BookChapter {
     );
   }
 }
-

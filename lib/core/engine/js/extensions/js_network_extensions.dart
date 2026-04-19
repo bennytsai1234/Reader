@@ -92,8 +92,9 @@ extension JsNetworkExtensions on JsExtensions {
             'url': response.url,
             'requestUrl': analyzeUrl.url,
             'code': response.raw.statusCode ?? 200,
+            'message': response.raw.statusMessage ?? '',
             'headers': response.headers,
-            'redirects': const <String>[],
+            'redirects': response.redirectChain,
           });
         } catch (e) {
           AppLog.e('java.connect failed: $e');
@@ -102,6 +103,7 @@ extension JsNetworkExtensions on JsExtensions {
             'url': url,
             'requestUrl': url,
             'code': 500,
+            'message': e.toString(),
             'headers': <String, dynamic>{},
             'redirects': const <String>[],
           });
@@ -137,6 +139,7 @@ extension JsNetworkExtensions on JsExtensions {
               'url': response.realUri.toString(),
               'requestUrl': url,
               'code': response.statusCode,
+              'message': response.statusMessage ?? '',
               'headers': response.headers.map,
               'redirects': _redirectsForResponse(response),
             };
@@ -149,6 +152,7 @@ extension JsNetworkExtensions on JsExtensions {
               'url': url,
               'requestUrl': url,
               'code': 500,
+              'message': e.toString(),
               'headers': <String, dynamic>{},
               'redirects': const <String>[],
             });
@@ -195,6 +199,7 @@ extension JsNetworkExtensions on JsExtensions {
               'url': response.realUri.toString(),
               'requestUrl': url,
               'code': response.statusCode,
+              'message': response.statusMessage ?? '',
               'headers': response.headers.map,
               'redirects': _redirectsForResponse(response),
             };
@@ -207,6 +212,7 @@ extension JsNetworkExtensions on JsExtensions {
               'url': url,
               'requestUrl': url,
               'code': 500,
+              'message': e.toString(),
               'headers': <String, dynamic>{},
               'redirects': const <String>[],
             });
@@ -241,6 +247,7 @@ extension JsNetworkExtensions on JsExtensions {
               'url': response.realUri.toString(),
               'requestUrl': url,
               'code': response.statusCode,
+              'message': response.statusMessage ?? '',
               'headers': response.headers.map,
               'redirects': _redirectsForResponse(response),
             });
@@ -252,6 +259,7 @@ extension JsNetworkExtensions on JsExtensions {
               'url': url,
               'requestUrl': url,
               'code': 500,
+              'message': e.toString(),
               'headers': <String, dynamic>{},
               'redirects': const <String>[],
             });

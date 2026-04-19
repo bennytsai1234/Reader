@@ -6,6 +6,80 @@ import 'package:inkpage_reader/core/services/chinese_utils.dart';
 
 extension JsStringExtensions on JsExtensions {
   void injectStringExtensions() {
+    runtime.evaluate(r'''
+      (function() {
+        function __lrJavaRegex(pattern, globalMode) {
+          if (pattern instanceof RegExp) {
+            var flags = pattern.flags || '';
+            if (globalMode && flags.indexOf('g') === -1) {
+              flags += 'g';
+            }
+            if (!globalMode) {
+              flags = flags.replace(/g/g, '');
+            }
+            return new RegExp(pattern.source, flags);
+          }
+          return new RegExp(String(pattern), globalMode ? 'g' : '');
+        }
+
+        globalThis.__lrJavaReplaceAll = function(value, pattern, replacement) {
+          var input = String(value == null ? '' : value);
+          try {
+            return input.replace(__lrJavaRegex(pattern, true), replacement);
+          } catch (e) {
+            return input.split(String(pattern)).join(String(replacement));
+          }
+        };
+
+        globalThis.__lrJavaReplaceFirst = function(value, pattern, replacement) {
+          var input = String(value == null ? '' : value);
+          try {
+            return input.replace(__lrJavaRegex(pattern, false), replacement);
+          } catch (e) {
+            return input.replace(String(pattern), String(replacement));
+          }
+        };
+
+        String.prototype.replaceAll = function(pattern, replacement) {
+          return globalThis.__lrJavaReplaceAll(this, pattern, replacement);
+        };
+
+        if (typeof String.prototype.replaceFirst !== 'function') {
+          String.prototype.replaceFirst = function(pattern, replacement) {
+            return globalThis.__lrJavaReplaceFirst(this, pattern, replacement);
+          };
+        }
+
+        if (typeof String.prototype.contains !== 'function') {
+          String.prototype.contains = function(value) {
+            return String(this).indexOf(String(value)) !== -1;
+          };
+        }
+
+        if (typeof globalThis.unpack !== 'function') {
+          globalThis.unpack = function(p, a, c, k, e, d) {
+            e = function(index) {
+              return (index < a ? '' : e(parseInt(index / a))) +
+                ((index = index % a) > 35
+                  ? String.fromCharCode(index + 29)
+                  : index.toString(36));
+            };
+            d = d || {};
+            for (var i = c - 1; i >= 0; i--) {
+              if (k[i]) {
+                d[e(i)] = k[i];
+              }
+            }
+            return String(p).replace(/\b\w+\b/g, function(token) {
+              return Object.prototype.hasOwnProperty.call(d, token)
+                ? d[token]
+                : token;
+            });
+          };
+        }
+      })();
+    ''');
+
     // 實作 java.strToBytes
     runtime.onMessage('strToBytes', (dynamic args) {
       final payload = _decodeArgs(args);

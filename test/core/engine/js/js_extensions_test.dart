@@ -3,7 +3,9 @@ import 'dart:io' show gzip;
 
 import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:inkpage_reader/core/engine/js/async_js_rewriter.dart';
 import 'package:inkpage_reader/core/engine/js/js_extensions.dart';
+import 'package:inkpage_reader/core/engine/js/js_rule_async_wrapper.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 
 import '../../../test_helper.dart';
@@ -160,7 +162,10 @@ void main() {
         runtime!.evaluate('typeof source.getLoginInfo').stringResult,
         'function',
       );
-      expect(runtime!.evaluate('typeof source.getKey').stringResult, 'function');
+      expect(
+        runtime!.evaluate('typeof source.getKey').stringResult,
+        'function',
+      );
       expect(
         runtime!.evaluate('typeof source.getVariable').stringResult,
         'function',
@@ -336,17 +341,15 @@ void main() {
       },
     );
 
-    test(
-      'java.base64Encode supports byte arrays',
-      () {
-        if (runtime == null) {
-          expect(runtimeError, isNotNull);
-          return;
-        }
-        final ext = JsExtensions(runtime!);
-        ext.inject();
+    test('java.base64Encode supports byte arrays', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
 
-        final result = runtime!.evaluate(r'''
+      final result = runtime!.evaluate(r'''
         var javaImport = new JavaImporter();
         javaImport.importPackage(Packages.java.lang);
         with(javaImport) {
@@ -354,9 +357,43 @@ void main() {
         }
       ''');
 
-        expect(result.stringResult, 'aGVsbG8=');
-      },
-    );
+      expect(result.stringResult, 'aGVsbG8=');
+    });
+
+    test('String.replaceAll follows Legado Java regex semantics', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final result = runtime!.evaluate(r'''
+        var javaImport = new JavaImporter();
+        javaImport.importPackage(Packages.java.lang);
+        with(javaImport) {
+          "abc123".replaceAll("[a-z]+", "") + "|" +
+          String("第12章").replaceAll("\\d+", "#");
+        }
+      ''');
+
+      expect(result.stringResult, '123|第#章');
+    });
+
+    test('global unpack helper decodes packed source tokens', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final result = runtime!.evaluate(r'''
+        unpack('0("1 2");', 3, 3, ['alert', 'hello', 'world']);
+      ''');
+
+      expect(result.stringResult, 'alert("hello world");');
+    });
 
     test(
       'java.aesBase64DecodeToString helper matches symmetric crypto output',
@@ -542,6 +579,126 @@ void main() {
       ''');
 
       expect(result.stringResult, '第12章 归来');
+    });
+
+    test(
+      'async java.ajax results support chained Java-style replaceAll rules',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        final ext = JsExtensions(runtime!);
+        ext.inject();
+        runtime!.evaluate(
+          'java.ajax = function() { '
+          '  return Promise.resolve(\'<style>gone</style><p>正文</p>\'); '
+          '}; '
+          'var baseUrl = "https://fqbook.cc/read-61918.html"; '
+          'var result = \'<script>var url="_getcontent.php?id=61918&v=test-token"</script>\';',
+        );
+
+        final rewritten = AsyncJsRewriter.rewrite(r'''
+java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' + result.match(/&v=(.*?)"/)[1])).replaceAll('<style.*style>','').replaceAll('<([^<]*?)class(.*?)</(.*?)>','')
+''');
+        final (callId, future) = ext.registerRuleCall();
+        final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+
+        final evalResult = runtime!.evaluate(wrapped);
+        expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+        runtime!.executePendingJob();
+
+        final resolved = await future;
+        expect(resolved, '<p>正文</p>');
+      },
+    );
+
+    test('java.connect wraps responses with raw request url parity', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+      runtime!.evaluate(r'''
+        __asyncCall = function(channel, payload) {
+          if (channel !== 'connect') {
+            return Promise.reject(new Error('unexpected channel: ' + channel));
+          }
+          return Promise.resolve({
+            body: 'OK',
+            url: 'https://canonical.example/e/search/result/index.php?searchid=42',
+            requestUrl: 'http://m.666biquge.com',
+            code: 200,
+            message: 'OK',
+            headers: {},
+            redirects: ['https://canonical.example/e/search/result/index.php?searchid=42']
+          });
+        };
+      ''');
+
+      final rewritten = AsyncJsRewriter.rewrite(r'''
+        var res = java.connect("http://m.666biquge.com");
+        [
+          res.raw().request().url(),
+          res.url(),
+          String(res.code()),
+          String(res.statusCode()),
+          String(res.isSuccessful())
+        ].join("|")
+      ''');
+      final (callId, future) = ext.registerRuleCall();
+      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+
+      final evalResult = runtime!.evaluate(wrapped);
+      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+      runtime!.executePendingJob();
+
+      final resolved = await future;
+      expect(
+        resolved,
+        'https://canonical.example/e/search/result/index.php?searchid=42|'
+        'https://canonical.example/e/search/result/index.php?searchid=42|'
+        '200|200|true',
+      );
+    });
+
+    test('java.connect normalizes bare-origin raw request urls with slash', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+      runtime!.evaluate(r'''
+        __asyncCall = function(channel, payload) {
+          if (channel !== 'connect') {
+            return Promise.reject(new Error('unexpected channel: ' + channel));
+          }
+          return Promise.resolve({
+            body: '',
+            url: 'http://m.666biquge.com',
+            requestUrl: 'http://m.666biquge.com',
+            code: 200,
+            message: 'OK',
+            headers: {},
+            redirects: []
+          });
+        };
+      ''');
+
+      final rewritten = AsyncJsRewriter.rewrite(r'''
+        java.connect("http://m.666biquge.com").raw().request().url() + "modules/article/waps.php"
+      ''');
+      final (callId, future) = ext.registerRuleCall();
+      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+
+      final evalResult = runtime!.evaluate(wrapped);
+      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+      runtime!.executePendingJob();
+
+      final resolved = await future;
+      expect(resolved, 'http://m.666biquge.com/modules/article/waps.php');
     });
   });
 }

@@ -11,6 +11,16 @@ import 'package:inkpage_reader/core/services/check_source_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'widgets/import_preview_dialog.dart';
 
+class ParsedSourceImportResult {
+  final List<BookSource> importableSources;
+  final List<BookSource> excludedNonNovelSources;
+
+  const ParsedSourceImportResult({
+    required this.importableSources,
+    required this.excludedNonNovelSources,
+  });
+}
+
 class SourceManagerProvider with ChangeNotifier {
   final BookSourceDao _dao = getIt<BookSourceDao>();
   final CheckSourceService checkService = CheckSourceService();
@@ -29,11 +39,15 @@ class SourceManagerProvider with ChangeNotifier {
     // 全文搜尋
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      list = list.where((s) =>
-        s.bookSourceName.toLowerCase().contains(q) ||
-        s.bookSourceUrl.toLowerCase().contains(q) ||
-        (s.bookSourceComment?.toLowerCase().contains(q) ?? false)
-      ).toList();
+      list =
+          list
+              .where(
+                (s) =>
+                    s.bookSourceName.toLowerCase().contains(q) ||
+                    s.bookSourceUrl.toLowerCase().contains(q) ||
+                    (s.bookSourceComment?.toLowerCase().contains(q) ?? false),
+              )
+              .toList();
     }
 
     if (filterGroup == '已啟用') {
@@ -214,8 +228,10 @@ class SourceManagerProvider with ChangeNotifier {
     if (_selectedUrls.isEmpty) return;
     final all = await _dao.getAll();
     all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-    final selected = all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
-    final rest = all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
+    final selected =
+        all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
+    final rest =
+        all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
     final reordered = [...selected, ...rest];
     await _dao.updateCustomOrder(reordered);
     await loadSources();
@@ -225,8 +241,10 @@ class SourceManagerProvider with ChangeNotifier {
     if (_selectedUrls.isEmpty) return;
     final all = await _dao.getAll();
     all.sort((a, b) => a.customOrder.compareTo(b.customOrder));
-    final selected = all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
-    final rest = all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
+    final selected =
+        all.where((s) => _selectedUrls.contains(s.bookSourceUrl)).toList();
+    final rest =
+        all.where((s) => !_selectedUrls.contains(s.bookSourceUrl)).toList();
     final reordered = [...rest, ...selected];
     await _dao.updateCustomOrder(reordered);
     await loadSources();
@@ -394,6 +412,20 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
+  Future<int> deleteNonNovelSources() async {
+    final all = await _dao.getAll();
+    final urlsToDelete = <String>[];
+    for (final source in all) {
+      if (source.isNovelTextSource) continue;
+      urlsToDelete.add(source.bookSourceUrl);
+    }
+    if (urlsToDelete.isNotEmpty) {
+      await _dao.deleteByUrls(urlsToDelete);
+      await loadSources();
+    }
+    return urlsToDelete.length;
+  }
+
   Future<void> checkAllSources() async {
     final urls = sources.map((s) => s.bookSourceUrl).toList();
     await checkService.check(urls);
@@ -402,20 +434,39 @@ class SourceManagerProvider with ChangeNotifier {
 
   /// 解析 JSON 字串為書源列表 (不匯入)
   List<BookSource> parseSources(String jsonStr) {
+    return parseSourcesDetailed(jsonStr).importableSources;
+  }
+
+  ParsedSourceImportResult parseSourcesDetailed(String jsonStr) {
     final decoded = jsonDecode(jsonStr);
     final List<dynamic> list = decoded is List ? decoded : [decoded];
     final result = <BookSource>[];
+    final excluded = <BookSource>[];
     for (final e in list) {
       if (e is! Map<String, dynamic>) continue;
       final source = BookSource.fromJson(e);
-      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) continue;
+      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty)
+        continue;
+      if (!source.isNovelTextSource) {
+        source.enabled = false;
+        source.enabledExplore = false;
+        source.addGroup(nonNovelSourceGroupTag);
+        excluded.add(source);
+        continue;
+      }
       result.add(source);
     }
-    return result;
+    return ParsedSourceImportResult(
+      importableSources: result,
+      excludedNonNovelSources: excluded,
+    );
   }
 
   /// 預覽匯入：分類為新增、更新、無變化
-  Future<ImportPreviewResult> previewImport(List<BookSource> incoming) async {
+  Future<ImportPreviewResult> previewImport(
+    List<BookSource> incoming, {
+    List<BookSource> excludedSources = const <BookSource>[],
+  }) async {
     final newSources = <BookSource>[];
     final updatedSources = <BookSource>[];
     final unchangedSources = <BookSource>[];
@@ -435,6 +486,7 @@ class SourceManagerProvider with ChangeNotifier {
       newSources: newSources,
       updatedSources: updatedSources,
       unchangedSources: unchangedSources,
+      excludedSources: excludedSources,
     );
   }
 
@@ -457,11 +509,11 @@ class SourceManagerProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final sources = parseSources(jsonStr);
-      if (sources.isEmpty) return 0;
-      await _dao.insertOrUpdateAll(sources);
+      final parsed = parseSourcesDetailed(jsonStr);
+      if (parsed.importableSources.isEmpty) return 0;
+      await _dao.insertOrUpdateAll(parsed.importableSources);
       await loadSources();
-      return sources.length;
+      return parsed.importableSources.length;
     } catch (_) {
       return 0;
     } finally {

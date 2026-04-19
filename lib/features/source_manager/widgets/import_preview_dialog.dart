@@ -5,19 +5,31 @@ class ImportPreviewResult {
   final List<BookSource> newSources;
   final List<BookSource> updatedSources;
   final List<BookSource> unchangedSources;
+  final List<BookSource> excludedSources;
 
   ImportPreviewResult({
     required this.newSources,
     required this.updatedSources,
     required this.unchangedSources,
+    this.excludedSources = const <BookSource>[],
   });
 
-  int get total => newSources.length + updatedSources.length + unchangedSources.length;
+  int get total =>
+      newSources.length +
+      updatedSources.length +
+      unchangedSources.length +
+      excludedSources.length;
+
+  int get importableTotal =>
+      newSources.length + updatedSources.length + unchangedSources.length;
 }
 
 /// Shows a dialog summarizing what will happen if sources are imported.
 /// Returns the list of sources the user confirms to import, or null if cancelled.
-Future<List<BookSource>?> showImportPreviewDialog(BuildContext context, ImportPreviewResult preview) {
+Future<List<BookSource>?> showImportPreviewDialog(
+  BuildContext context,
+  ImportPreviewResult preview,
+) {
   return showDialog<List<BookSource>>(
     context: context,
     builder: (ctx) => _ImportPreviewDialog(preview: preview),
@@ -45,7 +57,18 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('共解析 ${p.total} 個書源', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            '共解析 ${p.total} 個書源',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          if (p.excludedSources.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '已排除非小說源：${p.excludedSources.length} 個',
+                style: const TextStyle(color: Colors.orange, fontSize: 13),
+              ),
+            ),
           const SizedBox(height: 12),
           if (p.newSources.isNotEmpty)
             CheckboxListTile(
@@ -66,12 +89,18 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
           if (p.unchangedSources.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('無變化：${p.unchangedSources.length} 個（跳過）', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              child: Text(
+                '無變化：${p.unchangedSources.length} 個（跳過）',
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
+              ),
             ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
         ElevatedButton(
           onPressed: () {
             final result = <BookSource>[];
@@ -79,7 +108,9 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
             if (_importUpdated) result.addAll(p.updatedSources);
             Navigator.pop(context, result);
           },
-          child: Text('匯入 (${(_importNew ? p.newSources.length : 0) + (_importUpdated ? p.updatedSources.length : 0)})'),
+          child: Text(
+            '匯入 (${(_importNew ? p.newSources.length : 0) + (_importUpdated ? p.updatedSources.length : 0)})',
+          ),
         ),
       ],
     );

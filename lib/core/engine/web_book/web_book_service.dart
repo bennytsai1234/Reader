@@ -37,6 +37,7 @@ class WebBook {
     String key, {
     int? page = 1,
     bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
     CancelToken? cancelToken,
   }) async {
     final searchUrl = source.searchUrl;
@@ -61,11 +62,10 @@ class WebBook {
       body: res.body,
       baseUrl: res.url,
       isSearch: true,
+      filter: filter,
+      shouldBreak: shouldBreak,
     );
 
-    if (filter != null) {
-      return results.where((b) => filter(b.name, b.author ?? '')).toList();
-    }
     return results;
   }
 
@@ -97,12 +97,17 @@ class WebBook {
   }) async {
 
     if (book.infoHtml != null && book.infoHtml!.isNotEmpty) {
-      return BookInfoParser.parse(
+      final parsed = await BookInfoParser.parse(
         source: source,
         book: book,
         body: book.infoHtml!,
         baseUrl: book.bookUrl,
       );
+      parsed.infoHtml = book.infoHtml;
+      if (parsed.tocUrl.isEmpty || parsed.tocUrl == parsed.bookUrl) {
+        parsed.tocHtml = book.infoHtml;
+      }
+      return parsed;
     }
 
     final analyzeUrl = await AnalyzeUrl.create(book.bookUrl, source: source, ruleData: book);
@@ -110,12 +115,17 @@ class WebBook {
     res = _runLoginCheckJs(source, res, ruleData: book);
     _checkRedirect(source, res);
 
-    return BookInfoParser.parse(
+    final parsed = await BookInfoParser.parse(
       source: source,
       book: book,
       body: res.body,
       baseUrl: res.url,
     );
+    parsed.infoHtml = res.body;
+    if (parsed.tocUrl.isEmpty || parsed.tocUrl == parsed.bookUrl) {
+      parsed.tocHtml = res.body;
+    }
+    return parsed;
   }
 
   /// 獲取目錄列表 (對標 getChapterListAwait / BookChapterList.analyzeChapterList)
@@ -123,6 +133,9 @@ class WebBook {
   static Future<List<BookChapter>> getChapterListAwait(
     BookSource source,
     Book book,
+    {
+    int? chapterLimit,
+  }
   ) async {
 
     final rule = AnalyzeRule(source: source, ruleData: book);
@@ -136,59 +149,81 @@ class WebBook {
 
     // 1. 抓取首頁目錄
     visitedUrls.add(initialUrl);
-    final firstAnalyzeUrl = await AnalyzeUrl.create(initialUrl, source: source, ruleData: book);
-    var firstRes = await firstAnalyzeUrl.getStrResponse();
-    firstRes = _runLoginCheckJs(source, firstRes, ruleData: book);
-    _checkRedirect(source, firstRes);
+    final firstRes = await _loadInitialTocResponse(
+      source: source,
+      book: book,
+      initialUrl: initialUrl,
+    );
 
     final firstResult = await ChapterListParser.parse(
       source: source,
       book: book,
       body: firstRes.body,
       baseUrl: firstRes.url,
+      maxChapters: chapterLimit,
     );
     isReverse = firstResult.isReverse;
     allChapters.addAll(firstResult.chapters);
 
-    if (firstResult.nextUrls.length > 1) {
+    if (chapterLimit == null || allChapters.length < chapterLimit) {
+      if (firstResult.nextUrls.length > 1) {
       // 多 nextUrl → 並發抓取剩餘頁 (對標 Android mapAsync)
-      final pending = firstResult.nextUrls
+        final pending = firstResult.nextUrls
           .where((u) => visitedUrls.add(u))
           .take(_maxTocPages - 1)
           .toList();
-      final responses = await _fetchParallel(pending, source, book);
-      for (var i = 0; i < responses.length; i++) {
-        final res = responses[i];
-        if (res == null) continue;
-        final pageResult = await ChapterListParser.parse(
-          source: source,
-          book: book,
-          body: res.body,
-          baseUrl: res.url,
-        );
-        allChapters.addAll(pageResult.chapters);
-        // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
-      }
-    } else {
+        final responses = await _fetchParallel(pending, source, book);
+        for (var i = 0; i < responses.length; i++) {
+          if (chapterLimit != null && allChapters.length >= chapterLimit) {
+            break;
+          }
+          final res = responses[i];
+          if (res == null) continue;
+          final pageResult = await ChapterListParser.parse(
+            source: source,
+            book: book,
+            body: res.body,
+            baseUrl: res.url,
+            maxChapters:
+                chapterLimit == null
+                    ? null
+                    : (chapterLimit! - allChapters.length),
+          );
+          allChapters.addAll(pageResult.chapters);
+          // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
+        }
+      } else {
       // 單 nextUrl → daisy chain 循序抓取
-      String? currentUrl =
+        String? currentUrl =
           firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
-      for (var pageNum = 1; pageNum < _maxTocPages && currentUrl != null; pageNum++) {
-        if (!visitedUrls.add(currentUrl)) break;
+        for (var pageNum = 1;
+            pageNum < _maxTocPages && currentUrl != null;
+            pageNum++) {
+          if (chapterLimit != null && allChapters.length >= chapterLimit) {
+            break;
+          }
+          if (!visitedUrls.add(currentUrl)) break;
 
-        final analyzeUrl = await AnalyzeUrl.create(currentUrl, source: source, ruleData: book);
-        var res = await analyzeUrl.getStrResponse();
-        res = _runLoginCheckJs(source, res, ruleData: book);
-        _checkRedirect(source, res);
+          final analyzeUrl = await AnalyzeUrl.create(
+            currentUrl,
+            source: source,
+            ruleData: book,
+          );
+          var res = await analyzeUrl.getStrResponse();
+          res = _runLoginCheckJs(source, res, ruleData: book);
+          _checkRedirect(source, res);
 
-        final result = await ChapterListParser.parse(
-          source: source,
-          book: book,
-          body: res.body,
-          baseUrl: res.url,
-        );
-        allChapters.addAll(result.chapters);
-        currentUrl = result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
+          final result = await ChapterListParser.parse(
+            source: source,
+            book: book,
+            body: res.body,
+            baseUrl: res.url,
+            maxChapters:
+                chapterLimit == null ? null : (chapterLimit - allChapters.length),
+          );
+          allChapters.addAll(result.chapters);
+          currentUrl = result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
+        }
       }
     }
 
@@ -385,6 +420,42 @@ class WebBook {
       }
     }).toList();
     return Future.wait(futures);
+  }
+
+  static Future<StrResponse> _loadInitialTocResponse({
+    required BookSource source,
+    required Book book,
+    required String initialUrl,
+  }) async {
+    final cachedBody =
+        (book.tocHtml != null && book.tocHtml!.isNotEmpty)
+            ? book.tocHtml
+            : (initialUrl == book.bookUrl &&
+                book.infoHtml != null &&
+                book.infoHtml!.isNotEmpty)
+            ? book.infoHtml
+            : null;
+    if (cachedBody != null && cachedBody.isNotEmpty) {
+      return StrResponse(
+        url: initialUrl,
+        body: cachedBody,
+        headers: const <String, List<String>>{},
+        raw: Response(
+          requestOptions: RequestOptions(path: initialUrl),
+          data: cachedBody,
+        ),
+      );
+    }
+
+    final analyzeUrl = await AnalyzeUrl.create(
+      initialUrl,
+      source: source,
+      ruleData: book,
+    );
+    var res = await analyzeUrl.getStrResponse();
+    res = _runLoginCheckJs(source, res, ruleData: book);
+    _checkRedirect(source, res);
+    return res;
   }
 
   /// 以檔名為鍵，從 DAO 讀回既有章節的 wordCount

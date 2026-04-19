@@ -1,9 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:inkpage_reader/core/engine/analyze_rule/analyze_rule_support.dart';
+import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/models/rule_data_interface.dart';
+import 'package:inkpage_reader/core/models/search_book.dart';
 import 'js_extensions_base.dart';
 import 'extensions/js_network_extensions.dart';
 import 'extensions/js_crypto_extensions.dart';
@@ -58,6 +64,12 @@ class JsExtensions extends JsExtensionsBase {
         } else {
           JsExtensionsBase.sharedScope[key] = value;
         }
+        if (source != null) {
+          final scopedKey = 'v_${source!.getKey()}_$key';
+          final stringValue = value?.toString() ?? '';
+          cacheManager.putMemory(scopedKey, stringValue);
+          unawaited(cacheManager.put(scopedKey, stringValue));
+        }
       }
       return null;
     });
@@ -65,8 +77,18 @@ class JsExtensions extends JsExtensionsBase {
       final key = _decodeSyncArgs(args).toString();
       if (ruleContext != null) {
         try {
-          return ruleContext.get(key);
+          final value = ruleContext.get(key);
+          if (value != null && value.toString().isNotEmpty) {
+            return value;
+          }
         } catch (_) {}
+      }
+      if (source != null) {
+        final scopedKey = 'v_${source!.getKey()}_$key';
+        final cached = cacheManager.getFromMemory(scopedKey);
+        if (cached != null && cached.toString().isNotEmpty) {
+          return cached;
+        }
       }
       return JsExtensionsBase.sharedScope[key];
     });
@@ -78,6 +100,25 @@ class JsExtensions extends JsExtensionsBase {
         } catch (_) {}
       }
       return '';
+    });
+    runtime.onMessage('ruleGetElement', (args) {
+      final rule = _decodeSyncArgs(args).toString();
+      if (ruleContext != null) {
+        try {
+          return _toJsRuleValue(ruleContext.getElement(rule));
+        } catch (_) {}
+      }
+      return '';
+    });
+    runtime.onMessage('ruleGetElements', (args) {
+      final rule = _decodeSyncArgs(args).toString();
+      if (ruleContext != null) {
+        try {
+          final values = ruleContext.getElements(rule);
+          return values.map(_toJsRuleValue).toList();
+        } catch (_) {}
+      }
+      return const <dynamic>[];
     });
     runtime.onMessage('log', (args) {
       debugPrint('JS_LOG: $args');
@@ -125,6 +166,38 @@ class JsExtensions extends JsExtensionsBase {
         return _removeHtml(payload[0].toString(), payload[1].toString());
       }
       return '';
+    });
+    runtime.onMessage('scopedObjectGetVariable', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        return _getScopedObjectVariable(
+          payload[0].toString(),
+          payload[1].toString(),
+        );
+      }
+      return '';
+    });
+    runtime.onMessage('scopedObjectPutVariable', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        _putScopedObjectVariable(
+          payload[0].toString(),
+          payload[1].toString(),
+          payload.length > 2 ? payload[2] : null,
+        );
+      }
+      return null;
+    });
+    runtime.onMessage('scopedObjectSetField', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 3) {
+        _setScopedObjectField(
+          payload[0].toString(),
+          payload[1].toString(),
+          payload[2],
+        );
+      }
+      return null;
     });
 
     // ─── Fire-and-forget async (JS 不讀回傳值) ──────────────────
@@ -180,9 +253,7 @@ class JsExtensions extends JsExtensionsBase {
       if (source == null) return <String, String>{};
       final includeLoginHeader =
           _decodeSyncArgs(args) is bool ? _decodeSyncArgs(args) as bool : true;
-      return source!.getHeaderMapSync(
-        hasLoginHeader: includeLoginHeader,
-      );
+      return source!.getHeaderMapSync(hasLoginHeader: includeLoginHeader);
     });
 
     // ─── Promise bridge: async with return value ────────────────
@@ -203,12 +274,14 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('cacheTextFile', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
-      final url = payload is List && payload.isNotEmpty
-          ? payload[0].toString()
-          : payload.toString();
-      final saveTime = payload is List && payload.length > 1
-          ? int.tryParse(payload[1].toString()) ?? 0
-          : 0;
+      final url =
+          payload is List && payload.isNotEmpty
+              ? payload[0].toString()
+              : payload.toString();
+      final saveTime =
+          payload is List && payload.length > 1
+              ? int.tryParse(payload[1].toString()) ?? 0
+              : 0;
       cacheFile(url, saveTime)
           .then((content) {
             resolveJsPending(parsed.callId, content);
@@ -229,7 +302,7 @@ class JsExtensions extends JsExtensionsBase {
             if (content.trim().isEmpty) {
               throw Exception('$path 內容獲取失敗或者為空');
             }
-            resolveJsPending(parsed.callId, content);
+            resolveJsPending(parsed.callId, _wrapImportedScript(content));
             return;
           }
           final file = File(path);
@@ -240,7 +313,7 @@ class JsExtensions extends JsExtensionsBase {
           if (content.trim().isEmpty) {
             throw Exception('$path 內容獲取失敗或者為空');
           }
-          resolveJsPending(parsed.callId, content);
+          resolveJsPending(parsed.callId, _wrapImportedScript(content));
         } catch (e) {
           rejectJsPending(parsed.callId, e);
         }
@@ -343,6 +416,239 @@ class JsExtensions extends JsExtensionsBase {
     return args;
   }
 
+  dynamic _resolveScopedObject(String scopeName) {
+    if (ruleContext == null) return null;
+    try {
+      switch (scopeName) {
+        case 'book':
+          return ruleContext.ruleData;
+        case 'chapter':
+          return ruleContext.chapter;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _getScopedObjectVariable(String scopeName, String key) {
+    final target = _resolveScopedObject(scopeName);
+    if (target is RuleDataInterface) {
+      return target.getVariable(key);
+    }
+    return '';
+  }
+
+  void _putScopedObjectVariable(String scopeName, String key, dynamic value) {
+    final target = _resolveScopedObject(scopeName);
+    if (target is RuleDataInterface) {
+      target.putVariable(key, value?.toString());
+    }
+  }
+
+  void _setScopedObjectField(
+    String scopeName,
+    String fieldName,
+    dynamic value,
+  ) {
+    final target = _resolveScopedObject(scopeName);
+    if (target is Book) {
+      _setBookField(target, fieldName, value);
+      return;
+    }
+    if (target is SearchBook) {
+      _setSearchBookField(target, fieldName, value);
+      return;
+    }
+    if (target is BookChapter) {
+      _setChapterField(target, fieldName, value);
+    }
+  }
+
+  void _setBookField(Book book, String fieldName, dynamic value) {
+    switch (fieldName) {
+      case 'bookUrl':
+        book.bookUrl = _asString(value);
+        return;
+      case 'tocUrl':
+        book.tocUrl = _asString(value);
+        return;
+      case 'origin':
+        book.origin = _asString(value);
+        return;
+      case 'originName':
+        book.originName = _asString(value);
+        return;
+      case 'name':
+        book.name = _asString(value);
+        return;
+      case 'author':
+        book.author = _asString(value);
+        return;
+      case 'kind':
+        book.kind = _asNullableString(value);
+        return;
+      case 'coverUrl':
+        book.coverUrl = _asNullableString(value);
+        return;
+      case 'intro':
+        book.intro = _asNullableString(value);
+        return;
+      case 'latestChapterTitle':
+        book.latestChapterTitle = _asNullableString(value);
+        return;
+      case 'wordCount':
+        book.wordCount = _asNullableString(value);
+        return;
+      case 'type':
+        book.type = _asInt(value, fallback: book.type);
+        return;
+      case 'durChapterIndex':
+        book.durChapterIndex = _asInt(value, fallback: book.durChapterIndex);
+        return;
+      case 'variable':
+        book.variable = _asNullableString(value);
+        return;
+      case 'isInBookshelf':
+        book.isInBookshelf = _asBool(value, fallback: book.isInBookshelf);
+        return;
+      default:
+        return;
+    }
+  }
+
+  void _setSearchBookField(SearchBook book, String fieldName, dynamic value) {
+    switch (fieldName) {
+      case 'bookUrl':
+        book.bookUrl = _asString(value);
+        return;
+      case 'name':
+        book.name = _asString(value);
+        return;
+      case 'author':
+        book.author = _asNullableString(value);
+        return;
+      case 'kind':
+        book.kind = _asNullableString(value);
+        return;
+      case 'coverUrl':
+        book.coverUrl = _asNullableString(value);
+        return;
+      case 'intro':
+        book.intro = _asNullableString(value);
+        return;
+      case 'wordCount':
+        book.wordCount = _asNullableString(value);
+        return;
+      case 'latestChapterTitle':
+        book.latestChapterTitle = _asNullableString(value);
+        return;
+      case 'origin':
+        book.origin = _asString(value);
+        return;
+      case 'originName':
+        book.originName = _asNullableString(value);
+        return;
+      case 'originOrder':
+        book.originOrder = _asInt(value, fallback: book.originOrder);
+        return;
+      case 'type':
+        book.type = _asInt(value, fallback: book.type);
+        return;
+      case 'variable':
+        book.variable = _asNullableString(value);
+        return;
+      case 'tocUrl':
+        book.tocUrl = _asNullableString(value);
+        return;
+      case 'respondTime':
+        book.respondTime = _asInt(value, fallback: book.respondTime);
+        return;
+      default:
+        return;
+    }
+  }
+
+  void _setChapterField(BookChapter chapter, String fieldName, dynamic value) {
+    switch (fieldName) {
+      case 'url':
+        chapter.url = _asString(value);
+        return;
+      case 'title':
+        chapter.title = _asString(value);
+        return;
+      case 'baseUrl':
+        chapter.baseUrl = _asString(value);
+        return;
+      case 'bookUrl':
+        chapter.bookUrl = _asString(value);
+        return;
+      case 'index':
+        chapter.index = _asInt(value, fallback: chapter.index);
+        return;
+      case 'isVolume':
+        chapter.isVolume = _asBool(value, fallback: chapter.isVolume);
+        return;
+      case 'isVip':
+        chapter.isVip = _asBool(value, fallback: chapter.isVip);
+        return;
+      case 'isPay':
+        chapter.isPay = _asBool(value, fallback: chapter.isPay);
+        return;
+      case 'resourceUrl':
+        chapter.resourceUrl = _asNullableString(value);
+        return;
+      case 'tag':
+        chapter.tag = _asNullableString(value);
+        return;
+      case 'wordCount':
+        chapter.wordCount = _asNullableString(value);
+        return;
+      case 'start':
+        chapter.start = _asNullableInt(value);
+        return;
+      case 'end':
+        chapter.end = _asNullableInt(value);
+        return;
+      case 'startFragmentId':
+        chapter.startFragmentId = _asNullableString(value);
+        return;
+      case 'endFragmentId':
+        chapter.endFragmentId = _asNullableString(value);
+        return;
+      case 'variable':
+        chapter.variable = _asNullableString(value);
+        return;
+      case 'content':
+        chapter.content = _asNullableString(value);
+        return;
+      default:
+        return;
+    }
+  }
+
+  String _asString(dynamic value) => value?.toString() ?? '';
+
+  String? _asNullableString(dynamic value) =>
+      value == null ? null : value.toString();
+
+  int _asInt(dynamic value, {int fallback = 0}) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  int? _asNullableInt(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  bool _asBool(dynamic value, {bool fallback = false}) {
+    if (value is bool) return value;
+    final normalized = value?.toString().trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1') return true;
+    if (normalized == 'false' || normalized == '0') return false;
+    return fallback;
+  }
+
   List<dom.Element> _selectHtmlElements(String html, String selector) {
     final doc = html_parser.parse(html);
     return _selectHtmlElementsFromDocument(doc, selector);
@@ -403,7 +709,10 @@ class JsExtensions extends JsExtensionsBase {
     final seen = <dom.Element>{};
 
     for (final part in selectors) {
-      final matched = _selectHtmlElementsForSinglePseudoSelector(document, part);
+      final matched = _selectHtmlElementsForSinglePseudoSelector(
+        document,
+        part,
+      );
       for (final element in matched) {
         if (seen.add(element)) {
           results.add(element);
@@ -444,7 +753,9 @@ class JsExtensions extends JsExtensionsBase {
       }).toList();
     }
 
-    final firstChildMatch = RegExp(r'^(.*):first-child\s*$').firstMatch(selector);
+    final firstChildMatch = RegExp(
+      r'^(.*):first-child\s*$',
+    ).firstMatch(selector);
     if (firstChildMatch != null) {
       final baseSelector = firstChildMatch.group(1)!.trim();
       final candidates = document.querySelectorAll(baseSelector);
@@ -554,5 +865,37 @@ class JsExtensions extends JsExtensionsBase {
     } catch (_) {
       return '';
     }
+  }
+
+  dynamic _toJsRuleValue(dynamic value) {
+    if (value == null || value is String || value is num || value is bool) {
+      return value;
+    }
+    if (value is Map) {
+      return value.map(
+        (key, item) => MapEntry(key.toString(), _toJsRuleValue(item)),
+      );
+    }
+    if (value is Iterable) {
+      return value.map(_toJsRuleValue).toList();
+    }
+    return stringifyRuleResult(value);
+  }
+
+  String _wrapImportedScript(String content) {
+    final indented =
+        content.split('\n').map((line) => line.isEmpty ? '' : '  $line').join('\n');
+    return '''
+(function(__lrGlobal) {
+  var exports = undefined;
+  var module = undefined;
+  var define = undefined;
+  var require = undefined;
+$indented
+}).call(
+  typeof globalThis !== "undefined" ? globalThis : this,
+  typeof globalThis !== "undefined" ? globalThis : this
+);
+''';
   }
 }

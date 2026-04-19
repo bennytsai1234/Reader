@@ -51,12 +51,6 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       mergedSource.putIfAbsent('tag', () => baseSource.getTag());
       sourceMap = mergedSource;
     }
-    dynamic chapterMap;
-    try {
-      chapterMap = chapter?.toJson();
-    } catch (_) {
-      chapterMap = chapter;
-    }
     return {
       'java': this,
       'cookie': CookieStore(),
@@ -65,7 +59,8 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       'baseUrl': baseUrl,
       'redirectUrl': redirectUrl,
       'source': sourceMap,
-      'chapter': chapterMap,
+      'book': ruleData,
+      'chapter': chapter,
       'title': chapter?.title,
       'nextChapterUrl': nextChapterUrl,
       'key': key,

@@ -316,6 +316,10 @@ class AsyncJsRewriter {
           i = end == -1 ? n : end + 2;
           continue;
         }
+        if (_isRegexLiteralStart(source, i)) {
+          i = _skipRegexLiteral(source, i);
+          continue;
+        }
       }
       i++;
     }

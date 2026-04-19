@@ -117,6 +117,19 @@ if (match) {
       expect(AsyncJsRewriter.rewrite(input), expected);
     });
 
+    test(
+      'regex literals inside java.ajax arguments keep chained calls intact',
+      () {
+        const input = r'''
+java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' + result.match(/&v=(.*?)"/)[1])).replaceAll('<style.*style>','').replaceAll('<([^<]*?)class(.*?)</(.*?)>','')
+''';
+        const expected = r'''
+(await java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' + result.match(/&v=(.*?)"/)[1]))).replaceAll('<style.*style>','').replaceAll('<([^<]*?)class(.*?)</(.*?)>','')
+''';
+        expect(AsyncJsRewriter.rewrite(input), expected);
+      },
+    );
+
     test('sync methods (md5Encode, base64Encode) are left alone', () {
       const input =
           'var h = java.md5Encode(str); var b = java.base64Encode(str);';

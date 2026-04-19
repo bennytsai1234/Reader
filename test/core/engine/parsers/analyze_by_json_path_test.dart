@@ -69,5 +69,19 @@ void main() {
       final result = analyzer.getString(r'Color: {$.store.bicycle.color}');
       expect(result, 'Color: red');
     });
+
+    test('9. Root array selectors accept legado \$.[*] syntax', () {
+      final arrayAnalyzer = AnalyzeByJsonPath('''
+        [
+          {"chapterId": "142366", "chapterName": "第一章"},
+          {"chapterId": "142367", "chapterName": "第二章"}
+        ]
+      ''');
+
+      final chapters = arrayAnalyzer.getElements(r'$.[*]');
+      expect(chapters, hasLength(2));
+      expect(chapters.first['chapterId'], '142366');
+      expect(arrayAnalyzer.getString(r'$.[*].chapterName'), '第一章\n第二章');
+    });
   });
 }

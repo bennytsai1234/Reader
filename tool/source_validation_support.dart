@@ -22,6 +22,7 @@ const String sourceListUrl =
 const String _sourceListCacheRelativePath =
     '.cache/inkpage_reader/source_lists/382015f6ff010d7fee368c6daabd5081.json';
 const String legadoValidationDefaultKeyword = '我的';
+const int sourceValidationChapterLimit = 128;
 
 enum SourceValidationOutcome { pass, skip, fail }
 
@@ -271,6 +272,18 @@ Future<SourceValidationResult> validateSourceFlow(
   BookSource source, {
   required int index,
 }) async {
+  if (!source.isNovelTextSource) {
+    return SourceValidationResult(
+      index: index,
+      sourceName: source.bookSourceName,
+      outcome: SourceValidationOutcome.skip,
+      stage: 'source-filter',
+      duration: Duration.zero,
+      failure: source.nonNovelExclusionReason,
+      category: 'non-novel-source',
+    );
+  }
+
   final stopwatch = Stopwatch()..start();
   const maxContentProbe = 5;
   var stage = 'init';
@@ -311,7 +324,11 @@ Future<SourceValidationResult> validateSourceFlow(
     }
 
     stage = 'toc';
-    chapters = await service.getChapterList(source, hydratedBook);
+    chapters = await service.getChapterList(
+      source,
+      hydratedBook,
+      chapterLimit: sourceValidationChapterLimit,
+    );
     readableChapters = chapters.where((chapter) => !chapter.isVolume).toList();
     if (readableChapters.isEmpty) {
       throw StateError('目錄沒有可閱讀章節');
@@ -477,8 +494,7 @@ ValidationFailureClassification classifyValidationFailure(
     );
   }
 
-  if (rawNormalized.contains('找不到可用測試關鍵詞') ||
-      rawNormalized.contains('沒有結果')) {
+  if (rawNormalized.contains('找不到可用測試關鍵詞') || rawNormalized.contains('沒有結果')) {
     return const ValidationFailureClassification(
       outcome: SourceValidationOutcome.skip,
       category: 'source-search-empty',
@@ -565,7 +581,12 @@ Future<SearchKeywordSeed> pickKeywordSeed(
   // use ruleSearch.checkKeyWord first, otherwise fall back to the global
   // default keyword instead of probing many derived candidates.
   final keyword = resolveValidationKeyword(source);
-  final searchBooks = await service.searchBooks(source, keyword);
+  final searchBooks = await service.searchBooks(
+    source,
+    keyword,
+    filter: (name, author) => _nameAuthorMatchesKeyword(name, author, keyword),
+    shouldBreak: (size) => size >= 1,
+  );
   return SearchKeywordSeed(keyword: keyword, searchBooks: searchBooks);
 }
 
@@ -577,8 +598,10 @@ String resolveValidationKeyword(
   return keyword.isEmpty ? defaultKeyword : keyword;
 }
 
-Future<String> pickKeyword(BookSourceService service, BookSource source) async =>
-    resolveValidationKeyword(source);
+Future<String> pickKeyword(
+  BookSourceService service,
+  BookSource source,
+) async => resolveValidationKeyword(source);
 
 Future<SearchKeywordSeed?> _tryKeyword(
   BookSourceService service,
@@ -871,10 +894,15 @@ bool looksLikeBookName(String text) {
 }
 
 bool _searchBookMatchesKeyword(SearchBook book, String keyword) {
-  final haystacks = <String>[
-    _normalizeKeywordText(book.name),
-    _normalizeKeywordText(book.author ?? ''),
-  ].where((value) => value.isNotEmpty).toList();
+  return _nameAuthorMatchesKeyword(book.name, book.author ?? '', keyword);
+}
+
+bool _nameAuthorMatchesKeyword(String name, String author, String keyword) {
+  final haystacks =
+      <String>[
+        _normalizeKeywordText(name),
+        _normalizeKeywordText(author),
+      ].where((value) => value.isNotEmpty).toList();
   if (haystacks.isEmpty) return false;
 
   for (final candidate in _buildKeywordMatchCandidates(keyword)) {

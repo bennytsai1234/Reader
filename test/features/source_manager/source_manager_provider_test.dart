@@ -2,18 +2,49 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:inkpage_reader/core/constant/source_type.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/features/source_manager/source_manager_provider.dart';
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
+  final Map<String, BookSource> store = <String, BookSource>{};
+
   @override
-  Future<List<BookSource>> getAllPart() async => [];
+  Future<List<BookSource>> getAllPart() async => store.values.toList();
+
+  @override
+  Future<List<BookSource>> getAll() async => store.values.toList();
+
+  @override
+  Future<BookSource?> getByUrl(String url) async => store[url];
+
+  @override
+  Future<void> upsert(BookSource source) async {
+    store[source.bookSourceUrl] = source;
+  }
+
+  @override
+  Future<void> insertOrUpdateAll(List<BookSource> sources) async {
+    for (final source in sources) {
+      store[source.bookSourceUrl] = source;
+    }
+  }
+
+  @override
+  Future<void> deleteByUrls(List<String> urls) async {
+    for (final url in urls) {
+      store.remove(url);
+    }
+  }
 }
 
 void main() {
+  late _FakeSourceDao fakeDao;
+
   setUp(() {
-    GetIt.instance.registerLazySingleton<BookSourceDao>(() => _FakeSourceDao());
+    fakeDao = _FakeSourceDao();
+    GetIt.instance.registerLazySingleton<BookSourceDao>(() => fakeDao);
   });
 
   tearDown(() async {
@@ -50,5 +81,65 @@ void main() {
     expect(parsed.first.bookSourceUrl, 'https://bbxxxx.com');
     expect(parsed.first.ruleSearch?.bookList, 'class.novel-item');
     expect(parsed[1].bookSourceName, '第二个书源');
+  });
+
+  test('parseSourcesDetailed excludes non-novel sources', () {
+    final provider = SourceManagerProvider();
+    final jsonStr = jsonEncode([
+      {
+        'bookSourceName': '純小說站',
+        'bookSourceUrl': 'https://novel.example.com',
+        'bookSourceType': SourceType.book,
+      },
+      {
+        'bookSourceName': '有聲站',
+        'bookSourceUrl': 'https://audio.example.com',
+        'bookSourceType': SourceType.audio,
+      },
+      {
+        'bookSourceName': '漫畫站',
+        'bookSourceUrl': 'https://comic.example.com',
+        'bookSourceType': SourceType.book,
+      },
+    ]);
+
+    final parsed = provider.parseSourcesDetailed(jsonStr);
+
+    expect(parsed.importableSources, hasLength(1));
+    expect(parsed.importableSources.single.bookSourceName, '純小說站');
+    expect(parsed.excludedNonNovelSources, hasLength(2));
+    expect(parsed.excludedNonNovelSources.first.enabled, isFalse);
+    expect(
+      parsed.excludedNonNovelSources.first.bookSourceGroup,
+      contains(nonNovelSourceGroupTag),
+    );
+  });
+
+  test('deleteNonNovelSources removes existing non-novel sources', () async {
+    fakeDao.store['https://novel.example.com'] = BookSource(
+      bookSourceUrl: 'https://novel.example.com',
+      bookSourceName: '小說源',
+      bookSourceType: SourceType.book,
+    );
+    fakeDao.store['https://audio.example.com'] = BookSource(
+      bookSourceUrl: 'https://audio.example.com',
+      bookSourceName: '有聲源',
+      bookSourceType: SourceType.audio,
+      enabledExplore: true,
+    );
+    fakeDao.store['https://comic.example.com'] = BookSource(
+      bookSourceUrl: 'https://comic.example.com',
+      bookSourceName: '漫畫源',
+      bookSourceType: SourceType.book,
+      enabledExplore: true,
+    );
+
+    final provider = SourceManagerProvider();
+    final affected = await provider.deleteNonNovelSources();
+
+    expect(affected, 2);
+    expect(fakeDao.store.keys, contains('https://novel.example.com'));
+    expect(fakeDao.store.keys, isNot(contains('https://audio.example.com')));
+    expect(fakeDao.store.keys, isNot(contains('https://comic.example.com')));
   });
 }

@@ -40,7 +40,9 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
           dynamic tempResult;
-          if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
+          if (result is Map && sourceRule.paramSize > 1) {
+            tempResult = rule;
+          } else if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
             switch (sourceRule.mode) {
               case Mode.js:
                 tempResult = evalJS(rule, result);
@@ -155,11 +157,13 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
             }
           }
 
-          final rule = sourceRule.makeUpRule(result, this);
+          final rule = await sourceRule.makeUpRuleAsync(result, this);
           log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
           dynamic tempResult;
-          if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
+          if (result is Map && sourceRule.paramSize > 1) {
+            tempResult = rule;
+          } else if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
             switch (sourceRule.mode) {
               case Mode.js:
                 tempResult = await evalJSAsync(rule, result);

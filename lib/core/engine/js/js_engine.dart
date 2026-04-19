@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_js/flutter_js.dart';
+import 'package:dio/dio.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:xpath_selector/xpath_selector.dart';
+import 'package:inkpage_reader/core/models/base_source.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
+import 'package:inkpage_reader/core/services/http_client.dart';
 import 'async_js_rewriter.dart';
 import 'js_extensions.dart';
 import 'js_rule_async_wrapper.dart';
@@ -22,11 +26,16 @@ class JsEngine {
   JavascriptRuntime? _runtime;
   bool _isAvailable = false;
   JsExtensions? _extensions;
+  final dynamic source;
   final dynamic ruleContext;
   final Map<int, dom.Element> _bridgedElements = <int, dom.Element>{};
   int _nextBridgeElementId = 0;
+  String? _loadedSourceJsLibKey;
+  static final Map<String, String> _resolvedJsLibCache = <String, String>{};
+  static final Map<String, Future<String>> _pendingJsLibCache =
+      <String, Future<String>>{};
 
-  JsEngine({dynamic source, this.ruleContext}) {
+  JsEngine({this.source, this.ruleContext}) {
     try {
       _runtime = getJavascriptRuntime();
       _isAvailable = true;
@@ -62,6 +71,7 @@ class JsEngine {
     }
 
     _injectContext(context);
+    _ensureSourceJsLibLoadedSync();
     final result = _evaluateRuleScript(jsCode);
     return _decodeContextValue(result.rawResult);
   }
@@ -83,6 +93,7 @@ class JsEngine {
     if (!AsyncJsRewriter.needsAsync(jsCode)) {
       // Fast path: 純同步 rule JS
       _injectContext(context);
+      _ensureSourceJsLibLoadedSync();
       final res = _evaluateRuleScript(jsCode);
       if (res.isError) {
         throw StateError('rule JS evaluate error: ${res.stringResult}');
@@ -91,6 +102,7 @@ class JsEngine {
     }
 
     _injectContext(context);
+    await _ensureSourceJsLibLoadedAsync();
     final rewritten = AsyncJsRewriter.rewrite(jsCode);
     final (callId, future) = _extensions!.registerRuleCall();
     final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
@@ -115,6 +127,188 @@ class JsEngine {
     return future.then(_decodeContextValue);
   }
 
+  String? _extractSourceJsLib() {
+    if (source is! BaseSource) {
+      return null;
+    }
+    final jsLib = (source as BaseSource).jsLib?.trim();
+    if (jsLib == null || jsLib.isEmpty) {
+      return null;
+    }
+    return jsLib;
+  }
+
+  void _ensureSourceJsLibLoadedSync() {
+    final jsLib = _extractSourceJsLib();
+    if (jsLib == null || jsLib == _loadedSourceJsLibKey) {
+      return;
+    }
+    final resolved = _resolveSourceJsLibSync(jsLib);
+    if (resolved == null || resolved.trim().isEmpty) {
+      return;
+    }
+    final result = _runtime!.evaluate(resolved);
+    if (result.isError) {
+      AppLog.e(
+        'JsEngine source jsLib sync load error: ${result.stringResult}',
+      );
+      return;
+    }
+    _loadedSourceJsLibKey = jsLib;
+  }
+
+  Future<void> _ensureSourceJsLibLoadedAsync() async {
+    final jsLib = _extractSourceJsLib();
+    if (jsLib == null || jsLib == _loadedSourceJsLibKey) {
+      return;
+    }
+    final resolved = await _resolveSourceJsLibAsync(jsLib);
+    if (resolved.trim().isEmpty) {
+      return;
+    }
+    final result = _runtime!.evaluate(resolved);
+    if (result.isError) {
+      AppLog.e(
+        'JsEngine source jsLib async load error: ${result.stringResult}',
+      );
+      return;
+    }
+    _loadedSourceJsLibKey = jsLib;
+  }
+
+  String? _resolveSourceJsLibSync(String jsLib) {
+    final cached = _resolvedJsLibCache[jsLib];
+    if (cached != null) {
+      return cached;
+    }
+    final libMap = _decodeJsLibMap(jsLib);
+    if (libMap == null) {
+      return jsLib;
+    }
+
+    final buffers = <String>[];
+    for (final value in libMap.values) {
+      final resolved = _resolveJsLibFragmentSync(value);
+      if (resolved == null) {
+        return null;
+      }
+      if (resolved.trim().isNotEmpty) {
+        buffers.add(resolved);
+      }
+    }
+    final merged = buffers.join('\n');
+    if (merged.isNotEmpty) {
+      _resolvedJsLibCache[jsLib] = merged;
+    }
+    return merged;
+  }
+
+  Future<String> _resolveSourceJsLibAsync(String jsLib) async {
+    final cached = _resolvedJsLibCache[jsLib];
+    if (cached != null) {
+      return cached;
+    }
+    final pending = _pendingJsLibCache[jsLib];
+    if (pending != null) {
+      return pending;
+    }
+
+    final future = () async {
+      final libMap = _decodeJsLibMap(jsLib);
+      if (libMap == null) {
+        return jsLib;
+      }
+
+      final buffers = <String>[];
+      for (final value in libMap.values) {
+        final resolved = await _resolveJsLibFragmentAsync(value);
+        if (resolved.trim().isNotEmpty) {
+          buffers.add(resolved);
+        }
+      }
+      return buffers.join('\n');
+    }();
+
+    _pendingJsLibCache[jsLib] = future;
+    try {
+      final resolved = await future;
+      if (resolved.isNotEmpty) {
+        _resolvedJsLibCache[jsLib] = resolved;
+      }
+      return resolved;
+    } finally {
+      _pendingJsLibCache.remove(jsLib);
+    }
+  }
+
+  Map<String, String>? _decodeJsLibMap(String jsLib) {
+    final trimmed = jsLib.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map) {
+        return null;
+      }
+      return decoded.map(
+        (key, value) => MapEntry(key.toString(), value?.toString() ?? ''),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _resolveJsLibFragmentSync(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final cached = _resolvedJsLibCache[trimmed];
+    if (cached != null) {
+      return cached;
+    }
+    final file = File(trimmed);
+    if (file.existsSync()) {
+      final content = file.readAsStringSync();
+      _resolvedJsLibCache[trimmed] = content;
+      return content;
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  Future<String> _resolveJsLibFragmentAsync(String raw) async {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final cached = _resolvedJsLibCache[trimmed];
+    if (cached != null) {
+      return cached;
+    }
+    final file = File(trimmed);
+    if (await file.exists()) {
+      final content = await file.readAsString();
+      _resolvedJsLibCache[trimmed] = content;
+      return content;
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      final response = await HttpClient().client.get<List<int>>(
+        trimmed,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final content = utf8.decode(response.data ?? const <int>[], allowMalformed: true);
+      _resolvedJsLibCache[trimmed] = content;
+      return content;
+    }
+    return trimmed;
+  }
+
   JsEvalResult _evaluateRuleScript(String jsCode) {
     final wrapped = 'eval(${jsonEncode(jsCode)})';
     final result = _runtime!.evaluate(wrapped);
@@ -131,20 +325,26 @@ class JsEngine {
     _bridgedElements.clear();
     _nextBridgeElementId = 0;
     context.forEach((key, value) {
-      final jsLiteral = _encodeContextValue(value);
       switch (key) {
         case 'java':
         case 'cookie':
         case 'cache':
           return;
         case 'source':
+          final jsLiteral = _encodeContextValue(value);
           _runtime!.evaluate(
             'if (typeof source === "object" && source !== null) { '
             'Object.assign(source, $jsLiteral); '
             '} else { var source = $jsLiteral; }',
           );
           return;
+        case 'book':
+        case 'chapter':
+          final jsLiteral = _encodeScopedObject(key, value);
+          _runtime!.evaluate('var $key = $jsLiteral;');
+          return;
         default:
+          final jsLiteral = _encodeContextValue(value);
           _runtime!.evaluate('var $key = $jsLiteral;');
       }
     });
@@ -186,10 +386,59 @@ class JsEngine {
 ''';
     }
     try {
+      return _encodeJsonContextValue(value);
+    } catch (_) {
+      return jsonEncode(value.toString());
+    }
+  }
+
+  String _encodeJsonContextValue(dynamic value) {
+    try {
       return jsonEncode(value);
     } catch (_) {
       return jsonEncode(value.toString());
     }
+  }
+
+  String _encodeScopedObject(String scopeName, dynamic value) {
+    final payload = _encodeJsonContextValue(value);
+    final scopeLiteral = jsonEncode(scopeName);
+    return '''
+(function() {
+  var seed = $payload;
+  if (seed == null || typeof seed !== 'object') {
+    return seed;
+  }
+  var obj = {};
+  Object.keys(seed).forEach(function(prop) {
+    var current = seed[prop];
+    Object.defineProperty(obj, prop, {
+      enumerable: true,
+      configurable: true,
+      get: function() { return current; },
+      set: function(value) {
+        current = value;
+        sendMessage('scopedObjectSetField', JSON.stringify([$scopeLiteral, prop, value]));
+      }
+    });
+  });
+  obj.getVariable = function(key) {
+    var value = sendMessage(
+      'scopedObjectGetVariable',
+      JSON.stringify([$scopeLiteral, key])
+    );
+    return value == null ? '' : value;
+  };
+  obj.putVariable = function(key, value) {
+    sendMessage(
+      'scopedObjectPutVariable',
+      JSON.stringify([$scopeLiteral, key, value])
+    );
+    return null;
+  };
+  return obj;
+})()
+''';
   }
 
   String _encodeElement(dom.Element element) {

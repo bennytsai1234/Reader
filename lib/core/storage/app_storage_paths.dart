@@ -1,13 +1,26 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// Centralizes app-owned filesystem locations so features don't hardcode paths.
 class AppStoragePaths {
-  static Future<Directory> documentsDir() => getApplicationDocumentsDirectory();
+  static Future<Directory> documentsDir() async {
+    try {
+      return await getApplicationDocumentsDirectory();
+    } on MissingPluginException {
+      return _fallbackRoot();
+    }
+  }
 
-  static Future<Directory> temporaryDir() => getTemporaryDirectory();
+  static Future<Directory> temporaryDir() async {
+    try {
+      return await getTemporaryDirectory();
+    } on MissingPluginException {
+      return _fallbackRoot();
+    }
+  }
 
   static Future<Directory> fontsDir({bool ensureExists = false}) async {
     return _subdirectory(
@@ -72,5 +85,9 @@ class AppStoragePaths {
       await dir.create(recursive: true);
     }
     return dir;
+  }
+
+  static Directory _fallbackRoot() {
+    return Directory(p.join(Directory.systemTemp.path, 'inkpage_reader'));
   }
 }

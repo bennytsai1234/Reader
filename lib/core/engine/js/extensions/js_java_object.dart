@@ -23,6 +23,30 @@ extension JsJavaObject on JsExtensionsBase {
   void injectJavaObjectJs() {
     runtime.evaluate(r'''
       function buildHttpResponse(res) {
+        function normalizeResponseUrl(value) {
+          var normalized = String(value == null ? '' : value);
+          if (!normalized) return '';
+          if (/^https?:\/\/[^\/?#]+$/i.test(normalized)) {
+            return normalized + '/';
+          }
+          return normalized;
+        }
+        function responseUrl() {
+          if (!res) return '';
+          return normalizeResponseUrl(res.url || res.requestUrl || '');
+        }
+        function responseCode() {
+          if (!res || res.code == null) return 0;
+          return Number(res.code) || 0;
+        }
+        function responseMessage() {
+          if (!res || res.message == null) return '';
+          return String(res.message);
+        }
+        function isSuccessfulStatus() {
+          var code = responseCode();
+          return code >= 200 && code < 300;
+        }
         function normalizeLocationValue(value) {
           var normalized = String(value == null ? '' : value);
           if (!normalized) return '';
@@ -106,12 +130,34 @@ extension JsJavaObject on JsExtensionsBase {
           }
           return '';
         }
+        function buildRawRequest() {
+          return {
+            url: function() { return responseUrl(); },
+            toString: function() { return responseUrl(); }
+          };
+        }
+        function buildRawResponse() {
+          return {
+            request: function() { return buildRawRequest(); },
+            url: function() { return responseUrl(); },
+            headers: function() { return res && res.headers ? res.headers : {}; },
+            code: function() { return responseCode(); },
+            message: function() { return responseMessage(); },
+            isSuccessful: function() { return isSuccessfulStatus(); },
+            toString: function() { return responseUrl(); }
+          };
+        }
         return {
           body: function() { return res.body; },
-          url: function() { return res.url; },
-          statusCode: function() { return res.code; },
+          url: function() { return responseUrl(); },
+          code: function() { return responseCode(); },
+          statusCode: function() { return responseCode(); },
+          message: function() { return responseMessage(); },
+          isSuccessful: function() { return isSuccessfulStatus(); },
           headers: function() { return res.headers; },
-          header: function(name) { return getHeader(name); }
+          header: function(name) { return getHeader(name); },
+          raw: function() { return buildRawResponse(); },
+          toString: function() { return responseUrl(); }
         };
       }
 
@@ -124,7 +170,7 @@ extension JsJavaObject on JsExtensionsBase {
           return __asyncCall(
             'connect',
             arguments.length > 1 ? [url, header || null] : url
-          );
+          ).then(buildHttpResponse);
         },
         get: function(url, headers) {
           if (arguments.length <= 1) {
@@ -215,6 +261,8 @@ extension JsJavaObject on JsExtensionsBase {
         toast: function(msg) { sendMessage('toast', JSON.stringify(msg)); },
         put: function(key, value) { sendMessage('scopePut', JSON.stringify([key, value])); return value; },
         getString: function(rule) { return sendMessage('ruleGetString', JSON.stringify(rule)); },
+        getElement: function(rule) { return sendMessage('ruleGetElement', JSON.stringify(rule)); },
+        getElements: function(rule) { return sendMessage('ruleGetElements', JSON.stringify(rule)); },
 
         // ─── sync: TTF query/replace (sync helpers) ──────────────
         queryTTF: function(data, useCache) {
@@ -362,8 +410,23 @@ extension JsJavaObject on JsExtensionsBase {
       JavaString.prototype.replace = function(pattern, replacement) {
         return this._value.replace(pattern, replacement);
       };
+      JavaString.prototype.replaceAll = function(pattern, replacement) {
+        if (typeof globalThis.__lrJavaReplaceAll === 'function') {
+          return globalThis.__lrJavaReplaceAll(this._value, pattern, replacement);
+        }
+        return this._value.replace(pattern, replacement);
+      };
+      JavaString.prototype.replaceFirst = function(pattern, replacement) {
+        if (typeof globalThis.__lrJavaReplaceFirst === 'function') {
+          return globalThis.__lrJavaReplaceFirst(this._value, pattern, replacement);
+        }
+        return this._value.replace(pattern, replacement);
+      };
       JavaString.prototype.match = function(pattern) {
         return this._value.match(pattern);
+      };
+      JavaString.prototype.contains = function(value) {
+        return this._value.indexOf(value) !== -1;
       };
       JavaString.prototype.toUpperCase = function() {
         return this._value.toUpperCase();

@@ -142,7 +142,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           }
         }
 
-        final rule = sourceRule.makeUpRule(result, this);
+        final rule = await sourceRule.makeUpRuleAsync(result, this);
         log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
         dynamic tempResult;

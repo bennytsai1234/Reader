@@ -130,6 +130,27 @@ void main() {
       expect(analyzer.body, 'searchkey=%E9%BE%99%E6%97%8F');
     });
 
+    test('source jsLib helpers are available to url template js', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final analyzer = await AnalyzeUrl.create(
+        '{{searchUrl(key)}}',
+        key: '末世',
+        source: BookSource(
+          bookSourceUrl: 'https://example.com',
+          jsLib: '''
+function searchUrl(key) {
+  return '/search?q=' + key;
+}
+''',
+        ),
+      );
+
+      expect(analyzer.url, 'https://example.com/search?q=%E6%9C%AB%E4%B8%96');
+    });
+
     test('Lenient JS-style url options are supported', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);

@@ -240,5 +240,40 @@ void main() {
         'B',
       );
     });
+
+    test('19. nth-of-type with sibling combinator matches TOC anchors', () {
+      final helper = AnalyzeByCss('''
+        <div id="list">
+          <dl>
+            <dt>最新章节</dt>
+            <a href="/latest"><dd>第784章 一声感慨</dd></a>
+            <dt>目录章节</dt>
+            <a href="/1"><dd>第1章 搬砖系统致富</dd></a>
+            <a href="/2"><dd>第2章 降薪</dd></a>
+          </dl>
+        </div>
+        ''');
+
+      expect(
+        helper.getStringList('#list@dt:nth-of-type(2)~a@href'),
+        ['/1', '/2'],
+      );
+    });
+
+    test('20. nth-child and eq pseudos match Jsoup-style structure rules', () {
+      final helper = AnalyzeByCss('''
+        <ul class="stats">
+          <li><span>一</span></li>
+          <li><span>二</span></li>
+          <li><span>三</span></li>
+        </ul>
+        ''');
+
+      expect(
+        helper.getStringList('@CSS:.stats > li:nth-child(n+2) span@text'),
+        ['二', '三'],
+      );
+      expect(helper.getString('@CSS:.stats > li:eq(1) span@text'), '二');
+    });
   });
 }

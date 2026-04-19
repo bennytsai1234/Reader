@@ -1,7 +1,13 @@
 import 'package:html/dom.dart';
 
+final Map<String, List<_SelectorSegment>> _selectorSegmentsCache = {};
+final Map<String, _ParsedCompoundSelector> _compoundSelectorCache = {};
+
 List<Element> querySelectorAllCompat(Element root, String selector) {
   final normalizedSelector = normalizeCssSelectorCompat(selector);
+  if (_needsCompatSelector(normalizedSelector)) {
+    return _querySelectorAllUnsupportedCompat(root, normalizedSelector);
+  }
   try {
     return root.querySelectorAll(normalizedSelector);
   } on UnimplementedError {
@@ -56,14 +62,23 @@ List<Element> _querySelectorAllUnsupportedCompat(
 bool _needsCompatSelector(String selector) {
   return selector.contains(':contains(') ||
       selector.contains(':containsOwn(') ||
-      selector.contains(':has(');
+      selector.contains(':has(') ||
+      selector.contains(':eq(') ||
+      selector.contains(':nth-child(') ||
+      selector.contains(':nth-last-child(') ||
+      selector.contains(':nth-of-type(') ||
+      selector.contains(':nth-last-of-type(') ||
+      selector.contains(':first-child') ||
+      selector.contains(':last-child') ||
+      selector.contains(':first-of-type') ||
+      selector.contains(':last-of-type');
 }
 
 List<Element> _querySelectorGroupCompat(Element root, String selector) {
-  final segments = _parseSelectorSegments(selector);
+  final segments = _selectorSegmentsFor(selector);
   if (segments.isEmpty) return [];
 
-  final tail = _parseCompoundSelector(segments.last.compound);
+  final tail = _parsedCompoundSelectorFor(segments.last.compound);
   final baseSelector = normalizeCssSelectorCompat(tail.baseSelector);
 
   List<Element> candidates;
@@ -87,7 +102,7 @@ List<Element> _querySelectorGroupCompat(Element root, String selector) {
 }
 
 bool _matchesSelectorAgainstElement(Element element, String selector) {
-  final segments = _parseSelectorSegments(selector);
+  final segments = _selectorSegmentsFor(selector);
   if (segments.isEmpty) return false;
   return _matchesSelectorPathFrom(element, segments, segments.length - 1);
 }
@@ -140,7 +155,7 @@ Iterable<Element> _relatedElementsForCombinator(Element element, String combinat
 }
 
 bool _matchesCompoundSelector(Element element, String compound) {
-  final parsed = _parseCompoundSelector(compound);
+  final parsed = _parsedCompoundSelectorFor(compound);
   if (!_matchesBaseSelector(element, parsed.baseSelector)) {
     return false;
   }
@@ -173,6 +188,11 @@ bool _matchesCompoundSelector(Element element, String compound) {
       return false;
     }
   }
+  for (final pseudo in parsed.structuralPseudos) {
+    if (!_matchesStructuralPseudo(element, pseudo)) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -180,6 +200,10 @@ bool _matchesBaseSelector(Element element, String selector) {
   final trimmed = selector.trim();
   if (trimmed.isEmpty || trimmed == '*') {
     return true;
+  }
+  final directMatch = _matchesSimpleBaseSelectorDirectly(element, trimmed);
+  if (directMatch != null) {
+    return directMatch;
   }
   final parentNode = element.parentNode;
   if (parentNode == null) {
@@ -192,6 +216,48 @@ bool _matchesBaseSelector(Element element, String selector) {
   } catch (_) {
     return false;
   }
+}
+
+bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
+  if (selector.contains(' ') ||
+      selector.contains('>') ||
+      selector.contains('+') ||
+      selector.contains('~') ||
+      selector.contains('[') ||
+      selector.contains(':')) {
+    return null;
+  }
+
+  final match = RegExp(
+    r'^([a-zA-Z][\w-]*)?(#[\w-]+)?((?:\.[\w-]+)*)$',
+  ).firstMatch(selector);
+  if (match == null) {
+    return null;
+  }
+
+  final tag = match.group(1);
+  final idToken = match.group(2);
+  final classToken = match.group(3) ?? '';
+
+  if (tag != null && element.localName != tag.toLowerCase()) {
+    return false;
+  }
+  if (idToken != null && element.id != idToken.substring(1)) {
+    return false;
+  }
+  if (classToken.isNotEmpty) {
+    final classes =
+        classToken
+            .split('.')
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false);
+    for (final className in classes) {
+      if (!element.classes.contains(className)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 List<Element> _querySelectorAllFromContainer(Node? container, String selector) {
@@ -222,6 +288,20 @@ List<Element> _querySelectorAllFromContainer(Node? container, String selector) {
 
 List<String> _splitSelectorList(String selector) {
   return _splitSelectorAtTopLevel(selector, ',');
+}
+
+List<_SelectorSegment> _selectorSegmentsFor(String selector) {
+  return _selectorSegmentsCache.putIfAbsent(
+    selector,
+    () => List.unmodifiable(_parseSelectorSegments(selector)),
+  );
+}
+
+_ParsedCompoundSelector _parsedCompoundSelectorFor(String compound) {
+  return _compoundSelectorCache.putIfAbsent(
+    compound,
+    () => _parseCompoundSelector(compound),
+  );
 }
 
 List<_SelectorSegment> _parseSelectorSegments(String selector) {
@@ -304,14 +384,30 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
   final containsOwnValues = <String>[];
   final hasSelectors = <String>[];
   final notSelectors = <String>[];
+  final structuralPseudos = <_StructuralPseudo>[];
 
   for (var i = 0; i < compound.length; i++) {
     final pseudo =
         _matchPseudo(compound, i, ':containsOwn(') ??
         _matchPseudo(compound, i, ':contains(') ??
         _matchPseudo(compound, i, ':has(') ??
-        _matchPseudo(compound, i, ':not(');
+        _matchPseudo(compound, i, ':not(') ??
+        _matchPseudo(compound, i, ':eq(') ??
+        _matchPseudo(compound, i, ':nth-last-of-type(') ??
+        _matchPseudo(compound, i, ':nth-of-type(') ??
+        _matchPseudo(compound, i, ':nth-last-child(') ??
+        _matchPseudo(compound, i, ':nth-child(');
     if (pseudo == null) {
+      final simplePseudo =
+          _matchSimplePseudo(compound, i, ':first-child') ??
+          _matchSimplePseudo(compound, i, ':last-child') ??
+          _matchSimplePseudo(compound, i, ':first-of-type') ??
+          _matchSimplePseudo(compound, i, ':last-of-type');
+      if (simplePseudo != null) {
+        structuralPseudos.add(_StructuralPseudo(simplePseudo.name));
+        i = simplePseudo.endIndex;
+        continue;
+      }
       base.write(compound[i]);
       continue;
     }
@@ -330,6 +426,20 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
       if (pseudo.argument.trim().isNotEmpty) {
         notSelectors.add(pseudo.argument.trim());
       }
+    } else if (pseudo.name == ':eq') {
+      structuralPseudos.add(_StructuralPseudo.eq(pseudo.argument.trim()));
+    } else if (pseudo.name == ':nth-child') {
+      structuralPseudos.add(_StructuralPseudo.nthChild(pseudo.argument.trim()));
+    } else if (pseudo.name == ':nth-last-child') {
+      structuralPseudos.add(
+        _StructuralPseudo.nthLastChild(pseudo.argument.trim()),
+      );
+    } else if (pseudo.name == ':nth-of-type') {
+      structuralPseudos.add(_StructuralPseudo.nthOfType(pseudo.argument.trim()));
+    } else if (pseudo.name == ':nth-last-of-type') {
+      structuralPseudos.add(
+        _StructuralPseudo.nthLastOfType(pseudo.argument.trim()),
+      );
     }
     i = pseudo.endIndex;
   }
@@ -340,7 +450,13 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
     containsOwnValues: containsOwnValues,
     hasSelectors: hasSelectors,
     notSelectors: notSelectors,
+    structuralPseudos: structuralPseudos,
   );
+}
+
+_SimplePseudoMatch? _matchSimplePseudo(String input, int index, String name) {
+  if (!input.startsWith(name, index)) return null;
+  return _SimplePseudoMatch(name: name, endIndex: index + name.length - 1);
 }
 
 _PseudoMatch? _matchPseudo(String input, int index, String prefix) {
@@ -489,6 +605,7 @@ class _ParsedCompoundSelector {
   final List<String> containsOwnValues;
   final List<String> hasSelectors;
   final List<String> notSelectors;
+  final List<_StructuralPseudo> structuralPseudos;
 
   const _ParsedCompoundSelector({
     required this.baseSelector,
@@ -496,6 +613,7 @@ class _ParsedCompoundSelector {
     required this.containsOwnValues,
     required this.hasSelectors,
     required this.notSelectors,
+    required this.structuralPseudos,
   });
 }
 
@@ -509,6 +627,122 @@ class _PseudoMatch {
     required this.argument,
     required this.endIndex,
   });
+}
+
+class _SimplePseudoMatch {
+  final String name;
+  final int endIndex;
+
+  const _SimplePseudoMatch({required this.name, required this.endIndex});
+}
+
+class _StructuralPseudo {
+  final String name;
+  final String? argument;
+
+  const _StructuralPseudo(this.name) : argument = null;
+
+  const _StructuralPseudo.eq(this.argument) : name = ':eq';
+  const _StructuralPseudo.nthChild(this.argument) : name = ':nth-child';
+  const _StructuralPseudo.nthLastChild(this.argument)
+    : name = ':nth-last-child';
+  const _StructuralPseudo.nthOfType(this.argument) : name = ':nth-of-type';
+  const _StructuralPseudo.nthLastOfType(this.argument)
+    : name = ':nth-last-of-type';
+}
+
+bool _matchesStructuralPseudo(Element element, _StructuralPseudo pseudo) {
+  switch (pseudo.name) {
+    case ':first-child':
+      return _elementIndex(element) == 0;
+    case ':last-child':
+      return _elementIndexFromEnd(element) == 0;
+    case ':first-of-type':
+      return _typeIndex(element) == 0;
+    case ':last-of-type':
+      return _typeIndexFromEnd(element) == 0;
+    case ':eq':
+      final index = int.tryParse(pseudo.argument ?? '');
+      return index != null && _elementIndex(element) == index;
+    case ':nth-child':
+      return _matchesNthExpression(_elementIndex(element) + 1, pseudo.argument);
+    case ':nth-last-child':
+      return _matchesNthExpression(
+        _elementIndexFromEnd(element) + 1,
+        pseudo.argument,
+      );
+    case ':nth-of-type':
+      return _matchesNthExpression(_typeIndex(element) + 1, pseudo.argument);
+    case ':nth-last-of-type':
+      return _matchesNthExpression(
+        _typeIndexFromEnd(element) + 1,
+        pseudo.argument,
+      );
+    default:
+      return true;
+  }
+}
+
+int _elementIndex(Element element) {
+  final parent = element.parent;
+  if (parent == null) return 0;
+  return parent.children.indexOf(element);
+}
+
+int _elementIndexFromEnd(Element element) {
+  final parent = element.parent;
+  if (parent == null) return 0;
+  final siblings = parent.children;
+  final index = siblings.indexOf(element);
+  return index == -1 ? 0 : siblings.length - index - 1;
+}
+
+int _typeIndex(Element element) {
+  final siblings = _sameTypeSiblings(element);
+  return siblings.indexOf(element);
+}
+
+int _typeIndexFromEnd(Element element) {
+  final siblings = _sameTypeSiblings(element);
+  final index = siblings.indexOf(element);
+  return index == -1 ? 0 : siblings.length - index - 1;
+}
+
+List<Element> _sameTypeSiblings(Element element) {
+  final parent = element.parent;
+  if (parent == null) return [element];
+  final localName = element.localName;
+  return parent.children.where((child) => child.localName == localName).toList();
+}
+
+bool _matchesNthExpression(int index1Based, String? expression) {
+  if (expression == null) return false;
+  final normalized = expression.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+  if (normalized.isEmpty) return false;
+  if (normalized == 'odd') return index1Based.isOdd;
+  if (normalized == 'even') return index1Based.isEven;
+
+  final direct = int.tryParse(normalized);
+  if (direct != null) return index1Based == direct;
+
+  final match = RegExp(r'^([+-]?\d*)n([+-]\d+)?$').firstMatch(normalized);
+  if (match == null) return false;
+
+  final aToken = match.group(1) ?? '';
+  final bToken = match.group(2);
+  final a =
+      aToken.isEmpty || aToken == '+'
+          ? 1
+          : aToken == '-'
+          ? -1
+          : int.tryParse(aToken);
+  final b = bToken == null ? 0 : int.tryParse(bToken);
+  if (a == null || b == null) return false;
+  if (a == 0) return index1Based == b;
+
+  final delta = index1Based - b;
+  if (delta.remainder(a) != 0) return false;
+  return delta ~/ a >= 0;
 }
 
 class SourceRule {

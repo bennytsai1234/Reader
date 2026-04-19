@@ -26,6 +26,9 @@ void main() {
   final debugJsIntermediate =
       Platform.environment['DEBUG_JS_INTERMEDIATE'] == '1';
   final debugTocParse = Platform.environment['DEBUG_TOC_PARSE'] == '1';
+  final debugTimings = Platform.environment['DEBUG_TIMINGS'] == '1';
+  final stopAfterDebugSearchParse =
+      Platform.environment['STOP_AFTER_DEBUG_SEARCH_PARSE'] == '1';
 
   test('debug single source flow', () async {
     await initSourceValidationEnvironment();
@@ -74,6 +77,7 @@ void main() {
     print('[debug] keyword=$keyword');
 
     if (debugSearchParse) {
+      final analyzeStopwatch = Stopwatch()..start();
       final analyzeUrl = await AnalyzeUrl.create(
         source.searchUrl!,
         source: source,
@@ -87,13 +91,32 @@ void main() {
         'request=${analyzeUrl.debugPrefetchedResponseRequestUrl} | '
         'redirect=${analyzeUrl.debugPrefetchedResponseRedirectUrl}',
       );
+      if (debugTimings) {
+        // ignore: avoid_print
+        print('[timing] analyzeUrl.create=${analyzeStopwatch.elapsedMilliseconds}ms');
+      }
+      final responseStopwatch = Stopwatch()..start();
       final response = await analyzeUrl.getStrResponse();
+      if (debugTimings) {
+        // ignore: avoid_print
+        print('[timing] analyzeUrl.getStrResponse=${responseStopwatch.elapsedMilliseconds}ms');
+      }
+      final parserStopwatch = Stopwatch()..start();
       final searchRule = source.ruleSearch;
       final parser = rule_engine.AnalyzeRule(
         source: source,
       ).setContent(response.body, baseUrl: response.url);
+      if (debugTimings) {
+        // ignore: avoid_print
+        print('[timing] AnalyzeRule.setContent=${parserStopwatch.elapsedMilliseconds}ms');
+      }
+      final elementStopwatch = Stopwatch()..start();
       final listRule = searchRule?.bookList ?? '';
       final elements = parser.getElements(listRule);
+      if (debugTimings) {
+        // ignore: avoid_print
+        print('[timing] parser.getElements=${elementStopwatch.elapsedMilliseconds}ms');
+      }
       // ignore: avoid_print
       print(
         '[debug] search response url=${response.url} '
@@ -153,9 +176,17 @@ void main() {
           'author=${book.author ?? ''} | url=${book.bookUrl}',
         );
       }
+      if (stopAfterDebugSearchParse) {
+        return;
+      }
     }
 
+    final searchBooksStopwatch = Stopwatch()..start();
     final searchBooks = await service.searchBooks(source, keyword);
+    if (debugTimings) {
+      // ignore: avoid_print
+      print('[timing] service.searchBooks=${searchBooksStopwatch.elapsedMilliseconds}ms');
+    }
     // ignore: avoid_print
     print('[debug] search results=${searchBooks.length}');
     for (final book in searchBooks.take(5)) {

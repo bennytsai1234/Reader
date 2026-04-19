@@ -206,6 +206,8 @@ class SourceRule {
     return buffer.toString();
   }
 
+  int get paramSize => ruleParam.length;
+
   // 延遲載入解析器
   AnalyzeByXPath getAnalyzeByXPath(AnalyzeRuleBase analyzer, dynamic o) {
     if (o != analyzer.content) return AnalyzeByXPath(o);
@@ -278,7 +280,14 @@ String stringifyRuleResult(dynamic value) {
 }
 
 bool isJsonLikeRuleInput(dynamic value) {
-  return value is Map || value is List;
+  if (value is Map || value is List) {
+    return true;
+  }
+  if (value is String) {
+    final trimmed = value.trimLeft();
+    return trimmed.startsWith('{') || trimmed.startsWith('[');
+  }
+  return false;
 }
 
 String? buildJsonFallbackRule(String rule) {

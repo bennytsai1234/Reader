@@ -31,7 +31,10 @@ class AnalyzeByJsonPath {
   String _preProcessRule(String rule) {
     rule = rule.trim();
     if (rule.toLowerCase().startsWith('@json:')) {
-      return rule.substring(6).trim();
+      rule = rule.substring(6).trim();
+    }
+    if (rule.startsWith(r'$.[')) {
+      return '\$${rule.substring(2)}';
     }
     return rule;
   }

@@ -19,8 +19,16 @@ class BookSourceService {
   }
 
   /// 獲取目錄列表 (對標 getChapterListAwait)
-  Future<List<BookChapter>> getChapterList(BookSource source, Book book) async {
-    return await WebBook.getChapterListAwait(source, book);
+  Future<List<BookChapter>> getChapterList(
+    BookSource source,
+    Book book, {
+    int? chapterLimit,
+  }) async {
+    return await WebBook.getChapterListAwait(
+      source,
+      book,
+      chapterLimit: chapterLimit,
+    );
   }
 
   /// 獲取正文內容 (對標 getContentAwait)
@@ -29,8 +37,22 @@ class BookSourceService {
   }
 
   /// 搜尋書籍 (對標 searchBookAwait)
-  Future<List<SearchBook>> searchBooks(BookSource source, String key, {int page = 1, CancelToken? cancelToken}) async {
-    return await WebBook.searchBookAwait(source, key, page: page, cancelToken: cancelToken);
+  Future<List<SearchBook>> searchBooks(
+    BookSource source,
+    String key, {
+    int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
+    CancelToken? cancelToken,
+  }) async {
+    return await WebBook.searchBookAwait(
+      source,
+      key,
+      page: page,
+      filter: filter,
+      shouldBreak: shouldBreak,
+      cancelToken: cancelToken,
+    );
   }
 
   /// 發現/探索書籍 (對標 exploreBookAwait)
@@ -44,6 +66,7 @@ class BookSourceService {
       source,
       name,
       filter: (n, a) => n == name && a == author,
+      shouldBreak: (size) => size >= 1,
     );
   }
 

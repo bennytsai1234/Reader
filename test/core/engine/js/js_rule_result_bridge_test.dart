@@ -2,7 +2,9 @@ import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:inkpage_reader/core/engine/analyze_rule.dart';
+import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
 
 import '../../../test_helper.dart';
 
@@ -207,6 +209,52 @@ var result = "";
 ''');
 
         expect(result, '<br>想要获取更多书籍信息，请点击书籍的书名(・o・)');
+        rule.dispose();
+      },
+    );
+
+    test(
+      'book and chapter scoped objects expose fields, variables, and setters',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+
+        final book = Book(
+          bookUrl: 'https://example.com/book',
+          name: '示例书',
+          author: '作者',
+          variable: '{"mode":"day"}',
+        );
+        final chapter = BookChapter(
+          title: '旧章节',
+          url: '/chapter/1',
+          variable: '{"state":"draft"}',
+        );
+        final rule = AnalyzeRule(
+          source: BookSource(bookSourceUrl: 'https://example.com'),
+          ruleData: book,
+        ).setContent('{}', baseUrl: 'https://example.com');
+        rule.chapter = chapter;
+
+        final result = await rule.getStringAsync(r'''
+<js>
+book.putVariable("custom", "42");
+chapter.putVariable("flag", "ready");
+book.type = 8;
+chapter.title = "新章节";
+chapter.url = "/chapter/2";
+book.name + "|" + book.getVariable("custom") + "|" + chapter.getVariable("flag") + "|" + book.type + "|" + chapter.title + "|" + chapter.url;
+</js>
+''');
+
+        expect(result, '示例书|42|ready|8|新章节|/chapter/2');
+        expect(book.getVariable('custom'), '42');
+        expect(chapter.getVariable('flag'), 'ready');
+        expect(book.type, 8);
+        expect(chapter.title, '新章节');
+        expect(chapter.url, '/chapter/2');
         rule.dispose();
       },
     );

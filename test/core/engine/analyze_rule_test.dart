@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/engine/analyze_rule.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
@@ -162,6 +164,37 @@ void main() {
       expect(analyzer.getString('@get:{tempVar}'), 'Hello');
     });
 
+    test('java.put values survive across analyze rules for the same source', () {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com/source',
+        bookSourceName: 'Shared Scope Source',
+      );
+
+      final writer = AnalyzeRule(source: source).setContent(htmlStr);
+      final reader = AnalyzeRule(source: source).setContent(htmlStr);
+
+      expect(
+        writer.evalJS(
+          'java.put("headers", "{\\"headers\\":{\\"X-Test\\":\\"1\\"}}")',
+          null,
+        ),
+        isNotNull,
+      );
+      expect(
+        reader.evalJS('java.get("headers")', null),
+        '{"headers":{"X-Test":"1"}}',
+      );
+    });
+
+    test('java.getElements exposes parsed element lists to rule js', () {
+      final analyzer = AnalyzeRule().setContent(htmlStr);
+
+      expect(
+        analyzer.evalJS('java.getElements(".links@tag.a").join("|")', null),
+        '<a href="/chapter/1">Chapter 1</a>|<a href="/chapter/2">Chapter 2</a>',
+      );
+    });
+
     test('@put runs before rule evaluation in getString', () {
       final analyzer = AnalyzeRule(
         ruleData: MockRuleData(),
@@ -204,6 +237,42 @@ void main() {
         'https://cdn.example.net/book/1',
       );
     });
+
+    test(
+      'isUrl=true preserves analyzeUrl option suffix for js-generated relative urls',
+      () async {
+        final analyzer = AnalyzeRule().setContent(
+          htmlStr,
+          baseUrl: 'https://api-bc.wtzw.com/api/v5/search/words',
+        );
+
+        final result = await analyzer.getStringAsync(
+          '''@js:"/api/v4/book/detail?id=1,{\\"headers\\":{\\"X-Test\\":\\"1\\"}}"''',
+          isUrl: true,
+        );
+
+        expect(
+          result,
+          'https://api-bc.wtzw.com/api/v4/book/detail?id=1,{"headers":{"X-Test":"1"}}',
+        );
+      },
+    );
+
+    test(
+      'dynamic map-backed url strings return assembled values instead of xpath parsing',
+      () async {
+        final analyzer = AnalyzeRule().setContent({'bookId': '47749'});
+
+        expect(
+          analyzer.getString(r'/books?bookId={$.bookId}'),
+          '/books?bookId=47749',
+        );
+        expect(
+          await analyzer.getStringAsync(r'/books?bookId={$.bookId}'),
+          '/books?bookId=47749',
+        );
+      },
+    );
 
     test('isUrl=true returns the first css match instead of joined values', () {
       final analyzer = AnalyzeRule().setContent(
@@ -258,6 +327,46 @@ void main() {
           await analyzer.getStringAsync('.link@href', isUrl: true),
           'https://cdn.example.net/book/1',
         );
+      },
+    );
+
+    test(
+      'getStringAsync expands async importScript fragments in browser mode',
+      () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'analyze_rule_import_script_test_',
+      );
+      final scriptFile = File('${tempDir.path}/helper.js');
+      await scriptFile.writeAsString(r'''
+!function(root, factory) {
+  if (typeof exports === "object" && typeof module !== "undefined") {
+    module.exports = factory(require("./core.min"));
+  } else if (typeof define === "function" && define.amd) {
+    define([], factory);
+  } else {
+    root.Helper = factory();
+  }
+}(this, function() {
+  return {
+    value: function(v) {
+      return v + "!";
+    }
+  };
+});
+''');
+
+      try {
+        final analyzer = AnalyzeRule().setContent(htmlStr);
+        final value = await analyzer.getStringAsync(
+          '@js:{{java.importScript("${scriptFile.path}")}}\nHelper.value("ok")',
+        );
+
+        expect(value, 'ok!');
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
       },
     );
 
