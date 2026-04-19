@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:dio/dio.dart';
@@ -33,6 +32,10 @@ class AnalyzeUrl {
   bool useWebView = false;
   String? webJs;
   int webViewDelayTime = 0;
+  String? _prefetchedResponseBody;
+  String? _prefetchedResponseUrl;
+  String? _prefetchedResponseRequestUrl;
+  String? _prefetchedResponseRedirectUrl;
 
   /// **注意**：這個同步建構子只能處理純同步的 rule JS（不含
   /// `java.ajax` / `cache.get` 等 async 呼叫）。書源實務上若規則內含 async
@@ -118,21 +121,28 @@ class AnalyzeUrl {
 
   /// 將 BookSource.header（JSON 格式）解析並注入 headerMap
   void _initSourceHeaders() {
-    final headerStr = source is BaseSource ? (source as BaseSource).header : null;
+    final headerStr =
+        source is BaseSource ? (source as BaseSource).header : null;
     if (headerStr == null || headerStr.isEmpty) return;
     try {
-      final Map<String, dynamic> headers = jsonDecode(headerStr);
-      headers.forEach((k, v) => headerMap[k.toString()] = v.toString());
+      final resolvedHeaderStr = _resolveMaybeJsString(headerStr);
+      final headers = _decodeLooseObject(resolvedHeaderStr);
+      if (headers != null) {
+        headers.forEach((k, v) => headerMap[k.toString()] = v.toString());
+      }
     } catch (e) {
       AppLog.e('AnalyzeUrl source header parse error: $e', error: e);
     }
   }
 
   void _analyzeJs() {
-    final jsRegex = RegExp(r'@js:([\s\S]*?)$|<js>([\s\S]*?)</js>', caseSensitive: false);
+    final jsRegex = RegExp(
+      r'@js:([\s\S]*?)$|<js>([\s\S]*?)</js>',
+      caseSensitive: false,
+    );
     var result = ruleUrl;
     final matches = jsRegex.allMatches(ruleUrl);
-    
+
     int lastEnd = 0;
 
     for (final match in matches) {
@@ -140,11 +150,12 @@ class AnalyzeUrl {
       final rule = AnalyzeRule(source: source, ruleData: ruleData);
       rule.key = key;
       rule.page = page ?? 1;
-      final evalRes = rule.evalJS(jsStr, result);
+      final jsInput = _jsInputForMatch(match.start, result);
+      final evalRes = rule.evalJS(jsStr, jsInput);
       result = evalRes?.toString() ?? '';
       lastEnd = match.end;
     }
-    
+
     if (lastEnd > 0) {
       ruleUrl = result;
     }
@@ -204,10 +215,29 @@ class AnalyzeUrl {
       final rule = AnalyzeRule(source: source, ruleData: ruleData);
       rule.key = key;
       rule.page = page ?? 1;
-      final evalRes = await rule.evalJSAsync(jsStr, result);
+      final jsInput = _jsInputForMatch(match.start, result);
+      final evalRes = await rule.evalJSAsync(jsStr, jsInput);
+      _capturePrefetchedResponse(rule);
       result = evalRes?.toString() ?? '';
     }
     ruleUrl = result;
+  }
+
+  void _capturePrefetchedResponse(AnalyzeRule rule) {
+    final body = rule.get('_lastHttpResponseBody');
+    if (body.isEmpty) return;
+    _prefetchedResponseBody = body;
+    _prefetchedResponseUrl = rule.get('_lastHttpResponseUrl');
+    _prefetchedResponseRequestUrl = rule.get('_lastHttpResponseRequestUrl');
+    _prefetchedResponseRedirectUrl = rule.get('_lastHttpResponseRedirectUrl');
+  }
+
+  String _jsInputForMatch(int matchStart, String currentValue) {
+    if (matchStart <= 0) {
+      return currentValue;
+    }
+    final clampedStart = matchStart.clamp(0, currentValue.length);
+    return currentValue.substring(0, clampedStart).trimRight();
   }
 
   /// async 版本的 [_replaceKeyPageJs] — `{{js}}` 表達式改走 [AnalyzeRule.evalJSAsync]。
@@ -265,8 +295,8 @@ class AnalyzeUrl {
     final detectedCharset = _detectCharset();
     if (detectedCharset != null &&
         (detectedCharset.toUpperCase().contains('GBK') ||
-         detectedCharset.toUpperCase().contains('GB2312') ||
-         detectedCharset.toUpperCase().contains('GB18030'))) {
+            detectedCharset.toUpperCase().contains('GB2312') ||
+            detectedCharset.toUpperCase().contains('GB18030'))) {
       // GBK 編碼: 逐位元組轉 %XX
       final bytes = gbk.encode(key);
       final sb = StringBuffer();
@@ -284,8 +314,8 @@ class AnalyzeUrl {
     final match = paramSplitRegex.firstMatch(ruleUrl);
     if (match != null) {
       try {
-        final Map<String, dynamic> options = jsonDecode(ruleUrl.substring(match.end).trim());
-        return options['charset']?.toString();
+        final options = _decodeLooseObject(ruleUrl.substring(match.end).trim());
+        return options?['charset']?.toString();
       } catch (_) {}
     }
     return null;
@@ -294,34 +324,115 @@ class AnalyzeUrl {
   void _analyzeUrlOptions() {
     final paramSplitRegex = RegExp(r'\s*,\s*(?=\{)');
     final match = paramSplitRegex.firstMatch(ruleUrl);
-    
+
     if (match != null) {
       url = ruleUrl.substring(0, match.start).trim();
       final optionStr = ruleUrl.substring(match.end).trim();
       try {
-        final Map<String, dynamic> options = jsonDecode(optionStr);
-        method = (options['method'] ?? 'GET').toString().toUpperCase();
-        if (options['headers'] != null) {
-          (options['headers'] as Map).forEach((k, v) => headerMap[k.toString()] = v.toString());
+        final options = _decodeLooseObject(optionStr);
+        if (options != null) {
+          method = (options['method'] ?? 'GET').toString().toUpperCase();
+          if (options['headers'] != null) {
+            (options['headers'] as Map).forEach(
+              (k, v) => headerMap[k.toString()] = v.toString(),
+            );
+          }
+          body = options['body'];
+          useWebView =
+              options['webView'] == true || options['webView'] == 'true';
+          webJs = options['webJs'];
+          charset = options['charset'];
+          webViewDelayTime =
+              int.tryParse(options['webViewDelayTime']?.toString() ?? '0') ?? 0;
+          final ruleJs = options['js']?.toString();
+          if (ruleJs != null && ruleJs.isNotEmpty) {
+            final rule = AnalyzeRule(source: source, ruleData: ruleData);
+            rule.key = key;
+            rule.page = page ?? 1;
+            url = rule.evalJS(ruleJs, url)?.toString() ?? url;
+          }
         }
-        body = options['body'];
-        useWebView = options['webView'] == true || options['webView'] == 'true';
-        webJs = options['webJs'];
-        charset = options['charset'];
-        webViewDelayTime = int.tryParse(options['webViewDelayTime']?.toString() ?? '0') ?? 0;
       } catch (e) {
         AppLog.e('AnalyzeUrl options parse error: $e', error: e);
       }
-
     } else {
       url = ruleUrl.trim();
     }
 
     // 處理相對路徑
-    if (!url.startsWith('http') && baseUrl.isNotEmpty) {
-      final baseUri = Uri.parse(baseUrl);
-      url = baseUri.resolve(url).toString();
+    if (!url.startsWith('http')) {
+      final resolvedBaseUrl = _resolveRelativeBaseUrl();
+      if (resolvedBaseUrl.isNotEmpty) {
+        final baseUri = Uri.parse(resolvedBaseUrl);
+        url = baseUri.resolve(url).toString();
+      }
     }
+  }
+
+  String _resolveRelativeBaseUrl() {
+    if (baseUrl.isNotEmpty) {
+      return baseUrl;
+    }
+    if (source is BaseSource) {
+      final sourceKey = (source as BaseSource).getKey();
+      if (sourceKey.isNotEmpty) {
+        return sourceKey;
+      }
+    }
+    return '';
+  }
+
+  String _resolveMaybeJsString(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('@js:')) {
+      final rule = AnalyzeRule(source: source, ruleData: ruleData);
+      rule.key = key;
+      rule.page = page ?? 1;
+      return rule.evalJS(trimmed.substring(4), null)?.toString() ?? '';
+    }
+    if (trimmed.toLowerCase().startsWith('<js>') &&
+        trimmed.toLowerCase().endsWith('</js>')) {
+      final rule = AnalyzeRule(source: source, ruleData: ruleData);
+      rule.key = key;
+      rule.page = page ?? 1;
+      return rule
+              .evalJS(trimmed.substring(4, trimmed.length - 5), null)
+              ?.toString() ??
+          '';
+    }
+    return raw;
+  }
+
+  Map<String, dynamic>? _decodeLooseObject(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {}
+
+    try {
+      final rule = AnalyzeRule(source: source, ruleData: ruleData);
+      rule.key = key;
+      rule.page = page ?? 1;
+      final normalized =
+          rule.evalJS('JSON.stringify(($raw))', null)?.toString();
+      if (normalized == null || normalized.isEmpty) {
+        return null;
+      }
+      final decoded = jsonDecode(normalized);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   /// 獲取回應內容 (對標 Android AnalyzeUrl.getStrResponseAwait)
@@ -332,7 +443,9 @@ class AnalyzeUrl {
   /// 3. HTML <meta> 標籤中的 charset
   /// 4. 自動偵測 (UTF-8 / GBK)
   Future<StrResponse> getStrResponse({CancelToken? cancelToken}) async {
-    final limiter = ConcurrentRateLimiter(source is BaseSource ? source as BaseSource : null);
+    final limiter = ConcurrentRateLimiter(
+      source is BaseSource ? source as BaseSource : null,
+    );
 
     return limiter.withLimit(() async {
       // 注入站點 Cookie (對標 Android AnalyzeUrl.getProxyClient + CookieStore)
@@ -362,14 +475,29 @@ class AnalyzeUrl {
           url: url,
           body: finalBody,
           headers: {},
-          raw: Response(requestOptions: RequestOptions(path: url), data: finalBody),
+          raw: Response(
+            requestOptions: RequestOptions(path: url),
+            data: finalBody,
+          ),
         );
       }
 
       final httpClient = HttpClient();
+      final prefetchedBody = _consumePrefetchedResponseBody();
+      if (prefetchedBody != null) {
+        return StrResponse(
+          url: url,
+          body: prefetchedBody,
+          headers: const <String, List<String>>{},
+          raw: Response(
+            requestOptions: RequestOptions(path: url),
+            data: prefetchedBody,
+          ),
+        );
+      }
       final options = Options(
         method: method,
-        headers: headerMap,
+        headers: _buildRequestHeaders(),
         responseType: ResponseType.bytes,
       );
 
@@ -380,9 +508,18 @@ class AnalyzeUrl {
       for (var attempt = 1; ; attempt++) {
         try {
           if (method == 'POST') {
-            rawResponse = await httpClient.client.post<List<int>>(url, data: body, options: options, cancelToken: cancelToken);
+            rawResponse = await httpClient.client.post<List<int>>(
+              url,
+              data: body,
+              options: options,
+              cancelToken: cancelToken,
+            );
           } else {
-            rawResponse = await httpClient.client.get<List<int>>(url, options: options, cancelToken: cancelToken);
+            rawResponse = await httpClient.client.get<List<int>>(
+              url,
+              options: options,
+              cancelToken: cancelToken,
+            );
           }
           break;
         } on DioException catch (e) {
@@ -458,8 +595,10 @@ class AnalyzeUrl {
 
   /// 從 Content-Type 標頭提取 charset
   String? _extractCharsetFromContentType(String contentType) {
-    final match = RegExp(r'charset=([a-zA-Z0-9_-]+)', caseSensitive: false)
-        .firstMatch(contentType);
+    final match = RegExp(
+      r'charset=([a-zA-Z0-9_-]+)',
+      caseSensitive: false,
+    ).firstMatch(contentType);
     return match?.group(1);
   }
 
@@ -484,29 +623,139 @@ class AnalyzeUrl {
 
   /// 獲取位元組回應內容
   Future<Uint8List> getByteArray() async {
-    final limiter = ConcurrentRateLimiter(source is BaseSource ? source as BaseSource : null);
+    final limiter = ConcurrentRateLimiter(
+      source is BaseSource ? source as BaseSource : null,
+    );
 
     return limiter.withLimit(() async {
       // 注入站點 Cookie
       final storedCookie = await CookieStore().getCookie(url);
-      if (storedCookie.isNotEmpty && (headerMap['Cookie'] == null || headerMap['Cookie']!.isEmpty)) {
+      if (storedCookie.isNotEmpty &&
+          (headerMap['Cookie'] == null || headerMap['Cookie']!.isEmpty)) {
         headerMap['Cookie'] = storedCookie;
       }
       final httpClient = HttpClient();
       final options = Options(
         method: method,
-        headers: headerMap,
+        headers: _buildRequestHeaders(),
         responseType: ResponseType.bytes,
       );
 
       Response<List<int>> response;
       if (method == 'POST') {
-        response = await httpClient.client.post<List<int>>(url, data: body, options: options);
+        response = await httpClient.client.post<List<int>>(
+          url,
+          data: body,
+          options: options,
+        );
       } else {
-        response = await httpClient.client.get<List<int>>(url, options: options);
+        response = await httpClient.client.get<List<int>>(
+          url,
+          options: options,
+        );
       }
 
       return Uint8List.fromList(response.data ?? []);
     });
   }
+
+  Map<String, String> _buildRequestHeaders() {
+    final headers = Map<String, String>.from(headerMap);
+    if (method == 'POST' && body is String && !_hasContentType(headers)) {
+      final rawBody = (body as String).trimLeft();
+      headers['Content-Type'] =
+          (rawBody.startsWith('{') || rawBody.startsWith('['))
+              ? 'application/json; charset=utf-8'
+              : 'application/x-www-form-urlencoded; charset=utf-8';
+    }
+    return headers;
+  }
+
+  String? _consumePrefetchedResponseBody() {
+    final body = _prefetchedResponseBody;
+    if (body == null || body.isEmpty) {
+      return null;
+    }
+    if (!_matchesPrefetchedResponseUrl()) {
+      return null;
+    }
+    _prefetchedResponseBody = null;
+    return body;
+  }
+
+  bool _matchesPrefetchedResponseUrl() {
+    final current = Uri.tryParse(url);
+    if (current == null) {
+      return false;
+    }
+    for (final candidate in <String?>[
+      _prefetchedResponseUrl,
+      _prefetchedResponseRedirectUrl,
+      _prefetchedResponseRequestUrl,
+    ]) {
+      if (candidate == null || candidate.isEmpty) continue;
+      final candidateUri = _resolveCandidateUri(candidate);
+      if (candidateUri == null) continue;
+      if (_isSameOrSupersetUrl(candidateUri, current)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Uri? _resolveCandidateUri(String candidate) {
+    try {
+      final direct = Uri.tryParse(candidate);
+      if (direct != null && direct.hasScheme) {
+        return direct;
+      }
+      final baseCandidates = <String>[
+        if (_prefetchedResponseRequestUrl != null &&
+            _prefetchedResponseRequestUrl!.isNotEmpty)
+          _prefetchedResponseRequestUrl!,
+        _resolveRelativeBaseUrl(),
+      ];
+      for (final base in baseCandidates) {
+        if (base.isEmpty) continue;
+        final baseUri = Uri.tryParse(base);
+        if (baseUri == null || !baseUri.hasScheme) continue;
+        return baseUri.resolve(candidate);
+      }
+      return direct;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isSameOrSupersetUrl(Uri candidate, Uri current) {
+    if (candidate == current) {
+      return true;
+    }
+    if (candidate.scheme != current.scheme ||
+        candidate.host != current.host ||
+        candidate.path != current.path) {
+      return false;
+    }
+    if (candidate.queryParameters.isEmpty) {
+      return true;
+    }
+    return candidate.queryParameters.entries.every(
+      (entry) => current.queryParameters[entry.key] == entry.value,
+    );
+  }
+
+  bool _hasContentType(Map<String, String> headers) {
+    return headers.keys.any((key) => key.toLowerCase() == 'content-type');
+  }
+
+  @visibleForTesting
+  Map<String, String> buildRequestHeadersForTesting() => _buildRequestHeaders();
+
+  String? get debugPrefetchedResponseUrl => _prefetchedResponseUrl;
+
+  String? get debugPrefetchedResponseRequestUrl =>
+      _prefetchedResponseRequestUrl;
+
+  String? get debugPrefetchedResponseRedirectUrl =>
+      _prefetchedResponseRedirectUrl;
 }

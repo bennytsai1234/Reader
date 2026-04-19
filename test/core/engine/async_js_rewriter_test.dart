@@ -24,6 +24,21 @@ void main() {
       );
     });
 
+    test('java.get(scopeKey) without response chain stays sync', () {
+      const input = "var intro = java.get('intro');";
+      expect(AsyncJsRewriter.rewrite(input), input);
+    });
+
+    test(
+      'java.get(url, headers) remains async even without response chain',
+      () {
+        expect(
+          AsyncJsRewriter.rewrite('java.get(url, headers)'),
+          '(await java.get(url, headers))',
+        );
+      },
+    );
+
     test('nested call argument', () {
       expect(
         AsyncJsRewriter.rewrite('JSON.parse(java.ajax(url))'),
@@ -39,14 +54,72 @@ void main() {
     });
 
     test('java.post with object literal argument preserves braces', () {
-      const input = 'java.post(url, body, {"Content-Type": "application/json"})';
+      const input =
+          'java.post(url, body, {"Content-Type": "application/json"})';
       const expected =
           '(await java.post(url, body, {"Content-Type": "application/json"}))';
       expect(AsyncJsRewriter.rewrite(input), expected);
     });
 
+    test('java.post with multiline headers object is awaited', () {
+      const input = '''
+let response = java.post("https://bcshuku.com/conapi.php", params, {
+  "accept": "application/json, text/javascript, */*; q=0.01",
+  "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+  "referer": baseUrl
+});
+if (response && response.body()) {
+  JSON.parse(response.body())["content"];
+}
+''';
+      const expected = '''
+let response = (await java.post("https://bcshuku.com/conapi.php", params, {
+  "accept": "application/json, text/javascript, */*; q=0.01",
+  "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+  "referer": baseUrl
+}));
+if (response && response.body()) {
+  JSON.parse(response.body())["content"];
+}
+''';
+      expect(AsyncJsRewriter.rewrite(input), expected);
+    });
+
+    test('regex literal before java.post still rewrites correctly', () {
+      const input = r'''
+var regex = /\{"url"\s*:\s*"[^"]+"\s*,\s*"mobile"\s*:\s*"\d"\s*,\s*"isk"\s*:\s*"\d"\s*,\s*"novel"\s*:\s*"\d+"\s*,\s*"chapter"\s*:\s*"\d+"\}/;
+var match = result.match(regex);
+if (match) {
+  let response = java.post("https://bcshuku.com/conapi.php", params, {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "referer": baseUrl
+  });
+  if (response && response.body()) {
+    JSON.parse(response.body())["content"];
+  }
+}
+''';
+      const expected = r'''
+var regex = /\{"url"\s*:\s*"[^"]+"\s*,\s*"mobile"\s*:\s*"\d"\s*,\s*"isk"\s*:\s*"\d"\s*,\s*"novel"\s*:\s*"\d+"\s*,\s*"chapter"\s*:\s*"\d+"\}/;
+var match = result.match(regex);
+if (match) {
+  let response = (await java.post("https://bcshuku.com/conapi.php", params, {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "referer": baseUrl
+  }));
+  if (response && response.body()) {
+    JSON.parse(response.body())["content"];
+  }
+}
+''';
+      expect(AsyncJsRewriter.rewrite(input), expected);
+    });
+
     test('sync methods (md5Encode, base64Encode) are left alone', () {
-      const input = 'var h = java.md5Encode(str); var b = java.base64Encode(str);';
+      const input =
+          'var h = java.md5Encode(str); var b = java.base64Encode(str);';
       expect(AsyncJsRewriter.rewrite(input), input);
     });
 
@@ -161,6 +234,13 @@ void main() {
       );
     });
 
+    test('cache.getFile(key) gets wrapped', () {
+      expect(
+        AsyncJsRewriter.rewrite('var v = cache.getFile("k")'),
+        'var v = (await cache.getFile("k"))',
+      );
+    });
+
     test('source.get(key) gets wrapped', () {
       expect(
         AsyncJsRewriter.rewrite('source.get("login")'),
@@ -188,7 +268,8 @@ void main() {
     });
 
     test('mixed owners and method chains', () {
-      const input = 'var a = java.ajax(u); var b = cache.get(k); var c = source.get("x").toString();';
+      const input =
+          'var a = java.ajax(u); var b = cache.get(k); var c = source.get("x").toString();';
       const expected =
           'var a = (await java.ajax(u)); var b = (await cache.get(k)); var c = (await source.get("x")).toString();';
       expect(AsyncJsRewriter.rewrite(input), expected);
@@ -206,38 +287,27 @@ void main() {
     });
 
     test('returns false when only sync java methods are used', () {
-      expect(
-        AsyncJsRewriter.needsAsync('java.md5Encode(str)'),
-        isFalse,
-      );
+      expect(AsyncJsRewriter.needsAsync('java.md5Encode(str)'), isFalse);
     });
 
     test('returns true when java.ajax is used', () {
-      expect(
-        AsyncJsRewriter.needsAsync('var r = java.ajax(url);'),
-        isTrue,
-      );
+      expect(AsyncJsRewriter.needsAsync('var r = java.ajax(url);'), isTrue);
     });
 
     test('returns true when java.get chain is used', () {
-      expect(
-        AsyncJsRewriter.needsAsync('java.get(url).body()'),
-        isTrue,
-      );
+      expect(AsyncJsRewriter.needsAsync('java.get(url).body()'), isTrue);
+    });
+
+    test('returns false when java.get is used as sync scope lookup', () {
+      expect(AsyncJsRewriter.needsAsync("java.get('intro')"), isFalse);
     });
 
     test('returns false when "java.ajax" only appears inside a string', () {
-      expect(
-        AsyncJsRewriter.needsAsync('var s = "java.ajax(x)";'),
-        isFalse,
-      );
+      expect(AsyncJsRewriter.needsAsync('var s = "java.ajax(x)";'), isFalse);
     });
 
     test('returns false when "java.ajax" only appears inside a comment', () {
-      expect(
-        AsyncJsRewriter.needsAsync('// java.ajax(x)'),
-        isFalse,
-      );
+      expect(AsyncJsRewriter.needsAsync('// java.ajax(x)'), isFalse);
     });
   });
 }

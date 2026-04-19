@@ -34,6 +34,7 @@ abstract class AnalyzeRuleBase {
   String? nextChapterUrl;
   String? key;
   int page = 1;
+  final Map<String, String> transientVariables = {};
 
   AnalyzeByXPath? analyzeByXPath;
   AnalyzeByCss? analyzeByJSoup;
@@ -42,7 +43,9 @@ abstract class AnalyzeRuleBase {
 
   static final HtmlUnescape htmlUnescape = HtmlUnescape();
   static final LruMap<String, RegExp> regexCache = LruMap(maxSize: 200);
-  static final LruMap<String, List<SourceRule>> stringRuleCache = LruMap(maxSize: 200);
+  static final LruMap<String, List<SourceRule>> stringRuleCache = LruMap(
+    maxSize: 200,
+  );
   static final LruMap<String, dynamic> scriptCache = LruMap(maxSize: 100);
 
   static void dispose() {
@@ -52,7 +55,7 @@ abstract class AnalyzeRuleBase {
 
   void put(String key, String? value) {
     if (value == null) return;
-    
+
     // 如果數據過大 (例如 > 5000 字元)，存入 BigData
     if (value.length > 5000) {
       final bigData = RuleBigDataService();
@@ -83,12 +86,33 @@ abstract class AnalyzeRuleBase {
       ruleData!.putVariable(key, value);
     } else if (source != null && source is RuleDataInterface) {
       (source as RuleDataInterface).putVariable(key, value);
+    } else {
+      transientVariables[key] = value;
     }
   }
 
   String get(String key) {
+    switch (key) {
+      case 'key':
+        return this.key ?? '';
+      case 'page':
+        return page.toString();
+      case 'baseUrl':
+        return baseUrl ?? '';
+      case 'redirectUrl':
+        return redirectUrl ?? '';
+      case 'nextChapterUrl':
+        return nextChapterUrl ?? '';
+      case 'title':
+        final chapterTitle = chapter?.title?.toString();
+        if (chapterTitle != null && chapterTitle.isNotEmpty) {
+          return chapterTitle;
+        }
+        break;
+    }
+
     String? val;
-    
+
     if (chapter != null && chapter is RuleDataInterface) {
       val = (chapter as RuleDataInterface).getVariable(key);
     }
@@ -97,6 +121,9 @@ abstract class AnalyzeRuleBase {
       if (source != null && source is RuleDataInterface) {
         val = (source as RuleDataInterface).getVariable(key);
       }
+    }
+    if (val == null || val.isEmpty) {
+      val = transientVariables[key];
     }
 
     // 如果內存中沒有且可能在大數據中，嘗試讀取
@@ -115,4 +142,3 @@ abstract class AnalyzeRuleBase {
   /// sync context（例如建構子內部）時才退而求其次使用 [evalJS]。
   Future<dynamic> evalJSAsync(String jsStr, dynamic result);
 }
-

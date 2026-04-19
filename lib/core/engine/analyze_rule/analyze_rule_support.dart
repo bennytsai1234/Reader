@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:html/dom.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/analyze_by_json_path.dart';
 import '../parsers/analyze_by_xpath.dart';
@@ -82,16 +83,26 @@ class SourceRule {
       } catch (_) {}
     }
     rule = vRuleStr;
-    final evalPattern = RegExp(r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}', caseSensitive: false);
+    final evalPattern = RegExp(
+      r'@get:\{[^}]+?\}|\{\{[\w\W]*?\}\}|\{\$.*?\}',
+      caseSensitive: false,
+    );
     var start = 0;
     final evalMatches = evalPattern.allMatches(rule);
     if (evalMatches.isNotEmpty) isDynamic = true;
     for (final match in evalMatches) {
       if (match.start > start) _splitRegex(rule.substring(start, match.start));
       final tmp = match.group(0)!;
-      if (tmp.toLowerCase().startsWith('@get:')) { ruleType.add(getRuleType); ruleParam.add(tmp.substring(6, tmp.length - 1)); }
-      else if (tmp.startsWith('{{')) { ruleType.add(jsRuleType); ruleParam.add(tmp.substring(2, tmp.length - 2)); }
-      else if (tmp.startsWith('{\$')) { ruleType.add(jsonPartRuleType); ruleParam.add(tmp.substring(1, tmp.length - 1)); }
+      if (tmp.toLowerCase().startsWith('@get:')) {
+        ruleType.add(getRuleType);
+        ruleParam.add(tmp.substring(6, tmp.length - 1));
+      } else if (tmp.startsWith('{{')) {
+        ruleType.add(jsRuleType);
+        ruleParam.add(tmp.substring(2, tmp.length - 2));
+      } else if (tmp.startsWith('{\$')) {
+        ruleType.add(jsonPartRuleType);
+        ruleParam.add(tmp.substring(1, tmp.length - 1));
+      }
       start = match.end;
     }
     if (rule.length > start) _splitRegex(rule.substring(start));
@@ -177,4 +188,88 @@ class SourceRule {
     if (o != analyzer.content) return AnalyzeByJsonPath(o);
     return analyzer.analyzeByJSonPath ??= AnalyzeByJsonPath(analyzer.content);
   }
+}
+
+String stringifyRuleResult(dynamic value) {
+  if (value == null) {
+    return '';
+  }
+  if (value is Element) {
+    return value.outerHtml;
+  }
+  if (value is Iterable) {
+    return value.map(stringifyRuleResult).join('\n');
+  }
+  return value.toString();
+}
+
+bool isJsonLikeRuleInput(dynamic value) {
+  return value is Map || value is List;
+}
+
+String? buildJsonFallbackRule(String rule) {
+  final trimmed = rule.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  if (trimmed.startsWith(r'$.') || trimmed.startsWith(r'$[')) {
+    return trimmed;
+  }
+
+  const operatorPattern = r'&&|\|\||%%';
+  final operatorRegex = RegExp(operatorPattern);
+  final matches = operatorRegex.allMatches(trimmed).toList();
+  if (matches.isEmpty) {
+    return _prefixJsonRuleSegment(trimmed);
+  }
+
+  final buffer = StringBuffer();
+  var lastEnd = 0;
+  for (final match in matches) {
+    final segment = trimmed.substring(lastEnd, match.start).trim();
+    final transformed = _prefixJsonRuleSegment(segment);
+    if (transformed == null) {
+      return null;
+    }
+    buffer.write(transformed);
+    buffer.write(match.group(0));
+    lastEnd = match.end;
+  }
+
+  final tail = trimmed.substring(lastEnd).trim();
+  final transformedTail = _prefixJsonRuleSegment(tail);
+  if (transformedTail == null) {
+    return null;
+  }
+  buffer.write(transformedTail);
+  return buffer.toString();
+}
+
+String? _prefixJsonRuleSegment(String segment) {
+  final trimmed = segment.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  if (trimmed == '*') {
+    return r'$[*]';
+  }
+  if (trimmed.startsWith(r'$.') || trimmed.startsWith(r'$[')) {
+    return trimmed;
+  }
+
+  final barePathPattern = RegExp(
+    r'^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\]|\.[A-Za-z_][A-Za-z0-9_]*)*$',
+  );
+  if (barePathPattern.hasMatch(trimmed)) {
+    return '\$.$trimmed';
+  }
+
+  final indexedPathPattern = RegExp(
+    r'^\[[^\]]+\](?:\[[^\]]+\]|\.[A-Za-z_][A-Za-z0-9_]*)*$',
+  );
+  if (indexedPathPattern.hasMatch(trimmed)) {
+    return '\$$trimmed';
+  }
+
+  return null;
 }

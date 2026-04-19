@@ -28,12 +28,14 @@ extension JsNetworkExtensions on JsExtensions {
     runtime.onMessage('ajax', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final url = _parseUrlArg(parsed.payload);
-      _runAjax(url).then((body) {
-        resolveJsPending(parsed.callId, body);
-      }).catchError((e) {
-        AppLog.e('java.ajax failed: $e');
-        rejectJsPending(parsed.callId, e);
-      });
+      _runAjax(url)
+          .then((body) {
+            resolveJsPending(parsed.callId, body);
+          })
+          .catchError((e) {
+            AppLog.e('java.ajax failed: $e');
+            rejectJsPending(parsed.callId, e);
+          });
       return null;
     });
 
@@ -46,12 +48,14 @@ extension JsNetworkExtensions on JsExtensions {
         return null;
       }
       final urls = payload.map((e) => e.toString()).toList();
-      Future.wait(urls.map(_runAjax)).then((bodies) {
-        resolveJsPending(parsed.callId, bodies);
-      }).catchError((e) {
-        AppLog.e('java.ajaxAll failed: $e');
-        rejectJsPending(parsed.callId, e);
-      });
+      Future.wait(urls.map(_runAjax))
+          .then((bodies) {
+            resolveJsPending(parsed.callId, bodies);
+          })
+          .catchError((e) {
+            AppLog.e('java.ajaxAll failed: $e');
+            rejectJsPending(parsed.callId, e);
+          });
       return null;
     });
 
@@ -92,27 +96,38 @@ extension JsNetworkExtensions on JsExtensions {
         return null;
       }
       final url = payload[0].toString();
-      final headers = payload.length > 1 && payload[1] is Map
-          ? Map<String, dynamic>.from(payload[1] as Map)
-          : <String, dynamic>{};
-      HttpClient().client.get(url, options: Options(headers: headers)).then((
-        response,
-      ) {
-        resolveJsPending(parsed.callId, {
-          'body': response.data?.toString() ?? '',
-          'url': response.requestOptions.uri.toString(),
-          'code': response.statusCode,
-          'headers': response.headers.map,
-        });
-      }).catchError((e) {
-        AppLog.e('java.get failed: $e');
-        resolveJsPending(parsed.callId, {
-          'body': e.toString(),
-          'url': url,
-          'code': 500,
-          'headers': <String, dynamic>{},
-        });
-      });
+      final headers =
+          payload.length > 1 && payload[1] is Map
+              ? Map<String, dynamic>.from(payload[1] as Map)
+              : <String, dynamic>{};
+      HttpClient().client
+          .get(url, options: Options(headers: headers))
+          .then((response) {
+            final payload = {
+              'body': response.data?.toString() ?? '',
+              'url': response.realUri.toString(),
+              'requestUrl': url,
+              'code': response.statusCode,
+              'headers': response.headers.map,
+              'redirects':
+                  response.redirects
+                      .map((record) => record.location.toString())
+                      .toList(),
+            };
+            _stashLastHttpResponse(payload);
+            resolveJsPending(parsed.callId, payload);
+          })
+          .catchError((e) {
+            AppLog.e('java.get failed: $e');
+            resolveJsPending(parsed.callId, {
+              'body': e.toString(),
+              'url': url,
+              'requestUrl': url,
+              'code': 500,
+              'headers': <String, dynamic>{},
+              'redirects': const <String>[],
+            });
+          });
       return null;
     });
 
@@ -129,26 +144,46 @@ extension JsNetworkExtensions on JsExtensions {
       }
       final url = payload[0].toString();
       final body = payload[1];
-      final headers = payload.length > 2 && payload[2] is Map
-          ? Map<String, dynamic>.from(payload[2] as Map)
-          : <String, dynamic>{};
+      final headers =
+          payload.length > 2 && payload[2] is Map
+              ? Map<String, dynamic>.from(payload[2] as Map)
+              : <String, dynamic>{};
+      if (body is String &&
+          !headers.keys.any(
+            (key) => key.toString().toLowerCase() == 'content-type',
+          )) {
+        final rawBody = body.trimLeft();
+        headers['Content-Type'] =
+            (rawBody.startsWith('{') || rawBody.startsWith('['))
+                ? 'application/json; charset=utf-8'
+                : 'application/x-www-form-urlencoded; charset=utf-8';
+      }
       HttpClient().client
           .post(url, data: body, options: Options(headers: headers))
           .then((response) {
-            resolveJsPending(parsed.callId, {
+            final payload = {
               'body': response.data?.toString() ?? '',
-              'url': response.requestOptions.uri.toString(),
+              'url': response.realUri.toString(),
+              'requestUrl': url,
               'code': response.statusCode,
               'headers': response.headers.map,
-            });
+              'redirects':
+                  response.redirects
+                      .map((record) => record.location.toString())
+                      .toList(),
+            };
+            _stashLastHttpResponse(payload);
+            resolveJsPending(parsed.callId, payload);
           })
           .catchError((e) {
             AppLog.e('java.post failed: $e');
             resolveJsPending(parsed.callId, {
               'body': e.toString(),
               'url': url,
+              'requestUrl': url,
               'code': 500,
               'headers': <String, dynamic>{},
+              'redirects': const <String>[],
             });
           });
       return null;
@@ -164,18 +199,21 @@ extension JsNetworkExtensions on JsExtensions {
       }
       final tag = payload[0].toString();
       final key = payload.length > 1 ? payload[1]?.toString() : null;
-      cookieStore.getCookie(tag).then((cookie) {
-        if (key != null && key.isNotEmpty) {
-          resolveJsPending(
-            parsed.callId,
-            cookieStore.cookieToMap(cookie)[key] ?? '',
-          );
-        } else {
-          resolveJsPending(parsed.callId, cookie);
-        }
-      }).catchError((e) {
-        rejectJsPending(parsed.callId, e);
-      });
+      cookieStore
+          .getCookie(tag)
+          .then((cookie) {
+            if (key != null && key.isNotEmpty) {
+              resolveJsPending(
+                parsed.callId,
+                cookieStore.cookieToMap(cookie)[key] ?? '',
+              );
+            } else {
+              resolveJsPending(parsed.callId, cookie);
+            }
+          })
+          .catchError((e) {
+            rejectJsPending(parsed.callId, e);
+          });
       return null;
     });
 
@@ -212,11 +250,7 @@ extension JsNetworkExtensions on JsExtensions {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final payload = parsed.payload;
       if (payload is! List || payload.isEmpty) {
-        resolveJsPending(parsed.callId, {
-          'body': '',
-          'url': '',
-          'code': 500,
-        });
+        resolveJsPending(parsed.callId, {'body': '', 'url': '', 'code': 500});
         return null;
       }
       final url = payload[0].toString();
@@ -322,5 +356,27 @@ extension JsNetworkExtensions on JsExtensions {
   String _parseUrlArg(dynamic payload) {
     if (payload is List && payload.isNotEmpty) return payload[0].toString();
     return payload.toString();
+  }
+
+  void _stashLastHttpResponse(Map<String, dynamic> payload) {
+    final context = ruleContext;
+    if (context == null) return;
+    try {
+      if (context.chapter != null) {
+        return;
+      }
+    } catch (_) {}
+    try {
+      context.put('_lastHttpResponseBody', payload['body']?.toString() ?? '');
+      context.put('_lastHttpResponseUrl', payload['url']?.toString() ?? '');
+      context.put(
+        '_lastHttpResponseRequestUrl',
+        payload['requestUrl']?.toString() ?? '',
+      );
+      final redirects = payload['redirects'];
+      if (redirects is List && redirects.isNotEmpty) {
+        context.put('_lastHttpResponseRedirectUrl', redirects.last.toString());
+      }
+    } catch (_) {}
   }
 }

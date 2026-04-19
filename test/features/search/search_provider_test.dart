@@ -1,9 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:inkpage_reader/core/database/dao/book_dao.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
+import 'package:inkpage_reader/core/engine/app_event_bus.dart';
+import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/search_keyword.dart';
+import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/features/search/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -45,11 +49,13 @@ class _FakeKeywordDao extends Fake implements SearchKeywordDao {
       _keywords[idx].usage += 1;
       _keywords[idx].lastUseTime = DateTime.now().millisecondsSinceEpoch;
     } else {
-      _keywords.add(SearchKeyword(
-        word: word,
-        usage: 1,
-        lastUseTime: DateTime.now().millisecondsSinceEpoch,
-      ));
+      _keywords.add(
+        SearchKeyword(
+          word: word,
+          usage: 1,
+          lastUseTime: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
     }
   }
 
@@ -65,6 +71,46 @@ class _FakeKeywordDao extends Fake implements SearchKeywordDao {
       _keywords.where((k) => k.word == word).firstOrNull;
 }
 
+class _FakeBookDao extends Fake implements BookDao {
+  List<Book> shelf = [];
+
+  @override
+  Future<List<Book>> getInBookshelf() async => shelf;
+}
+
+Book _makeBook({
+  required String bookUrl,
+  required String name,
+  required String author,
+}) {
+  return Book(
+    bookUrl: bookUrl,
+    name: name,
+    author: author,
+    origin: 'source://main',
+    originName: '主書源',
+    isInBookshelf: true,
+  );
+}
+
+SearchBook _makeSearchBook({
+  required String bookUrl,
+  required String name,
+  required String author,
+}) {
+  return SearchBook(
+    bookUrl: bookUrl,
+    name: name,
+    author: author,
+    origin: 'source://main',
+    originName: '主書源',
+  );
+}
+
+Future<void> _settleAsync() async {
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+}
+
 // ---------------------------------------------------------------------------
 // 測試
 // ---------------------------------------------------------------------------
@@ -72,13 +118,16 @@ class _FakeKeywordDao extends Fake implements SearchKeywordDao {
 void main() {
   late _FakeSourceDao fakeSourceDao;
   late _FakeKeywordDao fakeKeywordDao;
+  late _FakeBookDao fakeBookDao;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     fakeSourceDao = _FakeSourceDao();
     fakeKeywordDao = _FakeKeywordDao();
+    fakeBookDao = _FakeBookDao();
 
     final getIt = GetIt.instance;
+    getIt.registerLazySingleton<BookDao>(() => fakeBookDao);
     getIt.registerLazySingleton<BookSourceDao>(() => fakeSourceDao);
     getIt.registerLazySingleton<SearchKeywordDao>(() => fakeKeywordDao);
   });
@@ -87,7 +136,8 @@ void main() {
 
   Future<SearchProvider> makeProvider() async {
     final p = SearchProvider();
-    await Future.delayed(Duration.zero); // 等 constructor async 完成
+    addTearDown(p.dispose);
+    await _settleAsync(); // 等 constructor async 完成
     return p;
   }
 
@@ -99,8 +149,16 @@ void main() {
 
     test('有群組的書源會加入 sourceGroups', () async {
       fakeSourceDao.sources = [
-        BookSource(bookSourceUrl: 'http://a.com', bookSourceName: 'A', bookSourceGroup: '玄幻'),
-        BookSource(bookSourceUrl: 'http://b.com', bookSourceName: 'B', bookSourceGroup: '都市'),
+        BookSource(
+          bookSourceUrl: 'http://a.com',
+          bookSourceName: 'A',
+          bookSourceGroup: '玄幻',
+        ),
+        BookSource(
+          bookSourceUrl: 'http://b.com',
+          bookSourceName: 'B',
+          bookSourceGroup: '都市',
+        ),
       ];
       final p = await makeProvider();
       expect(p.sourceGroups, containsAll(['玄幻', '都市']));
@@ -195,6 +253,78 @@ void main() {
     test('totalSources 初始為 0', () async {
       final p = await makeProvider();
       expect(p.totalSources, 0);
+    });
+  });
+
+  group('SearchProvider - 書架狀態', () {
+    test('初始載入會同步 bookUrl 與書名作者鍵值', () async {
+      fakeBookDao.shelf = [
+        _makeBook(
+          bookUrl: 'https://example.com/books/1',
+          name: '測試書',
+          author: '作者甲',
+        ),
+      ];
+      final p = await makeProvider();
+
+      expect(
+        p.isInBookshelf(
+          _makeSearchBook(
+            bookUrl: 'https://example.com/books/1',
+            name: '測試書',
+            author: '作者甲',
+          ),
+        ),
+        isTrue,
+      );
+
+      expect(
+        p.isInBookshelf(
+          _makeSearchBook(
+            bookUrl: 'https://example.com/books/redirected',
+            name: '測試書',
+            author: '作者甲',
+          ),
+        ),
+        isTrue,
+      );
+
+      expect(
+        p.isInBookshelf(
+          _makeSearchBook(
+            bookUrl: 'https://example.com/books/other',
+            name: '其他書',
+            author: '作者乙',
+          ),
+        ),
+        isFalse,
+      );
+    });
+
+    test('收到 upBookshelf 事件後會重新同步書架狀態', () async {
+      final p = await makeProvider();
+      final targetBook = _makeBook(
+        bookUrl: 'https://example.com/books/2',
+        name: '事件同步書',
+        author: '作者乙',
+      );
+      final targetSearchBook = _makeSearchBook(
+        bookUrl: targetBook.bookUrl,
+        name: targetBook.name,
+        author: targetBook.author,
+      );
+
+      expect(p.isInBookshelf(targetSearchBook), isFalse);
+
+      fakeBookDao.shelf = [targetBook];
+      AppEventBus().fire(AppEventBus.upBookshelf);
+      await _settleAsync();
+      expect(p.isInBookshelf(targetSearchBook), isTrue);
+
+      fakeBookDao.shelf = [];
+      AppEventBus().fire(AppEventBus.upBookshelf);
+      await _settleAsync();
+      expect(p.isInBookshelf(targetSearchBook), isFalse);
     });
   });
 }

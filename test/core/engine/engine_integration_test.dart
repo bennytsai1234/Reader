@@ -17,10 +17,7 @@ void main() {
   // ───────────────────────────────────────────────────
   group('AnalyzeUrl', () {
     test('{{key}} is URL-encoded (UTF-8 default)', () {
-      final a = AnalyzeUrl(
-        'https://example.com/search?q={{key}}',
-        key: '斗破蒼穹',
-      );
+      final a = AnalyzeUrl('https://example.com/search?q={{key}}', key: '斗破蒼穹');
       expect(a.url, contains('%E6%96%97%E7%A0%B4%E8%92%BC%E7%A9%B9'));
     });
 
@@ -34,10 +31,7 @@ void main() {
     });
 
     test('{{page}} substitution', () {
-      final a = AnalyzeUrl(
-        'https://example.com/list?p={{page}}',
-        page: 3,
-      );
+      final a = AnalyzeUrl('https://example.com/list?p={{page}}', page: 3);
       expect(a.url, 'https://example.com/list?p=3');
     });
 
@@ -162,6 +156,44 @@ void main() {
       expect(result.nextUrls, isEmpty);
     });
 
+    test(
+      'Parses chapter list when chapterList returns anchor elements',
+      () async {
+        final source = BookSource(
+          bookSourceUrl: 'https://novel.example.com',
+          ruleToc: TocRule(
+            chapterList: '.chapter-list a',
+            chapterName: 'a@text',
+            chapterUrl: 'a@href',
+          ),
+        );
+        final book = Book(bookUrl: 'https://novel.example.com/book/1');
+
+        const html = '''
+      <html><body>
+        <div class="chapter-list">
+          <a href="/chapter/1">Chapter 1</a>
+          <a href="/chapter/2">Chapter 2</a>
+          <a href="/chapter/3">Chapter 3</a>
+        </div>
+      </body></html>
+      ''';
+
+        final result = await ChapterListParser.parse(
+          source: source,
+          book: book,
+          body: html,
+          baseUrl: 'https://novel.example.com/book/1',
+        );
+
+        expect(result.chapters.length, 3);
+        expect(result.chapters[0].title, 'Chapter 1');
+        expect(result.chapters[0].url, 'https://novel.example.com/chapter/1');
+        expect(result.chapters[1].title, 'Chapter 2');
+        expect(result.chapters[2].title, 'Chapter 3');
+      },
+    );
+
     test('nextTocUrl pagination extracts next page URL', () async {
       final source = BookSource(
         bookSourceUrl: 'https://novel.example.com',
@@ -195,19 +227,21 @@ void main() {
       expect(result1.nextUrls, ['https://novel.example.com/book/1/toc?page=2']);
     });
 
-    test('nextTocUrl pointing to self returns null (no infinite loop)', () async {
-      final source = BookSource(
-        bookSourceUrl: 'https://novel.example.com',
-        ruleToc: TocRule(
-          chapterList: '.chapter-list li',
-          chapterName: 'a@text',
-          chapterUrl: 'a@href',
-          nextTocUrl: '.self-link@href',
-        ),
-      );
-      final book = Book(bookUrl: 'https://novel.example.com/book/1');
+    test(
+      'nextTocUrl pointing to self returns null (no infinite loop)',
+      () async {
+        final source = BookSource(
+          bookSourceUrl: 'https://novel.example.com',
+          ruleToc: TocRule(
+            chapterList: '.chapter-list li',
+            chapterName: 'a@text',
+            chapterUrl: 'a@href',
+            nextTocUrl: '.self-link@href',
+          ),
+        );
+        final book = Book(bookUrl: 'https://novel.example.com/book/1');
 
-      const html = '''
+        const html = '''
       <html><body>
         <ul class="chapter-list">
           <li><a href="/chapter/1">Chapter 1</a></li>
@@ -216,15 +250,16 @@ void main() {
       </body></html>
       ''';
 
-      final result = await ChapterListParser.parse(
-        source: source,
-        book: book,
-        body: html,
-        baseUrl: 'https://novel.example.com/book/1/toc',
-      );
+        final result = await ChapterListParser.parse(
+          source: source,
+          book: book,
+          body: html,
+          baseUrl: 'https://novel.example.com/book/1/toc',
+        );
 
-      expect(result.nextUrls, isEmpty);
-    });
+        expect(result.nextUrls, isEmpty);
+      },
+    );
 
     test('Returns empty when no ruleToc', () async {
       final source = BookSource(bookSourceUrl: 'https://example.com');
@@ -270,16 +305,20 @@ void main() {
       expect(result.nextUrls, isEmpty);
     });
 
-    test('replaceRegex cleans content', skip: '待確認 replaceRegex 規則字串語義 (pattern##replacement vs ##pattern##replacement) — 非 async migration 相關', () async {
-      final source = BookSource(
-        bookSourceUrl: 'https://example.com',
-        ruleContent: ContentRule(
-          content: '#content@text',
-          replaceRegex: r'广告\d+##&&请访问.*?\.com##[已屏蔽]',
-        ),
-      );
+    test(
+      'replaceRegex cleans content',
+      skip:
+          '待確認 replaceRegex 規則字串語義 (pattern##replacement vs ##pattern##replacement) — 非 async migration 相關',
+      () async {
+        final source = BookSource(
+          bookSourceUrl: 'https://example.com',
+          ruleContent: ContentRule(
+            content: '#content@text',
+            replaceRegex: r'广告\d+##&&请访问.*?\.com##[已屏蔽]',
+          ),
+        );
 
-      const html = '''
+        const html = '''
       <html><body>
         <div id="content">
           First line.
@@ -290,22 +329,23 @@ void main() {
       </body></html>
       ''';
 
-      final result = await ContentParser.parse(
-        source: source,
-        body: html,
-        baseUrl: 'https://example.com/chapter/1',
-      );
-      final finalized = await ContentParser.finalizeContent(
-        source: source,
-        contentStr: result.content,
-        baseUrl: 'https://example.com/chapter/1',
-      );
+        final result = await ContentParser.parse(
+          source: source,
+          body: html,
+          baseUrl: 'https://example.com/chapter/1',
+        );
+        final finalized = await ContentParser.finalizeContent(
+          source: source,
+          contentStr: result.content,
+          baseUrl: 'https://example.com/chapter/1',
+        );
 
-      expect(finalized, isNot(contains('广告123')));
-      expect(finalized, contains('[已屏蔽]'));
-      expect(finalized, contains('First line.'));
-      expect(finalized, contains('Last line.'));
-    });
+        expect(finalized, isNot(contains('广告123')));
+        expect(finalized, contains('[已屏蔽]'));
+        expect(finalized, contains('First line.'));
+        expect(finalized, contains('Last line.'));
+      },
+    );
 
     test('nextContentUrl extracts next page URL', () async {
       final source = BookSource(
@@ -333,61 +373,68 @@ void main() {
       expect(result.nextUrls, ['https://example.com/chapter/1_2']);
     });
 
-    test('nextContentUrl matching nextChapterUrl returns null (no overlap)', () async {
-      final source = BookSource(
-        bookSourceUrl: 'https://example.com',
-        ruleContent: ContentRule(
-          content: '#content@text',
-          nextContentUrl: '#next@href',
-        ),
-      );
+    test(
+      'nextContentUrl matching nextChapterUrl returns null (no overlap)',
+      () async {
+        final source = BookSource(
+          bookSourceUrl: 'https://example.com',
+          ruleContent: ContentRule(
+            content: '#content@text',
+            nextContentUrl: '#next@href',
+          ),
+        );
 
-      const html = '''
+        const html = '''
       <html><body>
         <div id="content">Content here.</div>
         <a id="next" href="https://example.com/chapter/2">Next Chapter</a>
       </body></html>
       ''';
 
-      final result = await ContentParser.parse(
-        source: source,
-        body: html,
-        baseUrl: 'https://example.com/chapter/1',
-        nextChapterUrl: 'https://example.com/chapter/2',
-      );
+        final result = await ContentParser.parse(
+          source: source,
+          body: html,
+          baseUrl: 'https://example.com/chapter/1',
+          nextChapterUrl: 'https://example.com/chapter/2',
+        );
 
-      expect(result.nextUrls, isEmpty);
-    });
+        expect(result.nextUrls, isEmpty);
+      },
+    );
 
-    test('replaceRegex with empty replacement (deletion)', skip: '待確認 replaceRegex 規則字串語義 — 非 async migration 相關', () async {
-      final source = BookSource(
-        bookSourceUrl: 'https://example.com',
-        ruleContent: ContentRule(
-          content: '#content@text',
-          replaceRegex: r'\[AD\].*?\[/AD\]##',
-        ),
-      );
+    test(
+      'replaceRegex with empty replacement (deletion)',
+      skip: '待確認 replaceRegex 規則字串語義 — 非 async migration 相關',
+      () async {
+        final source = BookSource(
+          bookSourceUrl: 'https://example.com',
+          ruleContent: ContentRule(
+            content: '#content@text',
+            replaceRegex: r'\[AD\].*?\[/AD\]##',
+          ),
+        );
 
-      const html = '''
+        const html = '''
       <html><body>
         <div id="content">Before[AD]ad text here[/AD]After</div>
       </body></html>
       ''';
 
-      final result = await ContentParser.parse(
-        source: source,
-        body: html,
-        baseUrl: 'https://example.com/chapter/1',
-      );
-      final finalized = await ContentParser.finalizeContent(
-        source: source,
-        contentStr: result.content,
-        baseUrl: 'https://example.com/chapter/1',
-      );
+        final result = await ContentParser.parse(
+          source: source,
+          body: html,
+          baseUrl: 'https://example.com/chapter/1',
+        );
+        final finalized = await ContentParser.finalizeContent(
+          source: source,
+          contentStr: result.content,
+          baseUrl: 'https://example.com/chapter/1',
+        );
 
-      expect(finalized, contains('BeforeAfter'));
-      expect(finalized, isNot(contains('[AD]')));
-    });
+        expect(finalized, contains('BeforeAfter'));
+        expect(finalized, isNot(contains('[AD]')));
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────
@@ -690,10 +737,7 @@ void main() {
       final source = BookSource(
         bookSourceUrl: 'https://example.com',
         bookSourceName: 'Test',
-        ruleSearch: SearchRule(
-          bookList: '.nonexistent',
-          name: '.name@text',
-        ),
+        ruleSearch: SearchRule(bookList: '.nonexistent', name: '.name@text'),
         ruleBookInfo: BookInfoRule(
           name: '.book-title@text',
           author: '.book-author@text',

@@ -47,11 +47,16 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
         break;
       case 'html':
       case 'outerHtml':
+        final buffer = StringBuffer();
         for (final el in elements) {
           final clone = el.clone(true);
           clone.querySelectorAll('script').forEach((node) => node.remove());
           clone.querySelectorAll('style').forEach((node) => node.remove());
-          textS.add(clone.outerHtml);
+          buffer.write(clone.outerHtml);
+        }
+        final html = buffer.toString();
+        if (html.isNotEmpty) {
+          textS.add(html);
         }
         break;
       case 'innerHtml':
@@ -60,8 +65,9 @@ extension AnalyzeByCssHelper on AnalyzeByCssBase {
         }
         break;
       case 'all':
-        for (final el in elements) {
-          textS.add(el.outerHtml);
+        final html = elements.map((el) => el.outerHtml).join();
+        if (html.isNotEmpty) {
+          textS.add(html);
         }
         break;
       default:

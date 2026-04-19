@@ -88,6 +88,16 @@ class ReaderChapterContentLoader {
       );
     }
 
+    final chapterContent = chapter.content;
+    if (chapterContent != null && chapterContent.isNotEmpty) {
+      return chapterContent;
+    }
+
+    final cachedContent = await chapterDao.getContent(chapter.url);
+    if (cachedContent != null && cachedContent.isNotEmpty) {
+      return cachedContent;
+    }
+
     var source = getSource();
     source ??= await sourceDao.getByUrl(book.origin);
     if (source != null) {

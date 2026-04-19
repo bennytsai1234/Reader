@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_js/flutter_js.dart';
+import 'package:html/dom.dart' as dom;
+import 'package:xpath_selector/xpath_selector.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'async_js_rewriter.dart';
 import 'js_extensions.dart';
@@ -20,12 +22,19 @@ class JsEngine {
   JavascriptRuntime? _runtime;
   bool _isAvailable = false;
   JsExtensions? _extensions;
+  final dynamic ruleContext;
+  final Map<int, dom.Element> _bridgedElements = <int, dom.Element>{};
+  int _nextBridgeElementId = 0;
 
-  JsEngine({dynamic source}) {
+  JsEngine({dynamic source, this.ruleContext}) {
     try {
       _runtime = getJavascriptRuntime();
       _isAvailable = true;
-      _extensions = JsExtensions(_runtime!, source: source);
+      _extensions = JsExtensions(
+        _runtime!,
+        source: source,
+        ruleContext: ruleContext,
+      );
       _extensions!.inject();
     } catch (e) {
       // Library not available in some test environments
@@ -53,8 +62,8 @@ class JsEngine {
     }
 
     _injectContext(context);
-    final result = _runtime!.evaluate(jsCode);
-    return result.rawResult;
+    final result = _evaluateRuleScript(jsCode);
+    return _decodeContextValue(result.rawResult);
   }
 
   /// Execute rule JS that may invoke async `java.*` / `cache.*` / `source.*`
@@ -74,8 +83,11 @@ class JsEngine {
     if (!AsyncJsRewriter.needsAsync(jsCode)) {
       // Fast path: 純同步 rule JS
       _injectContext(context);
-      final res = _runtime!.evaluate(jsCode);
-      return res.rawResult;
+      final res = _evaluateRuleScript(jsCode);
+      if (res.isError) {
+        throw StateError('rule JS evaluate error: ${res.stringResult}');
+      }
+      return _decodeContextValue(res.rawResult);
     }
 
     _injectContext(context);
@@ -100,27 +112,132 @@ class JsEngine {
       rethrow;
     }
 
-    return future;
+    return future.then(_decodeContextValue);
+  }
+
+  JsEvalResult _evaluateRuleScript(String jsCode) {
+    final wrapped = 'eval(${jsonEncode(jsCode)})';
+    final result = _runtime!.evaluate(wrapped);
+    if (!result.isError) {
+      return result;
+    }
+    // 某些 legacy rule 在 eval(...) 路徑會被 QuickJS 誤判語法，
+    // 退回原生 evaluate 以保住兼容性。
+    return _runtime!.evaluate(jsCode);
   }
 
   void _injectContext(Map<String, dynamic>? context) {
     if (context == null) return;
+    _bridgedElements.clear();
+    _nextBridgeElementId = 0;
     context.forEach((key, value) {
-      if (value != null) {
-        try {
-          final valJson = jsonEncode(value);
-          _runtime!.evaluate('var $key = $valJson;');
-        } catch (_) {
-          final safeStr = value
-              .toString()
-              .replaceAll("'", "\\'")
-              .replaceAll('\n', '\\n');
-          _runtime!.evaluate("var $key = '$safeStr';");
-        }
-      } else {
-        _runtime!.evaluate('var $key = null;');
+      final jsLiteral = _encodeContextValue(value);
+      switch (key) {
+        case 'java':
+        case 'cookie':
+        case 'cache':
+          return;
+        case 'source':
+          _runtime!.evaluate(
+            'if (typeof source === "object" && source !== null) { '
+            'Object.assign(source, $jsLiteral); '
+            '} else { var source = $jsLiteral; }',
+          );
+          return;
+        default:
+          _runtime!.evaluate('var $key = $jsLiteral;');
       }
     });
+  }
+
+  String _encodeContextValue(dynamic value) {
+    if (value == null) {
+      return 'null';
+    }
+    if (value is dom.Element) {
+      return _encodeElement(value);
+    }
+    if (value is XPathNode) {
+      final node = value.node;
+      if (node is dom.Element) {
+        return _encodeElement(node);
+      }
+      return jsonEncode(value.text ?? '');
+    }
+    if (value is Iterable) {
+      final encodedItems = value.map(_encodeContextValue).join(',');
+      return '''
+(function() {
+  var arr = [$encodedItems];
+  Object.defineProperty(arr, 'toArray', {
+    value: function() { return arr; },
+    enumerable: false
+  });
+  Object.defineProperty(arr, 'get', {
+    value: function(index) { return arr[index]; },
+    enumerable: false
+  });
+  Object.defineProperty(arr, 'size', {
+    value: function() { return arr.length; },
+    enumerable: false
+  });
+  return arr;
+})()
+''';
+    }
+    try {
+      return jsonEncode(value);
+    } catch (_) {
+      return jsonEncode(value.toString());
+    }
+  }
+
+  String _encodeElement(dom.Element element) {
+    final bridgeId = _nextBridgeElementId++;
+    _bridgedElements[bridgeId] = element;
+    final payload = jsonEncode(<String, dynamic>{
+      '__lrElementId': bridgeId,
+      'text': element.text,
+      'html': element.innerHtml,
+      'outerHtml': element.outerHtml,
+      'attributes': element.attributes,
+    });
+    return '''
+(function() {
+  var e = $payload;
+  return {
+    __lrElementId: e.__lrElementId,
+    text: function() { return e.text || ''; },
+    html: function() { return e.html || ''; },
+    outerHtml: function() { return e.outerHtml || ''; },
+    attr: function(name) {
+      var attrs = e.attributes || {};
+      return attrs[name] || '';
+    },
+    toString: function() {
+      return e.outerHtml || e.html || e.text || '';
+    }
+  };
+})()
+''';
+  }
+
+  dynamic _decodeContextValue(dynamic value) {
+    if (value is List) {
+      return value.map(_decodeContextValue).toList();
+    }
+    if (value is Map) {
+      final elementId = value['__lrElementId'];
+      if (elementId is num) {
+        return _bridgedElements[elementId.toInt()] ?? value;
+      }
+      final decoded = <dynamic, dynamic>{};
+      value.forEach((key, entry) {
+        decoded[key] = _decodeContextValue(entry);
+      });
+      return decoded;
+    }
+    return value;
   }
 
   dynamic _mockEvaluate(String jsCode, Map<String, dynamic>? context) {

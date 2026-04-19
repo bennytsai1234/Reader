@@ -22,11 +22,12 @@ class ExploreShowPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => ExploreShowProvider(
-        sourceUrl: sourceUrl,
-        exploreUrl: exploreUrl,
-        exploreName: exploreName,
-      ),
+      create:
+          (_) => ExploreShowProvider(
+            sourceUrl: sourceUrl,
+            exploreUrl: exploreUrl,
+            exploreName: exploreName,
+          ),
       child: _ExploreShowContent(exploreName: exploreName),
     );
   }
@@ -100,6 +101,7 @@ class _ExploreShowContent extends StatelessWidget {
           }
           return ExploreBookItem(
             book: provider.books[index],
+            isInBookshelf: provider.isInBookshelf(provider.books[index]),
             sourceName: exploreName,
           );
         },

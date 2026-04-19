@@ -24,6 +24,7 @@ import 'query_ttf.dart';
 abstract class JsExtensionsBase {
   final JavascriptRuntime runtime;
   final BaseSource? source;
+  final dynamic ruleContext;
   final CookieStore cookieStore = CookieStore();
   final CacheManager cacheManager = CacheManager();
 
@@ -43,7 +44,7 @@ abstract class JsExtensionsBase {
   /// bridge 是否已經初始化 (防重複 inject)
   bool _bridgeInitialised = false;
 
-  JsExtensionsBase(this.runtime, {this.source});
+  JsExtensionsBase(this.runtime, {this.source, this.ruleContext});
 
   /// 安裝 Dart↔JS Promise bridge 的 JS 端基礎設施與對應 onMessage handler
   ///
@@ -105,7 +106,6 @@ abstract class JsExtensionsBase {
       }
       return null;
     });
-
   }
 
   /// 註冊一個 rule-level JS 執行，回傳唯一 id 與綁定的 Completer

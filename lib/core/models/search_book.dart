@@ -28,10 +28,19 @@ class SearchBook implements RuleDataInterface {
   String? tocHtml;
 
   late final Set<String> origins = {origin};
+  late final Map<String, String> _originNames = {
+    if (originName != null && originName!.isNotEmpty) origin: originName!,
+  };
 
-  void addOrigin(String o) {
+  void addOrigin(String o, {String? name}) {
     origins.add(o);
+    if (name != null && name.isNotEmpty) {
+      _originNames[o] = name;
+    }
   }
+
+  List<String> get sourceLabels =>
+      origins.map((originUrl) => _originNames[originUrl] ?? originUrl).toList();
 
   // 核心業務方法
   String getRealAuthor() => BookHelp.formatBookAuthor(author ?? '');
@@ -145,4 +154,3 @@ class AggregatedSearchBook {
 
   AggregatedSearchBook({required this.book, required this.sources});
 }
-

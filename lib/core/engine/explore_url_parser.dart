@@ -1,48 +1,115 @@
 import 'dart:convert';
-import 'package:inkpage_reader/core/services/app_log_service.dart';
+
 import 'package:inkpage_reader/core/engine/analyze_rule.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/source/explore_kind.dart';
+import 'package:inkpage_reader/core/services/app_log_service.dart';
 
 /// ExploreUrlParser - 發現規則解析器 (對標 Android BookSource.getExploreKinds)
 class ExploreUrlParser {
-  /// 將 exploreUrl 字符串解析為分類列表
-  /// 支援 JS 動態規則 (`@js:` 或 `<js>...</js>`)
-  /// 支援 JSON 陣列格式
+  /// 同步版本，僅適用於純同步 JS 或靜態 exploreUrl。
   static List<ExploreKind> parse(String? exploreUrl, {BookSource? source}) {
     if (exploreUrl == null || exploreUrl.isEmpty) return [];
 
-    var urlStr = exploreUrl;
-
     try {
-      // 處理 JS 動態發現規則 (對標 Android BookSource.getExploreKinds)
-      if (urlStr.startsWith('<js>') || urlStr.startsWith('@js:')) {
-        if (source != null) {
-          final jsStr = urlStr.startsWith('@js:')
-              ? urlStr.substring(4)
-              : urlStr.substring(4, urlStr.lastIndexOf('<'));
-          final rule = AnalyzeRule(source: source);
-          final result = rule.evalJS(jsStr.trim(), null);
-          if (result != null && result.toString().isNotEmpty) {
-            urlStr = result.toString().trim();
-          } else {
-            return [];
-          }
-        } else {
-          // 沒有 source context 時無法執行 JS
-          return [];
-        }
-      }
+      final resolved = _resolveSync(exploreUrl, source: source);
+      return _parseResolvedValue(resolved);
     } catch (e) {
-      AppLog.e('ExploreUrl JS 執行失敗: $e', error: e);
+      AppLog.e('ExploreUrl 解析失敗: $e', error: e);
       return [ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString())];
     }
+  }
 
-    // 嘗試 JSON 陣列格式 (對標 Android isJsonArray)
+  /// 非同步版本，支援 `<js>` / `@js:` 規則內使用 `java.ajax(...)`
+  /// 等 Promise bridge 方法。
+  static Future<List<ExploreKind>> parseAsync(
+    String? exploreUrl, {
+    BookSource? source,
+    Future<dynamic> Function(String jsSource)? jsExecutor,
+  }) async {
+    if (exploreUrl == null || exploreUrl.isEmpty) return [];
+
+    try {
+      final resolved = await _resolveAsync(
+        exploreUrl,
+        source: source,
+        jsExecutor: jsExecutor,
+      );
+      return _parseResolvedValue(resolved);
+    } catch (e) {
+      AppLog.e('ExploreUrl 非同步解析失敗: $e', error: e);
+      return [ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString())];
+    }
+  }
+
+  static dynamic _resolveSync(String exploreUrl, {BookSource? source}) {
+    if (!_isJsExploreUrl(exploreUrl)) {
+      return exploreUrl;
+    }
+    if (source == null) {
+      return '';
+    }
+
+    final rule = AnalyzeRule(source: source);
+    return rule.evalJS(_extractJsBody(exploreUrl), null);
+  }
+
+  static Future<dynamic> _resolveAsync(
+    String exploreUrl, {
+    BookSource? source,
+    Future<dynamic> Function(String jsSource)? jsExecutor,
+  }) async {
+    if (!_isJsExploreUrl(exploreUrl)) {
+      return exploreUrl;
+    }
+
+    final jsSource = _extractJsBody(exploreUrl);
+    if (jsExecutor != null) {
+      return jsExecutor(jsSource);
+    }
+    if (source == null) {
+      return '';
+    }
+
+    final rule = AnalyzeRule(source: source);
+    return rule.evalJSAsync(jsSource, null);
+  }
+
+  static bool _isJsExploreUrl(String exploreUrl) {
+    final trimmed = exploreUrl.trimLeft();
+    return trimmed.startsWith('<js>') || trimmed.startsWith('@js:');
+  }
+
+  static String _extractJsBody(String exploreUrl) {
+    final trimmed = exploreUrl.trim();
+    if (trimmed.startsWith('@js:')) {
+      return trimmed.substring(4).trim();
+    }
+
+    var body = trimmed.substring(4);
+    if (body.endsWith('</js>')) {
+      body = body.substring(0, body.length - 5);
+    }
+    return body.trim();
+  }
+
+  static List<ExploreKind> _parseResolvedValue(dynamic value) {
+    if (value == null) return [];
+    if (value is List) {
+      return value
+          .whereType<Map>()
+          .map((item) => ExploreKind.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    }
+    if (value is Map) {
+      return [ExploreKind.fromJson(Map<String, dynamic>.from(value))];
+    }
+
+    final urlStr = value.toString().trim();
+    if (urlStr.isEmpty) return [];
     if (_isJsonArray(urlStr)) {
       return _parseJsonArray(urlStr);
     }
-
     return _parseStatic(urlStr);
   }
 
@@ -58,8 +125,8 @@ class ExploreUrlParser {
       final decoded = jsonDecode(jsonStr);
       if (decoded is! List) return [];
       return decoded
-          .whereType<Map<String, dynamic>>()
-          .map((e) => ExploreKind.fromJson(e))
+          .whereType<Map>()
+          .map((item) => ExploreKind.fromJson(Map<String, dynamic>.from(item)))
           .toList();
     } catch (e) {
       AppLog.e('ExploreUrl JSON 解析失敗: $e', error: e);
@@ -69,26 +136,26 @@ class ExploreUrlParser {
 
   /// 解析靜態格式的 exploreUrl (對標 Android `&&` 和 `\n` 分隔)
   static List<ExploreKind> _parseStatic(String exploreUrl) {
-    final List<ExploreKind> kinds = [];
+    final kinds = <ExploreKind>[];
 
     try {
-      // 使用 && 或換行符分隔 (對標 Android `(&&|\n)+`.toRegex())
       final items = exploreUrl.split(RegExp(r'(&&|\n)+'));
-      for (var item in items) {
+      for (final item in items) {
         final trimmed = item.trim();
         if (trimmed.isEmpty) continue;
 
-        // 解析標題與網址 (::)
         final parts = trimmed.split('::');
         if (parts.length >= 2) {
-          kinds.add(ExploreKind(
-            title: parts[0].trim(),
-            url: parts.sublist(1).join('::').trim(),
-          ));
+          kinds.add(
+            ExploreKind(
+              title: parts[0].trim(),
+              url: parts.sublist(1).join('::').trim(),
+            ),
+          );
         }
       }
     } catch (e) {
-      AppLog.e('ExploreUrl解析失敗: $e', error: e);
+      AppLog.e('ExploreUrl 解析失敗: $e', error: e);
       kinds.add(ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString()));
     }
 

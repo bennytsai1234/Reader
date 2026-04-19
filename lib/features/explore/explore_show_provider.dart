@@ -5,8 +5,16 @@ import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
-import 'package:inkpage_reader/core/engine/web_book/web_book_service.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
+import 'package:inkpage_reader/core/services/bookshelf_state_tracker.dart';
+import 'package:inkpage_reader/core/engine/web_book/web_book_service.dart';
+
+typedef ExploreBookLoader =
+    Future<List<SearchBook>> Function(
+      BookSource source,
+      String exploreUrl, {
+      int? page,
+    });
 
 /// ExploreShowProvider - 探索結果列表的狀態管理
 /// (對標 Android ExploreShowViewModel)
@@ -18,6 +26,8 @@ class ExploreShowProvider extends ChangeNotifier {
   final String exploreName;
 
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
+  final BookshelfStateTracker _bookshelfTracker;
+  final ExploreBookLoader _exploreLoader;
   CancelToken? _cancelToken;
 
   BookSource? _bookSource;
@@ -26,9 +36,6 @@ class ExploreShowProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _hasMore = true;
   String? _errorMessage;
-
-  // --- 書架狀態 (對標 Android ExploreShowViewModel.bookshelf) ---
-  final Set<String> _bookshelfKeys = {};
 
   // --- Getters ---
   List<SearchBook> get books => _books;
@@ -41,7 +48,10 @@ class ExploreShowProvider extends ChangeNotifier {
     required this.sourceUrl,
     required this.exploreUrl,
     required this.exploreName,
-  }) {
+    BookshelfStateTracker? bookshelfTracker,
+    ExploreBookLoader? exploreLoader,
+  }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
+       _exploreLoader = exploreLoader ?? WebBook.exploreBookAwait {
     _init();
   }
 
@@ -52,23 +62,13 @@ class ExploreShowProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    await _loadBookshelfState();
+    await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadData();
   }
 
-  /// 載入書架狀態 (對標 Android ExploreShowViewModel.init bookshelf flow)
-  Future<void> _loadBookshelfState() async {
-    // TODO: 當 bookDao 可用時，從書架載入狀態
-    // 目前先跳過，等待後續整合
-  }
-
   /// 判斷書籍是否在書架中 (對標 Android isInBookShelf)
-  bool isInBookshelf(SearchBook book) {
-    final key = book.author != null && book.author!.isNotEmpty
-        ? '${book.name}-${book.author}'
-        : book.name;
-    return _bookshelfKeys.contains(key) || _bookshelfKeys.contains(book.bookUrl);
-  }
+  bool isInBookshelf(SearchBook book) =>
+      _bookshelfTracker.containsSearchBook(book);
 
   /// 載入數據
   Future<void> _loadData() async {
@@ -81,7 +81,7 @@ class ExploreShowProvider extends ChangeNotifier {
     _cancelToken = CancelToken();
 
     try {
-      final results = await WebBook.exploreBookAwait(
+      final results = await _exploreLoader(
         _bookSource!,
         exploreUrl,
         page: _page,
@@ -129,6 +129,7 @@ class ExploreShowProvider extends ChangeNotifier {
   @override
   void dispose() {
     _cancelToken?.cancel('ExploreShowProvider disposed');
+    _bookshelfTracker.dispose();
     super.dispose();
   }
 }

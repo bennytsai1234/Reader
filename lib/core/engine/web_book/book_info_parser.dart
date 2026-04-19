@@ -20,8 +20,11 @@ class BookInfoParser {
     // 執行 init 規則 (對標 Android BookInfoRule.init)
     // init 規則用於頁面預處理，例如 Ajax 載入或 JS 解密
     if (infoRule.init != null && infoRule.init!.isNotEmpty) {
-      final initResult = await rule.getStringAsync(infoRule.init!);
-      if (initResult.isNotEmpty) {
+      final initResult = await rule.getElementAsync(infoRule.init!);
+      final hasInitResult =
+          initResult != null &&
+          (initResult is! String || initResult.trim().isNotEmpty);
+      if (hasInitResult) {
         // init 規則的結果替換為新的解析內容
         rule.setContent(initResult, baseUrl: baseUrl);
       }
@@ -40,8 +43,9 @@ class BookInfoParser {
       isUrl: true,
     );
     final intro = await rule.getStringAsync(infoRule.intro ?? '');
-    final latestChapterTitle =
-        await rule.getStringAsync(infoRule.lastChapter ?? '');
+    final latestChapterTitle = await rule.getStringAsync(
+      infoRule.lastChapter ?? '',
+    );
 
     return book.copyWith(
       name: name.isEmpty ? book.name : name,
@@ -57,4 +61,3 @@ class BookInfoParser {
 
   static String _format(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
 }
-

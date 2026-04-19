@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
@@ -17,7 +18,7 @@ class NetworkService {
   late Dio _dio;
   late PersistCookieJar _cookieJar;
   final Map<String, Lock> _sourceLocks = {}; // 書源併發鎖
-  
+
   Dio get dio => _dio;
   PersistCookieJar get cookieJar => _cookieJar;
 
@@ -32,30 +33,51 @@ class NetworkService {
   Future<void> init() async {
     if (_isInitialized) return;
 
-    final appDocDir = await getApplicationDocumentsDirectory();
+    final appDocDir = await _resolveCookieDirectoryRoot();
     final cookiePath = p.join(appDocDir.path, '.cookies');
     final dir = Directory(cookiePath);
     if (!await dir.exists()) await dir.create(recursive: true);
 
     _cookieJar = PersistCookieJar(storage: FileStorage(cookiePath));
-    
-    _dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36',
-      },
-    ));
+
+    _dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+      ),
+    );
 
     _dio.interceptors.add(CookieManager(_cookieJar));
     _dio.interceptors.add(AppInterceptor());
-    
+
     _isInitialized = true;
   }
 
+  Future<Directory> _resolveCookieDirectoryRoot() async {
+    try {
+      return await getApplicationDocumentsDirectory();
+    } on MissingPluginException {
+      final fallbackDir = Directory(
+        p.join(Directory.systemTemp.path, 'inkpage_reader'),
+      );
+      if (!await fallbackDir.exists()) {
+        await fallbackDir.create(recursive: true);
+      }
+      return fallbackDir;
+    }
+  }
+
   /// 快速 GET 請求
-  Future<Response> get(String url, {Map<String, dynamic>? queryParameters, Options? options}) async {
-    return await _dio.get(url, queryParameters: queryParameters, options: options);
+  Future<Response> get(
+    String url, {
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    return await _dio.get(
+      url,
+      queryParameters: queryParameters,
+      options: options,
+    );
   }
 
   /// 快速 POST 請求
@@ -66,7 +88,8 @@ class NetworkService {
   /// 手動保存 Cookie (用於 WebView 同步等場景)
   Future<void> saveCookies(String url, String cookieStr) async {
     final uri = Uri.parse(url);
-    await _cookieJar.saveFromResponse(uri, [Cookie.fromSetCookieValue(cookieStr)]);
+    await _cookieJar.saveFromResponse(uri, [
+      Cookie.fromSetCookieValue(cookieStr),
+    ]);
   }
 }
-

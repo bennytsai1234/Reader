@@ -32,7 +32,8 @@ class SearchModel {
   int get completedCount => _completedCount;
   int get totalCount => _totalCount;
   String get currentSourceName => _currentSourceName;
-  double get progress => _totalCount == 0 ? 0 : (_completedCount / _totalCount).clamp(0.0, 1.0);
+  double get progress =>
+      _totalCount == 0 ? 0 : (_completedCount / _totalCount).clamp(0.0, 1.0);
 
   /// 執行搜尋
   Future<void> search({
@@ -61,17 +62,20 @@ class SearchModel {
     }
 
     // 取得並行數
-    final threadCount = await SharedPreferences.getInstance()
-        .then((p) => p.getInt('thread_count') ?? 8);
+    final threadCount = await SharedPreferences.getInstance().then(
+      (p) => p.getInt('thread_count') ?? 8,
+    );
     final searchPool = Pool(threadCount);
 
     final tasks = <Future<void>>[];
     for (final source in sources) {
       if (_isCancelled) break;
-      tasks.add(searchPool.withResource(() async {
-        if (_isCancelled) return;
-        await _searchSingleSource(source, key, precisionSearch);
-      }));
+      tasks.add(
+        searchPool.withResource(() async {
+          if (_isCancelled) return;
+          await _searchSingleSource(source, key, precisionSearch);
+        }),
+      );
     }
 
     await Future.wait(tasks);
@@ -108,9 +112,10 @@ class SearchModel {
       if (_isCancelled) return;
 
       // 精準搜尋過濾
-      final filteredBooks = precisionSearch
-          ? books.where((b) => b.name == key || b.author == key).toList()
-          : books;
+      final filteredBooks =
+          precisionSearch
+              ? books.where((b) => b.name == key || b.author == key).toList()
+              : books;
 
       if (filteredBooks.isNotEmpty) {
         // 持久化到搜尋快取
@@ -145,7 +150,11 @@ class SearchModel {
   /// 3. 其他結果（非精準搜尋時才保留）
   ///
   /// 每級內部按來源數量降序排列。
-  void _mergeItems(List<SearchBook> newBooks, String searchKey, bool precision) {
+  void _mergeItems(
+    List<SearchBook> newBooks,
+    String searchKey,
+    bool precision,
+  ) {
     // 分類現有結果
     final equalData = <SearchBook>[];
     final containsData = <SearchBook>[];
@@ -165,7 +174,8 @@ class SearchModel {
     // 合併新結果
     for (final newBook in newBooks) {
       final isEqual = newBook.name == searchKey || newBook.author == searchKey;
-      final isContains = !isEqual &&
+      final isContains =
+          !isEqual &&
           ((newBook.name.contains(searchKey)) ||
               (newBook.author?.contains(searchKey) ?? false));
 
@@ -198,7 +208,7 @@ class SearchModel {
       (b) => b.name == newBook.name && b.author == newBook.author,
     );
     if (index != -1) {
-      list[index].addOrigin(newBook.origin);
+      list[index].addOrigin(newBook.origin, name: newBook.originName);
     } else {
       list.add(newBook);
     }

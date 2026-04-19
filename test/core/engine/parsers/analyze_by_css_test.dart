@@ -43,7 +43,7 @@ void main() {
     test('2. Legado custom syntax tag.class@attr', () {
       final titles = analyzer.getStringList('li.item@tag.a@text');
       expect(titles, ['Chapter 1', 'Chapter 2', 'Chapter 3']);
-      
+
       final hrefs = analyzer.getStringList('li.item@tag.a@href');
       expect(hrefs, ['book1.html', 'book2.html', 'book3.html']);
     });
@@ -56,8 +56,14 @@ void main() {
     });
 
     test('4. Index selection using !index (User requirement: selection)', () {
-      expect(analyzer.getStringList('li.item!0@tag.a@text'), ['Chapter 2', 'Chapter 3']);
-      expect(analyzer.getStringList('li.item!1@tag.a@text'), ['Chapter 1', 'Chapter 3']);
+      expect(analyzer.getStringList('li.item!0@tag.a@text'), [
+        'Chapter 2',
+        'Chapter 3',
+      ]);
+      expect(analyzer.getStringList('li.item!1@tag.a@text'), [
+        'Chapter 1',
+        'Chapter 3',
+      ]);
     });
 
     test('5. Range selection [start:end]', () {
@@ -71,7 +77,10 @@ void main() {
       // ownText only includes direct text nodes
       expect(analyzer.getString('.footer@ownText'), 'Footer Text');
       // html includes outer html
-      expect(analyzer.getString('.footer@html'), contains('<div class="footer">'));
+      expect(
+        analyzer.getString('.footer@html'),
+        contains('<div class="footer">'),
+      );
     });
 
     test('7. Logical && operator', () {
@@ -80,11 +89,16 @@ void main() {
     });
 
     test('8. Logical || operator (fallback)', () {
-      expect(analyzer.getString('.none@text || .footer@ownText'), 'Footer Text');
+      expect(
+        analyzer.getString('.none@text || .footer@ownText'),
+        'Footer Text',
+      );
     });
 
     test('9. ElementsSingle ! exclusion removes specified indexes', () {
-      final doc = html_parser.parse('<div><p>A</p><p>B</p><p>C</p><p>D</p></div>');
+      final doc = html_parser.parse(
+        '<div><p>A</p><p>B</p><p>C</p><p>D</p></div>',
+      );
       final container = doc.querySelector('div')!;
       final single = ElementsSingle();
 
@@ -93,7 +107,9 @@ void main() {
     });
 
     test('10. Bracket exclusion [!...] removes multiple indexes', () {
-      final doc = html_parser.parse('<div><p>A</p><p>B</p><p>C</p><p>D</p></div>');
+      final doc = html_parser.parse(
+        '<div><p>A</p><p>B</p><p>C</p><p>D</p></div>',
+      );
       final container = doc.querySelector('div')!;
       final single = ElementsSingle();
 
@@ -115,12 +131,74 @@ void main() {
       expect(result.first.contains('World'), true);
     });
 
+    test('11b. html combines multiple matched elements into one string', () {
+      final helper = AnalyzeByCss('''
+        <div class="con"><p>第一段</p></div>
+        <div class="con"><p>第二段</p></div>
+        ''');
+
+      final result = helper.getStringList('.con@html');
+
+      expect(result, hasLength(1));
+      expect(result.first, contains('第一段'));
+      expect(result.first, contains('第二段'));
+    });
+
     test('12. textNodes joins direct text nodes per element', () {
-      final doc = html_parser.parse('<div>First<br>Second<span>Skip</span>Third</div>');
+      final doc = html_parser.parse(
+        '<div>First<br>Second<span>Skip</span>Third</div>',
+      );
       final helper = AnalyzeByCss(doc.documentElement!.outerHtml);
-      final result = helper.getResultLast(doc.querySelectorAll('div'), 'textNodes');
+      final result = helper.getResultLast(
+        doc.querySelectorAll('div'),
+        'textNodes',
+      );
 
       expect(result, ['First\nSecond\nThird']);
+    });
+
+    test('13. Current element can match itself in tag selector', () {
+      final doc = html_parser.parse('<a href="/chapter/1">Chapter 1</a>');
+      final anchor = doc.querySelector('a')!;
+      final helper = AnalyzeByCss(anchor);
+
+      expect(helper.getString('a@text'), 'Chapter 1');
+      expect(helper.getString('a@href'), '/chapter/1');
+    });
+
+    test('14. :contains selector works in direct CSS mode', () {
+      final helper = AnalyzeByCss('''
+        <div class="pager">
+          <a href="/prev">上一章</a>
+          <a href="/next">下一章</a>
+        </div>
+        ''');
+
+      expect(helper.getString('@CSS:.pager a:contains(下一章)@href'), '/next');
+    });
+
+    test('15. :contains selector works in tag-prefixed legado syntax', () {
+      final helper = AnalyzeByCss('''
+        <p class="text-center padding-large">
+          <a href="/prev">上一章</a>
+          <a href="/next">下一章</a>
+        </p>
+        ''');
+
+      expect(
+        helper.getString(
+          'p.text-center.padding-large@tag.a:contains(下一章)@href',
+        ),
+        '/next',
+      );
+    });
+
+    test('16. unquoted attribute selectors are normalized compatibly', () {
+      final helper = AnalyzeByCss('''
+        <div style="text-indent: 2em;">正文内容</div>
+        ''');
+
+      expect(helper.getString('div[style=text-indent: 2em;]@text'), '正文内容');
     });
   });
 }

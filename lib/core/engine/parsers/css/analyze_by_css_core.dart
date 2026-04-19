@@ -19,7 +19,7 @@ extension AnalyzeByCssCore on AnalyzeByCssBase {
       for (var ruleStr in ruleStrS) {
         ruleStr = ruleStr.trim();
         if (ruleStr.isEmpty) continue;
-        final tempS = element.querySelectorAll(ruleStr);
+        final tempS = querySelectorAllCompat(element, ruleStr);
         elementsList.add(tempS);
         if (tempS.isNotEmpty && ruleAnalyzes.elementsType == '||') break;
       }
@@ -93,9 +93,15 @@ extension AnalyzeByCssCore on AnalyzeByCssBase {
         if (lastIndex != -1) {
           final cssSelector = ruleStrX.substring(0, lastIndex);
           final attr = ruleStrX.substring(lastIndex + 1);
-          temp = getResultLast(element.querySelectorAll(cssSelector), attr);
+          temp = getResultLast(
+            querySelectorAllCompat(element, cssSelector),
+            attr,
+          );
         } else {
-          temp = getResultLast(element.querySelectorAll(ruleStrX), 'text');
+          temp = getResultLast(
+            querySelectorAllCompat(element, ruleStrX),
+            'text',
+          );
         }
       } else {
         temp = getResultList(ruleStrX);
@@ -154,4 +160,3 @@ extension AnalyzeByCssCore on AnalyzeByCssBase {
     return getResultLast(elements, rules[last]);
   }
 }
-

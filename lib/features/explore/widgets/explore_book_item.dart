@@ -9,11 +9,13 @@ import '../../book_detail/book_detail_page.dart';
 /// 列表式展示：封面、書名、作者、最新章節、簡介、分類標籤。
 class ExploreBookItem extends StatelessWidget {
   final SearchBook book;
+  final bool isInBookshelf;
   final String? sourceName;
 
   const ExploreBookItem({
     super.key,
     required this.book,
+    this.isInBookshelf = false,
     this.sourceName,
   });
 
@@ -44,13 +46,50 @@ class ExploreBookItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 書名 (對標 Android tvName)
-                  Text(
-                    book.name,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          book.name,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isInBookshelf) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.library_add_check,
+                                size: 12,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '書架',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   // 作者 (對標 Android tvAuthor)
@@ -65,7 +104,8 @@ class ExploreBookItem extends StatelessWidget {
                     ),
                   const SizedBox(height: 2),
                   // 最新章節 (對標 Android tvLasted)
-                  if (book.latestChapterTitle != null && book.latestChapterTitle!.isNotEmpty)
+                  if (book.latestChapterTitle != null &&
+                      book.latestChapterTitle!.isNotEmpty)
                     Text(
                       '最新: ${book.latestChapterTitle}',
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -105,18 +145,21 @@ class ExploreBookItem extends StatelessWidget {
 
   /// 構建分類標籤 (對標 Android llKind.setLabels)
   List<Widget> _buildKindTags(ThemeData theme) {
-    final kinds = book.kind!
-        .split(RegExp(r'[,，]'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .take(4)
-        .toList();
+    final kinds =
+        book.kind!
+            .split(RegExp(r'[,，]'))
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .take(4)
+            .toList();
 
     return kinds.map((kind) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         decoration: BoxDecoration(
-          border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.3),
+          ),
           borderRadius: BorderRadius.circular(3),
         ),
         child: Text(
@@ -134,12 +177,13 @@ class ExploreBookItem extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => BookDetailPage(
-          searchBook: AggregatedSearchBook(
-            book: book,
-            sources: [book.originName ?? sourceName ?? '發現'],
-          ),
-        ),
+        builder:
+            (context) => BookDetailPage(
+              searchBook: AggregatedSearchBook(
+                book: book,
+                sources: [book.originName ?? sourceName ?? '發現'],
+              ),
+            ),
       ),
     );
   }

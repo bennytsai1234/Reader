@@ -53,7 +53,7 @@ class AsyncJsRewriter {
       'unArchiveFile',
       'getTxtInFolder',
     },
-    'cache': {'get'},
+    'cache': {'get', 'getFile'},
     'cookie': {'get', 'all'},
     'source': {'get', 'getLoginInfo', 'getLoginInfoMap'},
   };
@@ -101,6 +101,12 @@ class AsyncJsRewriter {
           final stop = end == -1 ? n : end + 2;
           if (rewrite) sb!.write(source.substring(i, stop));
           i = stop;
+          continue;
+        }
+        if (_isRegexLiteralStart(source, i)) {
+          final endIdx = _skipRegexLiteral(source, i);
+          if (rewrite) sb!.write(source.substring(i, endIdx));
+          i = endIdx;
           continue;
         }
       }
@@ -157,7 +163,10 @@ class AsyncJsRewriter {
         continue;
       }
       if (c == quote) return i + 1;
-      if (quote == _backtick && c == _dollar && i + 1 < n && source.codeUnitAt(i + 1) == _lbrace) {
+      if (quote == _backtick &&
+          c == _dollar &&
+          i + 1 < n &&
+          source.codeUnitAt(i + 1) == _lbrace) {
         i = _skipTemplateInterp(source, i + 2);
         continue;
       }
@@ -197,6 +206,10 @@ class AsyncJsRewriter {
         if (next == _star) {
           final end = source.indexOf('*/', i + 2);
           i = end == -1 ? n : end + 2;
+          continue;
+        }
+        if (_isRegexLiteralStart(source, i)) {
+          i = _skipRegexLiteral(source, i);
           continue;
         }
       }
@@ -242,6 +255,18 @@ class AsyncJsRewriter {
     // 括號配對 — 找出對應的 ')' 位置
     final closeIdx = _matchParen(source, i);
     if (closeIdx == null) return null;
+
+    if (owner == 'java' && method == 'get') {
+      final argCount = _countTopLevelArgs(source, i, closeIdx);
+      final chainedResponse = _looksLikeJavaGetResponseChain(
+        source,
+        closeIdx + 1,
+      );
+      if (argCount <= 1 && !chainedResponse) {
+        return null;
+      }
+    }
+
     return closeIdx + 1;
   }
 
@@ -292,11 +317,154 @@ class AsyncJsRewriter {
     return null;
   }
 
+  static int _countTopLevelArgs(String source, int openIdx, int closeIdx) {
+    var count = 0;
+    var hasToken = false;
+    var depthParen = 0;
+    var depthBracket = 0;
+    var depthBrace = 0;
+    var i = openIdx + 1;
+
+    while (i < closeIdx) {
+      final c = source.codeUnitAt(i);
+      if (c == _dquote || c == _squote || c == _backtick) {
+        hasToken = true;
+        i = _skipString(source, i, c);
+        continue;
+      }
+      if (c == _slash && i + 1 < closeIdx) {
+        final next = source.codeUnitAt(i + 1);
+        if (next == _slash) {
+          final end = source.indexOf('\n', i);
+          i = end == -1 || end > closeIdx ? closeIdx : end;
+          continue;
+        }
+        if (next == _star) {
+          final end = source.indexOf('*/', i + 2);
+          i = end == -1 || end + 2 > closeIdx ? closeIdx : end + 2;
+          continue;
+        }
+        if (_isRegexLiteralStart(source, i)) {
+          i = _skipRegexLiteral(source, i);
+          continue;
+        }
+      }
+      if (!_isWhitespace(c)) {
+        hasToken = true;
+      }
+      if (c == _lparen) {
+        depthParen++;
+      } else if (c == _rparen) {
+        depthParen--;
+      } else if (c == _lbracket) {
+        depthBracket++;
+      } else if (c == _rbracket) {
+        depthBracket--;
+      } else if (c == _lbrace) {
+        depthBrace++;
+      } else if (c == _rbrace) {
+        depthBrace--;
+      } else if (c == _comma &&
+          depthParen == 0 &&
+          depthBracket == 0 &&
+          depthBrace == 0) {
+        count++;
+      }
+      i++;
+    }
+
+    if (!hasToken) return 0;
+    return count + 1;
+  }
+
+  static bool _looksLikeJavaGetResponseChain(String source, int startIdx) {
+    final n = source.length;
+    var i = startIdx;
+    while (i < n && _isWhitespace(source.codeUnitAt(i))) {
+      i++;
+    }
+    if (i >= n || source.codeUnitAt(i) != _dot) return false;
+    i++;
+    final methodStart = i;
+    while (i < n && _isIdentChar(source.codeUnitAt(i))) {
+      i++;
+    }
+    if (i == methodStart) return false;
+    final member = source.substring(methodStart, i);
+    return _javaGetResponseMembers.contains(member);
+  }
+
   /// [idx] 處的字元能否作為新 identifier 的起始（即前一個字元不是 identifier 字元）
   static bool _isIdentifierStart(String source, int idx) {
     if (idx == 0) return true;
     final prev = source.codeUnitAt(idx - 1);
     return !_isIdentChar(prev);
+  }
+
+  static bool _isRegexLiteralStart(String source, int slashIdx) {
+    var i = slashIdx - 1;
+    while (i >= 0 && _isWhitespace(source.codeUnitAt(i))) {
+      i--;
+    }
+    if (i < 0) return true;
+    final prev = source.codeUnitAt(i);
+    return prev == _lparen ||
+        prev == _lbrace ||
+        prev == _lbracket ||
+        prev == _equal ||
+        prev == _colon ||
+        prev == _comma ||
+        prev == _semicolon ||
+        prev == _bang ||
+        prev == _question ||
+        prev == _plus ||
+        prev == _minus ||
+        prev == _star ||
+        prev == _percent ||
+        prev == _ampersand ||
+        prev == _pipe ||
+        prev == _caret ||
+        prev == _tilde ||
+        prev == _lt ||
+        prev == _gt;
+  }
+
+  static int _skipRegexLiteral(String source, int startIdx) {
+    final n = source.length;
+    var i = startIdx + 1;
+    var inCharClass = false;
+    while (i < n) {
+      final c = source.codeUnitAt(i);
+      if (c == _backslash) {
+        i += 2;
+        continue;
+      }
+      if (c == _lbracket) {
+        inCharClass = true;
+        i++;
+        continue;
+      }
+      if (c == _rbracket && inCharClass) {
+        inCharClass = false;
+        i++;
+        continue;
+      }
+      if (c == _slash && !inCharClass) {
+        i++;
+        while (i < n) {
+          final flag = source.codeUnitAt(i);
+          if ((flag >= _charLowerA && flag <= _charLowerZ) ||
+              (flag >= _charUpperA && flag <= _charUpperZ)) {
+            i++;
+            continue;
+          }
+          break;
+        }
+        return i;
+      }
+      i++;
+    }
+    return n;
   }
 
   /// 檢查已寫入 sb 的尾端是否以 `await ` 結尾（word boundary）
@@ -338,7 +506,24 @@ class AsyncJsRewriter {
   static const int _rbrace = 0x7D;
   static const int _lparen = 0x28;
   static const int _rparen = 0x29;
+  static const int _lbracket = 0x5B;
+  static const int _rbracket = 0x5D;
+  static const int _comma = 0x2C;
   static const int _dot = 0x2E;
+  static const int _equal = 0x3D;
+  static const int _colon = 0x3A;
+  static const int _semicolon = 0x3B;
+  static const int _bang = 0x21;
+  static const int _question = 0x3F;
+  static const int _plus = 0x2B;
+  static const int _minus = 0x2D;
+  static const int _percent = 0x25;
+  static const int _ampersand = 0x26;
+  static const int _pipe = 0x7C;
+  static const int _caret = 0x5E;
+  static const int _tilde = 0x7E;
+  static const int _lt = 0x3C;
+  static const int _gt = 0x3E;
   static const int _space = 0x20;
   static const int _tab = 0x09;
   static const int _lf = 0x0A;
@@ -350,6 +535,13 @@ class AsyncJsRewriter {
   static const int _charUpperZ = 0x5A;
   static const int _charLowerA = 0x61;
   static const int _charLowerZ = 0x7A;
+
+  static const Set<String> _javaGetResponseMembers = {
+    'body',
+    'url',
+    'statusCode',
+    'headers',
+  };
 }
 
 class _ScanResult {

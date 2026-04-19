@@ -94,22 +94,24 @@ class BookListParser {
       if (bookUrl.isEmpty) bookUrl = baseUrl;
       searchBook.bookUrl = bookUrl;
       searchBook.author = BookHelp.formatBookAuthor(
-        await itemRule.getStringAsync(listRule.author ?? ''),
+        await _safeString(() => itemRule.getStringAsync(listRule.author ?? '')),
       );
-      searchBook.kind =
-          (await itemRule.getStringListAsync(listRule.kind ?? '')).join(',');
-      searchBook.coverUrl = await itemRule.getStringAsync(
-        listRule.coverUrl ?? '',
-        isUrl: true,
+      searchBook.kind = (await _safeStringList(
+        () => itemRule.getStringListAsync(listRule.kind ?? ''),
+      )).join(',');
+      searchBook.coverUrl = await _safeString(
+        () => itemRule.getStringAsync(listRule.coverUrl ?? '', isUrl: true),
       );
       searchBook.intro = HtmlFormatter.format(
-        await itemRule.getStringAsync(listRule.intro ?? ''),
+        await _safeString(() => itemRule.getStringAsync(listRule.intro ?? '')),
       );
-      searchBook.latestChapterTitle = await itemRule.getStringAsync(
-        listRule.lastChapter ?? '',
+      searchBook.latestChapterTitle = await _safeString(
+        () => itemRule.getStringAsync(listRule.lastChapter ?? ''),
       );
       searchBook.wordCount = StringUtils.wordCountFormat(
-        await itemRule.getStringAsync(listRule.wordCount ?? ''),
+        await _safeString(
+          () => itemRule.getStringAsync(listRule.wordCount ?? ''),
+        ),
       );
 
       // 去重：同一個 (name, author, bookUrl) 只保留首次出現
@@ -146,5 +148,23 @@ class BookListParser {
       return book.toSearchBook();
     }
     return null;
+  }
+
+  static Future<String> _safeString(Future<String> Function() reader) async {
+    try {
+      return await reader();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  static Future<List<String>> _safeStringList(
+    Future<List<String>> Function() reader,
+  ) async {
+    try {
+      return await reader();
+    } catch (_) {
+      return const <String>[];
+    }
   }
 }

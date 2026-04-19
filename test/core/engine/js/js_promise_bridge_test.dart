@@ -45,17 +45,24 @@ void main() {
         ext = JsExtensions(runtime!);
         ext!.setupPromiseBridge();
 
-        // 安裝測試用 java.ajax shim (僅 ajax, 無其他方法)
-        runtime!.evaluate(
-          'var java = { ajax: function(u) { return __asyncCall("ajax", u); } };',
-        );
+        // 安裝測試用 java shim。
+        runtime!.evaluate('''
+            var java = {
+              ajax: function(u) { return __asyncCall("ajax", u); },
+              post: function(u, body, headers) {
+                return __asyncCall("ajax", [u, body || "", headers || null]);
+              },
+              log: function(msg) { return msg; }
+            };
+          ''');
 
         // 測試專用 ajax handler — 根據表控制 resolve / reject / delay
         runtime!.onMessage('ajax', (dynamic args) {
           final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
-          final url = parsed.payload is List
-              ? (parsed.payload as List)[0].toString()
-              : parsed.payload.toString();
+          final url =
+              parsed.payload is List
+                  ? (parsed.payload as List)[0].toString()
+                  : parsed.payload.toString();
           callCount++;
           callOrder.add(url);
           final delay = delays[url] ?? Duration.zero;
@@ -188,28 +195,31 @@ void main() {
       );
     });
 
-    test('out-of-order async resolution still returns correct values', () async {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      responses['slow'] = 'SLOW';
-      responses['fast'] = 'FAST';
-      delays['slow'] = const Duration(milliseconds: 50);
-      delays['fast'] = const Duration(milliseconds: 5);
+    test(
+      'out-of-order async resolution still returns correct values',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        responses['slow'] = 'SLOW';
+        responses['fast'] = 'FAST';
+        delays['slow'] = const Duration(milliseconds: 50);
+        delays['fast'] = const Duration(milliseconds: 5);
 
-      // 順序 await — slow 先叫但 handler 回應較晚
-      final result = await runRule('''
+        // 順序 await — slow 先叫但 handler 回應較晚
+        final result = await runRule('''
         var s = java.ajax("slow");
         var f = java.ajax("fast");
         s + "+" + f
       ''');
 
-      expect(result, 'SLOW+FAST');
-      expect(callCount, 2);
-      // JS 依然以程式碼順序叫 handler，即使 Dart 側 resolve 順序相反
-      expect(callOrder, ['slow', 'fast']);
-    });
+        expect(result, 'SLOW+FAST');
+        expect(callCount, 2);
+        // JS 依然以程式碼順序叫 handler，即使 Dart 側 resolve 順序相反
+        expect(callOrder, ['slow', 'fast']);
+      },
+    );
 
     test('pure-sync rule JS still works through async wrapper', () async {
       if (runtime == null) {
@@ -275,29 +285,30 @@ void main() {
       );
     });
 
-    test('concurrent rules on same runtime each complete independently',
-        () async {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      responses['http://x'] = 'X_VAL';
-      responses['http://y'] = 'Y_VAL';
-      delays['http://x'] = const Duration(milliseconds: 20);
-      delays['http://y'] = const Duration(milliseconds: 5);
+    test(
+      'concurrent rules on same runtime each complete independently',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        responses['http://x'] = 'X_VAL';
+        responses['http://y'] = 'Y_VAL';
+        delays['http://x'] = const Duration(milliseconds: 20);
+        delays['http://y'] = const Duration(milliseconds: 5);
 
-      // 在同一個 runtime 上同時 fire 兩個 rule
-      final r1 = runRule('java.ajax("http://x")');
-      final r2 = runRule('java.ajax("http://y")');
-      final results = await Future.wait([r1, r2]);
+        // 在同一個 runtime 上同時 fire 兩個 rule
+        final r1 = runRule('java.ajax("http://x")');
+        final r2 = runRule('java.ajax("http://y")');
+        final results = await Future.wait([r1, r2]);
 
-      expect(results[0], 'X_VAL');
-      expect(results[1], 'Y_VAL');
-      expect(callCount, 2);
-    });
+        expect(results[0], 'X_VAL');
+        expect(results[1], 'Y_VAL');
+        expect(callCount, 2);
+      },
+    );
 
-    test('async rewriter correctly injects await for var assignment',
-        () async {
+    test('async rewriter correctly injects await for var assignment', () async {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
         return;
@@ -313,5 +324,76 @@ void main() {
 
       expect(result, 'got=XX');
     });
+
+    test('final if statement preserves branch completion value', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+
+      final result = await runRule('''
+        var enabled = true;
+        if (enabled) {
+          "branch:yes";
+        } else {
+          "branch:no";
+        }
+      ''');
+
+      expect(result, 'branch:yes');
+    });
+
+    test('final if statement can resolve awaited branch results', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      responses['http://branch'] = 'BRANCH_OK';
+
+      final result = await runRule('''
+        if (1 < 2) {
+          java.ajax("http://branch");
+        } else {
+          "MISS";
+        }
+      ''');
+
+      expect(result, 'BRANCH_OK');
+    });
+
+    test(
+      'realistic regex + try content scripts preserve logged completion',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        responses['https://api.example.com/content'] =
+            '{"content":"chapter body"}';
+
+        final result = await runRule(r'''
+        var regex = /\{"url"\s*:\s*"[^"]+"\}/;
+        var match = result.match(regex);
+        if (match) {
+          try {
+            var jsonObj = JSON.parse(match[0]);
+            var response = java.post(jsonObj.url, '', {});
+            if (response) {
+              var content = JSON.parse(response)["content"];
+              java.log(content);
+            } else {
+              java.log("EMPTY");
+            }
+          } catch (e) {
+            java.log("ERR:" + e.message);
+          }
+        } else {
+          java.log("MISS");
+        }
+      ''');
+
+        expect(result, 'chapter body');
+      },
+    );
   });
 }

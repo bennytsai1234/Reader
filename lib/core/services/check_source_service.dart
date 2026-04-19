@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
-import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/source/book_source_logic.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
@@ -12,12 +12,9 @@ import 'package:inkpage_reader/core/di/injection.dart';
 /// CheckSourceService - 書源校驗服務
 /// (原 Android service/CheckSourceService.kt)
 class CheckSourceService extends ChangeNotifier {
-  static final CheckSourceService _instance = CheckSourceService._internal();
-  factory CheckSourceService() => _instance;
-
-  final BookSourceService _service = BookSourceService();
-  final BookSourceDao _sourceDao = getIt<BookSourceDao>();
-  final AppEventBus _eventBus = AppEventBus();
+  final BookSourceService _service;
+  final BookSourceDao _sourceDao;
+  final AppEventBus _eventBus;
 
   AppEventBus get eventBus => _eventBus;
 
@@ -26,7 +23,13 @@ class CheckSourceService extends ChangeNotifier {
   int _currentCount = 0;
   String _statusMsg = '';
 
-  CheckSourceService._internal();
+  CheckSourceService({
+    BookSourceService? service,
+    BookSourceDao? sourceDao,
+    AppEventBus? eventBus,
+  }) : _service = service ?? BookSourceService(),
+       _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
+       _eventBus = eventBus ?? AppEventBus();
 
   bool get isChecking => _isChecking;
   int get totalCount => _totalCount;
@@ -41,7 +44,7 @@ class CheckSourceService extends ChangeNotifier {
   /// 開始校驗選中的書源 (原 Android check 邏輯)
   Future<void> check(List<String> urls) async {
     if (_isChecking) return;
-    
+
     _isChecking = true;
     _totalCount = urls.length;
     _currentCount = 0;
@@ -101,26 +104,36 @@ class CheckSourceService extends ChangeNotifier {
       // 2. 測試搜尋 (Search Check)
       final searchWord = source.getCheckKeyword('我的');
       _postLog('  ◇ 正在測試搜尋: $searchWord');
-      final searchResults = await _service.searchBooks(source, searchWord).timeout(const Duration(seconds: 15));
-      
+      final searchResults = await _service
+          .searchBooks(source, searchWord)
+          .timeout(const Duration(seconds: 15));
+
       if (searchResults.isEmpty) {
         _postLog('  └ 搜尋結果為空');
         source.addGroup('搜尋失效');
         source.addErrorComment('搜尋結果為空 ($searchWord)');
       } else {
         _postLog('  └ 搜尋成功，找到 ${searchResults.length} 本書');
-        // 3. 測試詳情與目錄 (Info & TOC Check)
-        final firstBook = searchResults.first;
-        _postLog('  ◇ 正在測試獲取詳情與目錄: ${firstBook.name}');
-        
-        final book = Book(
-          bookUrl: firstBook.bookUrl,
+        // 3. 先測試詳情頁，補齊 tocUrl 等資訊，再抓目錄
+        var book = searchResults.first.toBook().copyWith(
           origin: source.bookSourceUrl,
-          name: firstBook.name,
+          originName: source.bookSourceName,
+          originOrder: source.customOrder,
         );
-        
-        final chapters = await _service.getChapterList(source, book).timeout(const Duration(seconds: 10));
-        
+
+        _postLog('  ◇ 正在測試獲取詳情: ${book.name}');
+        book = await _service
+            .getBookInfo(source, book)
+            .timeout(const Duration(seconds: 10));
+        _postLog(
+          '  └ 詳情抓取成功，目錄 URL: ${book.tocUrl.isNotEmpty ? book.tocUrl : book.bookUrl}',
+        );
+
+        _postLog('  ◇ 正在測試獲取目錄: ${book.name}');
+        final chapters = await _service
+            .getChapterList(source, book)
+            .timeout(const Duration(seconds: 10));
+
         if (chapters.isEmpty) {
           _postLog('  └ 目錄抓取失敗或為空');
           source.addGroup('目錄失效');
@@ -128,11 +141,22 @@ class CheckSourceService extends ChangeNotifier {
         } else {
           _postLog('  └ 目錄抓取成功，共 ${chapters.length} 章');
           // 4. 測試正文 (Content Check)
-          final firstChapter = chapters.firstWhere((c) => (c.title.length > 1), orElse: () => chapters.first);
+          final firstChapter = _pickReadableChapter(chapters);
+          final nextChapterUrl = _nextReadableChapterUrl(
+            chapters,
+            firstChapter,
+          );
           _postLog('  ◇ 正在測試獲取正文: ${firstChapter.title}');
-          
-          final content = await _service.getContent(source, book, firstChapter).timeout(const Duration(seconds: 10));
-          
+
+          final content = await _service
+              .getContent(
+                source,
+                book,
+                firstChapter,
+                nextChapterUrl: nextChapterUrl,
+              )
+              .timeout(const Duration(seconds: 10));
+
           if (content.isEmpty || content.length < 10) {
             _postLog('  └ 正文內容過短或為空');
             source.addGroup('正文失效');
@@ -146,8 +170,10 @@ class CheckSourceService extends ChangeNotifier {
       stopwatch.stop();
       source.respondTime = stopwatch.elapsedMilliseconds;
       source.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
-      _postLog('  ✓ [${source.bookSourceName}] 校驗成功 (耗時: ${source.respondTime}ms)');
-      
+      _postLog(
+        '  ✓ [${source.bookSourceName}] 校驗成功 (耗時: ${source.respondTime}ms)',
+      );
+
       // 更新書源狀態
       await _sourceDao.upsert(source);
     } on TimeoutException {
@@ -168,6 +194,27 @@ class CheckSourceService extends ChangeNotifier {
     _isChecking = false;
     notifyListeners();
   }
+
+  BookChapter _pickReadableChapter(List<BookChapter> chapters) {
+    return chapters.firstWhere(
+      (chapter) => !chapter.isVolume && chapter.title.trim().isNotEmpty,
+      orElse: () => chapters.first,
+    );
+  }
+
+  String? _nextReadableChapterUrl(
+    List<BookChapter> chapters,
+    BookChapter currentChapter,
+  ) {
+    final startIndex = chapters.indexOf(currentChapter);
+    if (startIndex < 0) return null;
+
+    for (var i = startIndex + 1; i < chapters.length; i++) {
+      final chapter = chapters[i];
+      if (!chapter.isVolume && chapter.url.isNotEmpty) {
+        return chapter.url;
+      }
+    }
+    return null;
+  }
 }
-
-

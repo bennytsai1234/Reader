@@ -5,13 +5,14 @@ import '../js/js_engine.dart';
 import 'package:inkpage_reader/core/services/cookie_store.dart';
 import 'package:inkpage_reader/core/services/cache_manager.dart';
 import 'package:inkpage_reader/core/services/http_client.dart';
+import 'package:inkpage_reader/core/models/base_source.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/utils/ttf_parser.dart';
 
 /// AnalyzeRule 的腳本執行與異步擴展 (原 Android AnalyzeRule.kt & JsExtensions.kt)
 extension AnalyzeRuleScript on AnalyzeRuleBase {
   dynamic evalJS(String jsStr, dynamic result) {
-    jsEngine ??= JsEngine(source: source);
+    jsEngine ??= JsEngine(source: source, ruleContext: this);
     if (AnalyzeRuleBase.scriptCache.containsKey(jsStr) && result == null) {
       return AnalyzeRuleBase.scriptCache[jsStr];
     }
@@ -26,7 +27,7 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
   /// 不做 scriptCache：async rule 的結果可能隨 HTTP 回應改變，quiety 快取容易
   /// 誤命中；同步 rule 仍由 [evalJS] 的 scriptCache 保留既有行為。
   Future<dynamic> evalJSAsync(String jsStr, dynamic result) async {
-    jsEngine ??= JsEngine(source: source);
+    jsEngine ??= JsEngine(source: source, ruleContext: this);
     final context = _buildJsContext(result);
     return jsEngine!.evaluateAsync(jsStr, context: context);
   }
@@ -37,6 +38,18 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
       sourceMap = source?.toJson();
     } catch (_) {
       sourceMap = source;
+    }
+    if (source is BaseSource) {
+      final baseSource = source as BaseSource;
+      final mergedSource = <String, dynamic>{};
+      if (sourceMap is Map) {
+        sourceMap.forEach((key, value) {
+          mergedSource[key.toString()] = value;
+        });
+      }
+      mergedSource.putIfAbsent('key', () => baseSource.getKey());
+      mergedSource.putIfAbsent('tag', () => baseSource.getTag());
+      sourceMap = mergedSource;
     }
     dynamic chapterMap;
     try {
@@ -105,7 +118,8 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
 
   /// 執行登入檢查 JS
   Future<void> checkLogin() async {
-    final js = source is BookSource ? (source as BookSource).loginCheckJs : null;
+    final js =
+        source is BookSource ? (source as BookSource).loginCheckJs : null;
     if (js != null && js.isNotEmpty) {
       log('⇒ 執行 loginCheckJs');
       evalJS(js, null);
@@ -114,13 +128,17 @@ extension AnalyzeRuleScript on AnalyzeRuleBase {
 
   /// 執行目錄預整理 JS
   Future<void> preUpdateToc() async {
-    final js = source is BookSource ? (source as BookSource).ruleToc?.preUpdateJs : null;
+    final js =
+        source is BookSource
+            ? (source as BookSource).ruleToc?.preUpdateJs
+            : null;
     if (js != null && js.isNotEmpty) {
       log('⇒ 執行 preUpdateJs');
       evalJS(js, null);
     }
   }
 
-  void dispose() { jsEngine?.dispose(); }
+  void dispose() {
+    jsEngine?.dispose();
+  }
 }
-

@@ -1,3 +1,4 @@
+import 'dart:io' show gzip;
 import 'dart:convert';
 import 'package:convert/convert.dart';
 import 'package:uuid/uuid.dart';
@@ -44,6 +45,12 @@ extension JsCryptoExtensions on JsExtensions {
           args is List && args.length > 1 ? args[1].toString() : 'UTF-8';
       return JsEncodeUtils.base64Decode(str, charset: charset);
     });
+    runtime.onMessage('_base64DecodeToBytes', (dynamic args) {
+      final payload = _decodeArgs(args);
+      final str =
+          payload is List ? payload.first.toString() : payload.toString();
+      return jsonEncode(JsEncodeUtils.base64DecodeToBytes(str).toList());
+    });
     runtime.onMessage(
       '_hexEncode',
       (dynamic args) => hex.encode(utf8.encode(args.toString())),
@@ -53,6 +60,25 @@ extension JsCryptoExtensions on JsExtensions {
       (dynamic args) => utf8.decode(hex.decode(args.toString())),
     );
     runtime.onMessage('_randomUUID', (dynamic args) => const Uuid().v4());
+    runtime.onMessage('_gunzipBytes', (dynamic args) {
+      final payload = _decodeArgs(args);
+      final bytesSource =
+          payload is List && payload.every((item) => item is num)
+              ? payload
+              : (payload is List ? payload.first : payload);
+      final bytes = List<int>.from(bytesSource as List);
+      return jsonEncode(gzip.decode(bytes));
+    });
+  }
+
+  dynamic _decodeArgs(dynamic args) {
+    if (args is String) {
+      try {
+        return jsonDecode(args);
+      } catch (_) {
+        return args;
+      }
+    }
+    return args;
   }
 }
-

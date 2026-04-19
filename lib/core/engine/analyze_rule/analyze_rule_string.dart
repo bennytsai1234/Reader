@@ -5,6 +5,7 @@ import '../parsers/analyze_by_regex.dart';
 import '../parsers/analyze_by_css.dart';
 import '../parsers/css/analyze_by_css_core.dart';
 import 'package:inkpage_reader/core/exception/app_exception.dart';
+import 'package:inkpage_reader/core/utils/network_utils.dart';
 
 /// AnalyzeRule 的字串解析擴展
 mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
@@ -45,23 +46,38 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                 tempResult = evalJS(rule, result);
                 break;
               case Mode.json:
-                tempResult =
-                    sourceRule.getAnalyzeByJSonPath(this, result).getString(rule);
+                tempResult = sourceRule
+                    .getAnalyzeByJSonPath(this, result)
+                    .getString(rule);
                 break;
               case Mode.xpath:
-                tempResult =
-                    sourceRule.getAnalyzeByXPath(this, result).getString(rule);
+                tempResult = sourceRule
+                    .getAnalyzeByXPath(this, result)
+                    .getString(rule);
                 break;
               case Mode.regex:
                 if (sourceRule.replaceRegex.isEmpty) {
                   tempResult = rule;
                 } else {
-                  tempResult = AnalyzeByRegex.getString(result.toString(), rule);
+                  tempResult = AnalyzeByRegex.getString(
+                    stringifyRuleResult(result),
+                    rule,
+                  );
                 }
                 break;
               default:
-                tempResult =
-                    sourceRule.getAnalyzeByJSoup(this, result).getString(rule);
+                tempResult = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getString(rule);
+                if ((tempResult == null || tempResult.toString().isEmpty) &&
+                    isJsonLikeRuleInput(result)) {
+                  final jsonRule = buildJsonFallbackRule(rule);
+                  if (jsonRule != null) {
+                    tempResult = sourceRule
+                        .getAnalyzeByJSonPath(this, result)
+                        .getString(jsonRule);
+                  }
+                }
             }
           } else {
             // rule 為空 + replaceRegex 非空 → 內容直通，交由 replaceRegex 處理
@@ -78,12 +94,13 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
           if (result != null && sourceRule.replaceRegex.isNotEmpty) {
             log('  ◇ 正則替換: ${sourceRule.replaceRegex}');
-            result = replaceRegexLogic(result.toString(), sourceRule);
+            result = replaceRegexLogic(stringifyRuleResult(result), sourceRule);
           }
 
-          final preview = result?.toString() ?? 'null';
+          final preview = result == null ? 'null' : stringifyRuleResult(result);
           log(
-              '  └ 字串預覽: ${preview.length > 500 ? preview.substring(0, 500) : preview}');
+            '  └ 字串預覽: ${preview.length > 500 ? preview.substring(0, 500) : preview}',
+          );
         } catch (e) {
           if (e is ParsingException) rethrow;
           throw ParsingException(
@@ -97,12 +114,15 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
       }
     }
 
-    var str = result?.toString() ?? '';
+    var str = result == null ? '' : stringifyRuleResult(result);
     if (unescape && str.contains('&')) {
       str = AnalyzeRuleBase.htmlUnescape.convert(str);
     }
     if (isUrl && str.isEmpty) {
       return baseUrl ?? '';
+    }
+    if (isUrl) {
+      return NetworkUtils.getAbsoluteURL(baseUrl, str);
     }
     return str;
   }
@@ -150,20 +170,33 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                     .getString(rule);
                 break;
               case Mode.xpath:
-                tempResult =
-                    sourceRule.getAnalyzeByXPath(this, result).getString(rule);
+                tempResult = sourceRule
+                    .getAnalyzeByXPath(this, result)
+                    .getString(rule);
                 break;
               case Mode.regex:
                 if (sourceRule.replaceRegex.isEmpty) {
                   tempResult = rule;
                 } else {
-                  tempResult =
-                      AnalyzeByRegex.getString(result.toString(), rule);
+                  tempResult = AnalyzeByRegex.getString(
+                    stringifyRuleResult(result),
+                    rule,
+                  );
                 }
                 break;
               default:
-                tempResult =
-                    sourceRule.getAnalyzeByJSoup(this, result).getString(rule);
+                tempResult = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getString(rule);
+                if ((tempResult == null || tempResult.toString().isEmpty) &&
+                    isJsonLikeRuleInput(result)) {
+                  final jsonRule = buildJsonFallbackRule(rule);
+                  if (jsonRule != null) {
+                    tempResult = sourceRule
+                        .getAnalyzeByJSonPath(this, result)
+                        .getString(jsonRule);
+                  }
+                }
             }
           } else {
             // rule 為空 + replaceRegex 非空 → 內容直通，交由 replaceRegex 處理
@@ -180,10 +213,10 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
           if (result != null && sourceRule.replaceRegex.isNotEmpty) {
             log('  ◇ 正則替換: ${sourceRule.replaceRegex}');
-            result = replaceRegexLogic(result.toString(), sourceRule);
+            result = replaceRegexLogic(stringifyRuleResult(result), sourceRule);
           }
 
-          final preview = result?.toString() ?? 'null';
+          final preview = result == null ? 'null' : stringifyRuleResult(result);
           log(
             '  └ 字串預覽: ${preview.length > 500 ? preview.substring(0, 500) : preview}',
           );
@@ -200,12 +233,15 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
       }
     }
 
-    var str = result?.toString() ?? '';
+    var str = result == null ? '' : stringifyRuleResult(result);
     if (unescape && str.contains('&')) {
       str = AnalyzeRuleBase.htmlUnescape.convert(str);
     }
     if (isUrl && str.isEmpty) {
       return baseUrl ?? '';
+    }
+    if (isUrl) {
+      return NetworkUtils.getAbsoluteURL(baseUrl, str);
     }
     return str;
   }
@@ -239,6 +275,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
           final rule = sourceRule.makeUpRule(result, this);
           log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
+          final currentInput = result;
 
           switch (sourceRule.mode) {
             case Mode.js:
@@ -250,26 +287,46 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                   .getStringList(rule);
               break;
             case Mode.xpath:
-              result =
-                  sourceRule.getAnalyzeByXPath(this, result).getStringList(rule);
+              result = sourceRule
+                  .getAnalyzeByXPath(this, result)
+                  .getStringList(rule);
               break;
             case Mode.regex:
               result = [rule];
               break;
             default:
               result = sourceRule
-                  .getAnalyzeByJSoup(this, result)
+                  .getAnalyzeByJSoup(this, currentInput)
                   .getStringList(rule);
+              if (result is List &&
+                  result.isEmpty &&
+                  isJsonLikeRuleInput(currentInput)) {
+                final jsonRule = buildJsonFallbackRule(rule);
+                if (jsonRule != null) {
+                  result = sourceRule
+                      .getAnalyzeByJSonPath(this, currentInput)
+                      .getStringList(jsonRule);
+                }
+              }
           }
 
           if (sourceRule.replaceRegex.isNotEmpty) {
             log('  ◇ 正則替換列表: ${sourceRule.replaceRegex}');
             if (result is List) {
-              result = result
-                  .map((e) => replaceRegexLogic(e.toString(), sourceRule))
-                  .toList();
+              result =
+                  result
+                      .map(
+                        (e) => replaceRegexLogic(
+                          stringifyRuleResult(e),
+                          sourceRule,
+                        ),
+                      )
+                      .toList();
             } else {
-              result = replaceRegexLogic(result?.toString() ?? '', sourceRule);
+              result = replaceRegexLogic(
+                result == null ? '' : stringifyRuleResult(result),
+                sourceRule,
+              );
             }
           }
         } catch (e) {
@@ -286,13 +343,17 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     }
 
     if (result is List) {
-      return result.map((e) => e.toString()).toSet().toList();
+      final values = result.map((e) => stringifyRuleResult(e));
+      return _normalizeStringList(values, isUrl: isUrl);
     }
     if (result == null) {
       return [];
     }
-    final str = result.toString();
-    return str.split('\n').where((s) => s.isNotEmpty).toSet().toList();
+    final str = stringifyRuleResult(result);
+    return _normalizeStringList(
+      str.split('\n').where((s) => s.isNotEmpty),
+      isUrl: isUrl,
+    );
   }
 
   /// Async 版本的 [getStringList]
@@ -323,6 +384,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
           final rule = sourceRule.makeUpRule(result, this);
           log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
+          final currentInput = result;
 
           switch (sourceRule.mode) {
             case Mode.js:
@@ -343,18 +405,37 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               break;
             default:
               result = sourceRule
-                  .getAnalyzeByJSoup(this, result)
+                  .getAnalyzeByJSoup(this, currentInput)
                   .getStringList(rule);
+              if (result is List &&
+                  result.isEmpty &&
+                  isJsonLikeRuleInput(currentInput)) {
+                final jsonRule = buildJsonFallbackRule(rule);
+                if (jsonRule != null) {
+                  result = sourceRule
+                      .getAnalyzeByJSonPath(this, currentInput)
+                      .getStringList(jsonRule);
+                }
+              }
           }
 
           if (sourceRule.replaceRegex.isNotEmpty) {
             log('  ◇ 正則替換列表: ${sourceRule.replaceRegex}');
             if (result is List) {
-              result = result
-                  .map((e) => replaceRegexLogic(e.toString(), sourceRule))
-                  .toList();
+              result =
+                  result
+                      .map(
+                        (e) => replaceRegexLogic(
+                          stringifyRuleResult(e),
+                          sourceRule,
+                        ),
+                      )
+                      .toList();
             } else {
-              result = replaceRegexLogic(result?.toString() ?? '', sourceRule);
+              result = replaceRegexLogic(
+                result == null ? '' : stringifyRuleResult(result),
+                sourceRule,
+              );
             }
           }
         } catch (e) {
@@ -371,10 +452,30 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     }
 
     if (result is List) {
-      return result.map((e) => e.toString()).toSet().toList();
+      final values = result.map((e) => stringifyRuleResult(e));
+      return _normalizeStringList(values, isUrl: isUrl);
     }
     if (result == null) return [];
-    final str = result.toString();
-    return str.split('\n').where((s) => s.isNotEmpty).toSet().toList();
+    final str = stringifyRuleResult(result);
+    return _normalizeStringList(
+      str.split('\n').where((s) => s.isNotEmpty),
+      isUrl: isUrl,
+    );
+  }
+
+  List<String> _normalizeStringList(
+    Iterable<String> values, {
+    required bool isUrl,
+  }) {
+    final normalized =
+        values
+            .where((value) => value.isNotEmpty)
+            .map(
+              (value) =>
+                  isUrl ? NetworkUtils.getAbsoluteURL(baseUrl, value) : value,
+            )
+            .toSet()
+            .toList();
+    return normalized;
   }
 }

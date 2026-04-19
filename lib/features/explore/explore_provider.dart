@@ -7,12 +7,19 @@ import 'package:inkpage_reader/core/models/source/explore_kind.dart';
 import 'package:inkpage_reader/core/engine/explore_url_parser.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 
+typedef ExploreKindsLoader =
+    Future<List<ExploreKind>> Function(
+      String? exploreUrl, {
+      BookSource? source,
+    });
+
 /// ExploreProvider - 發現主頁面的狀態管理
 /// (對標 Android ExploreFragment + ExploreAdapter + ExploreViewModel)
 ///
 /// 管理「書源列表 → 展開分類標籤」的互動。
 class ExploreProvider extends ChangeNotifier {
-  final BookSourceDao _sourceDao = getIt<BookSourceDao>();
+  final BookSourceDao _sourceDao;
+  final ExploreKindsLoader _kindsLoader;
 
   // --- 書源列表 ---
   List<BookSource> _allSources = [];
@@ -41,17 +48,18 @@ class ExploreProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isEmpty => _filteredSources.isEmpty;
 
-  ExploreProvider() {
+  ExploreProvider({BookSourceDao? sourceDao, ExploreKindsLoader? kindsLoader})
+    : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
+      _kindsLoader = kindsLoader ?? ExploreUrlParser.parseAsync {
     _loadSources();
   }
 
   /// 載入所有啟用探索的書源
   Future<void> _loadSources() async {
     final allEnabled = await _sourceDao.getEnabled();
-    _allSources = allEnabled
-        .where((s) => s.enabledExplore && s.hasExploreUrl)
-        .toList()
-      ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
+    _allSources =
+        allEnabled.where((s) => s.enabledExplore && s.hasExploreUrl).toList()
+          ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
 
     // 提取分組
     final groupSet = <String>{};
@@ -96,18 +104,22 @@ class ExploreProvider extends ChangeNotifier {
   void _applyFilter() {
     if (_selectedGroup != null) {
       // 按分組過濾 (對標 Android flowGroupExplore)
-      _filteredSources = _allSources.where((s) {
-        if (s.bookSourceGroup == null) return false;
-        final groups = s.bookSourceGroup!.split(RegExp(r'[,，]')).map((e) => e.trim());
-        return groups.contains(_selectedGroup);
-      }).toList();
+      _filteredSources =
+          _allSources.where((s) {
+            if (s.bookSourceGroup == null) return false;
+            final groups = s.bookSourceGroup!
+                .split(RegExp(r'[,，]'))
+                .map((e) => e.trim());
+            return groups.contains(_selectedGroup);
+          }).toList();
     } else if (_searchQuery.isNotEmpty) {
       // 按關鍵字過濾 (對標 Android flowExplore(key))
       final key = _searchQuery.toLowerCase();
-      _filteredSources = _allSources.where((s) {
-        return s.bookSourceName.toLowerCase().contains(key) ||
-            (s.bookSourceGroup?.toLowerCase().contains(key) ?? false);
-      }).toList();
+      _filteredSources =
+          _allSources.where((s) {
+            return s.bookSourceName.toLowerCase().contains(key) ||
+                (s.bookSourceGroup?.toLowerCase().contains(key) ?? false);
+          }).toList();
     } else {
       _filteredSources = List.from(_allSources);
     }
@@ -144,16 +156,20 @@ class ExploreProvider extends ChangeNotifier {
     }
 
     try {
-      final kinds = ExploreUrlParser.parse(source.exploreUrl, source: source);
+      final kinds = await _kindsLoader(source.exploreUrl, source: source);
       _kindsCache[cacheKey] = kinds;
       // 確認展開狀態仍然有效（用戶可能已經點擊了其他書源）
-      if (_expandedIndex >= 0 && _expandedIndex < _filteredSources.length &&
-          _filteredSources[_expandedIndex].bookSourceUrl == source.bookSourceUrl) {
+      if (_expandedIndex >= 0 &&
+          _expandedIndex < _filteredSources.length &&
+          _filteredSources[_expandedIndex].bookSourceUrl ==
+              source.bookSourceUrl) {
         _expandedKinds = kinds;
       }
     } catch (e) {
       AppLog.e('載入探索分類失敗', error: e);
-      _expandedKinds = [ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString())];
+      _expandedKinds = [
+        ExploreKind(title: 'ERROR:${e.toString()}', url: e.toString()),
+      ];
     } finally {
       _isLoadingKinds = false;
       notifyListeners();
@@ -163,8 +179,10 @@ class ExploreProvider extends ChangeNotifier {
   /// 刷新分類快取 (對標 Android menu_refresh / clearExploreKindsCache)
   Future<void> refreshKindsCache(BookSource source) async {
     _kindsCache.remove(source.bookSourceUrl);
-    if (_expandedIndex >= 0 && _expandedIndex < _filteredSources.length &&
-        _filteredSources[_expandedIndex].bookSourceUrl == source.bookSourceUrl) {
+    if (_expandedIndex >= 0 &&
+        _expandedIndex < _filteredSources.length &&
+        _filteredSources[_expandedIndex].bookSourceUrl ==
+            source.bookSourceUrl) {
       _isLoadingKinds = true;
       _expandedKinds = [];
       notifyListeners();
@@ -174,7 +192,12 @@ class ExploreProvider extends ChangeNotifier {
 
   /// 置頂書源 (對標 Android ExploreViewModel.topSource)
   Future<void> topSource(BookSource source) async {
-    final minOrder = _allSources.isEmpty ? 0 : _allSources.map((s) => s.customOrder).reduce((a, b) => a < b ? a : b);
+    final minOrder =
+        _allSources.isEmpty
+            ? 0
+            : _allSources
+                .map((s) => s.customOrder)
+                .reduce((a, b) => a < b ? a : b);
     source.customOrder = minOrder - 1;
     await _sourceDao.upsert(source);
     await _loadSources();

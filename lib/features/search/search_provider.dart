@@ -6,6 +6,7 @@ import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/models/search_keyword.dart';
+import 'package:inkpage_reader/core/services/bookshelf_state_tracker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models/search_scope.dart';
 import 'search_model.dart';
@@ -18,6 +19,7 @@ import 'search_model.dart';
 class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   final BookSourceDao _sourceDao = getIt<BookSourceDao>();
   final SearchKeywordDao _keywordDao = getIt<SearchKeywordDao>();
+  final BookshelfStateTracker _bookshelfTracker;
 
   late final SearchModel _searchModel;
   late SearchScope _searchScope;
@@ -44,7 +46,10 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   bool get isSearching => _isSearching;
   String get currentSource => _currentSource;
   String get lastSearchKey => _lastSearchKey;
-  double get progress => _totalSources == 0 ? 0 : (_completedSources / _totalSources).clamp(0.0, 1.0);
+  double get progress =>
+      _totalSources == 0
+          ? 0
+          : (_completedSources / _totalSources).clamp(0.0, 1.0);
   int get failedSources => _failedSources;
   int get totalSources => _totalSources;
   bool get precisionSearch => _precisionSearch;
@@ -52,7 +57,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   SearchScope get searchScope => _searchScope;
   bool get scopeLoaded => _scopeLoaded;
 
-  SearchProvider() {
+  SearchProvider({BookshelfStateTracker? bookshelfTracker})
+    : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker() {
     _searchModel = SearchModel(callback: this);
     _searchScope = SearchScope();
     _init();
@@ -61,10 +67,14 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   Future<void> _init() async {
     _searchScope = await SearchScope.load();
     _scopeLoaded = true;
+    await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();
     await _loadPrecisionPreference();
     await loadHistory();
   }
+
+  bool isInBookshelf(SearchBook book) =>
+      _bookshelfTracker.containsSearchBook(book);
 
   // ═══════════════════════════════════════════
   // 搜尋範圍管理
@@ -218,6 +228,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void dispose() {
+    _bookshelfTracker.dispose();
     _searchModel.dispose();
     super.dispose();
   }

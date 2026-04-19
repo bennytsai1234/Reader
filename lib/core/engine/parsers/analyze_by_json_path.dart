@@ -47,7 +47,10 @@ class AnalyzeByJsonPath {
     if (rules.length == 1) {
       ruleAnalyzer.reSetPos();
       // 替換所有 {$.rule...}
-      final result = ruleAnalyzer.innerRule(r'{$.', fr: (it) => getString(it.startsWith('\$') ? it : '\$.$it'));
+      final result = ruleAnalyzer.innerRule(
+        r'{$.',
+        fr: (it) => getString(it.startsWith('\$') ? it : '\$.$it'),
+      );
 
       // 如果替換後結果與原規則相同，說明沒有嵌套規則，或者是純 JsonPath 規則
       if (result == rule) {
@@ -93,13 +96,25 @@ class AnalyzeByJsonPath {
 
     if (rules.length == 1) {
       ruleAnalyzer.reSetPos();
-      final ruleStr = ruleAnalyzer.innerRule(r'{$.', fr: (it) => getString(it.startsWith('\$') ? it : '\$.$it'));
-      
+      final ruleStr = ruleAnalyzer.innerRule(
+        r'{$.',
+        fr: (it) => getString(it.startsWith('\$') ? it : '\$.$it'),
+      );
+
       if (ruleStr == rule) {
         try {
           final path = JsonPath(rule);
           final matches = path.read(_jsonData);
-          return matches.map((m) => m.value).toList();
+          final values = <dynamic>[];
+          for (final match in matches) {
+            final value = match.value;
+            if (value is Iterable && value is! Map && value is! String) {
+              values.addAll(value);
+            } else {
+              values.add(value);
+            }
+          }
+          return values;
         } catch (e) {
           return [];
         }
@@ -155,4 +170,3 @@ class AnalyzeByJsonPath {
     return list.map((e) => e.toString()).toList();
   }
 }
-

@@ -22,30 +22,112 @@ import '../js_extensions_base.dart';
 extension JsJavaObject on JsExtensionsBase {
   void injectJavaObjectJs() {
     runtime.evaluate(r'''
+      function buildHttpResponse(res) {
+        function normalizeLocationValue(value) {
+          var normalized = String(value == null ? '' : value);
+          if (!normalized) return '';
+          if (normalized.indexOf('?') !== -1 && !/[?&]$/.test(normalized)) {
+            return normalized + '&';
+          }
+          return normalized;
+        }
+        function getHeader(name) {
+          if (!res || !name) return '';
+          var target = String(name).toLowerCase();
+          if (target === 'location' && Array.isArray(res.redirects) && res.redirects.length > 0) {
+            var lastRedirect = res.redirects[res.redirects.length - 1];
+            if (lastRedirect != null) {
+              var redirectValue = String(lastRedirect);
+              if (/^https?:\/\//i.test(redirectValue) && res.requestUrl) {
+                try {
+                  function splitUrl(rawUrl) {
+                    var match = String(rawUrl).match(/^(https?:\/\/[^\/]+)(\/[^?#]*)?(\?[^#]*)?/i);
+                    if (!match) return null;
+                    return {
+                      origin: match[1],
+                      path: match[2] || '/',
+                      query: match[3] || ''
+                    };
+                  }
+                  var requestUrl = splitUrl(res.requestUrl);
+                  var redirectUrl = splitUrl(redirectValue);
+                  if (requestUrl && redirectUrl && requestUrl.origin === redirectUrl.origin) {
+                    var requestDir = requestUrl.path.replace(/[^/]*$/, '');
+                    var relativePath = redirectUrl.path.indexOf(requestDir) === 0
+                      ? redirectUrl.path.substring(requestDir.length)
+                      : redirectUrl.path.replace(/^\//, '');
+                    return normalizeLocationValue(relativePath + (redirectUrl.query || ''));
+                  }
+                } catch (e) {}
+              }
+              return normalizeLocationValue(redirectValue);
+            }
+          }
+          if (!res.headers) return '';
+          for (var key in res.headers) {
+            if (!Object.prototype.hasOwnProperty.call(res.headers, key)) continue;
+            if (String(key).toLowerCase() !== target) continue;
+            var value = res.headers[key];
+            if (Array.isArray(value)) {
+              return value.length > 0
+                ? (target === 'location'
+                    ? normalizeLocationValue(value[0])
+                    : String(value[0]))
+                : '';
+            }
+            if (value == null) return '';
+            return target === 'location'
+              ? normalizeLocationValue(value)
+              : String(value);
+          }
+          if (target === 'location' && res.url && res.requestUrl && res.url !== res.requestUrl) {
+            try {
+              function splitUrl(rawUrl) {
+                var match = String(rawUrl).match(/^(https?:\/\/[^\/]+)(\/[^?#]*)?(\?[^#]*)?/i);
+                if (!match) return null;
+                return {
+                  origin: match[1],
+                  path: match[2] || '/',
+                  query: match[3] || ''
+                };
+              }
+              var requestUrl = splitUrl(res.requestUrl);
+              var finalUrl = splitUrl(res.url);
+              if (requestUrl && finalUrl && requestUrl.origin === finalUrl.origin) {
+                var requestDir = requestUrl.path.replace(/[^/]*$/, '');
+                var finalPath = finalUrl.path;
+                var relativePath = finalPath.indexOf(requestDir) === 0
+                  ? finalPath.substring(requestDir.length)
+                  : finalPath.replace(/^\//, '');
+                var query = finalUrl.query || '';
+                return normalizeLocationValue(relativePath + query);
+              }
+            } catch (e) {}
+          }
+          return '';
+        }
+        return {
+          body: function() { return res.body; },
+          url: function() { return res.url; },
+          statusCode: function() { return res.code; },
+          headers: function() { return res.headers; },
+          header: function(name) { return getHeader(name); }
+        };
+      }
+
       var java = {
         // ─── async: HTTP ─────────────────────────────────────────
         ajax: function(url) { return __asyncCall('ajax', url); },
         ajaxAll: function(urlList) { return __asyncCall('ajaxAll', urlList); },
         connect: function(url) { return __asyncCall('connect', url); },
         get: function(url, headers) {
-          return __asyncCall('get', [url, headers || {}]).then(function(res) {
-            return {
-              body: function() { return res.body; },
-              url: function() { return res.url; },
-              statusCode: function() { return res.code; },
-              headers: function() { return res.headers; }
-            };
-          });
+          if (arguments.length <= 1) {
+            return sendMessage('scopeGet', JSON.stringify(url));
+          }
+          return __asyncCall('get', [url, headers || {}]).then(buildHttpResponse);
         },
         post: function(url, body, headers) {
-          return __asyncCall('post', [url, body, headers || {}]).then(function(res) {
-            return {
-              body: function() { return res.body; },
-              url: function() { return res.url; },
-              statusCode: function() { return res.code; },
-              headers: function() { return res.headers; }
-            };
-          });
+          return __asyncCall('post', [url, body, headers || {}]).then(buildHttpResponse);
         },
         head: function(url, headers) { return this.get(url, headers); },
 
@@ -74,6 +156,11 @@ extension JsJavaObject on JsExtensionsBase {
         md5Encode16: function(str) { return sendMessage('_md5Encode16', JSON.stringify(str)); },
         base64Encode: function(str) { return sendMessage('_base64Encode', JSON.stringify(str)); },
         base64Decode: function(str) { return sendMessage('_base64Decode', JSON.stringify(str)); },
+        base64DecodeToByteArray: function(str) {
+          return normalizeByteArray(
+            sendMessage('_base64DecodeToBytes', JSON.stringify(str))
+          );
+        },
         hexEncodeToString: function(str) { return sendMessage('_hexEncode', JSON.stringify(str)); },
         hexDecodeToString: function(hex) { return sendMessage('_hexDecode', JSON.stringify(hex)); },
         randomUUID: function() { return sendMessage('_randomUUID', ''); },
@@ -81,12 +168,34 @@ extension JsJavaObject on JsExtensionsBase {
         timeFormatUTC: function(time, format, sh) { return sendMessage('timeFormatUTC', JSON.stringify([time, format, sh])); },
         t2s: function(text) { return sendMessage('t2s', JSON.stringify(text)); },
         s2t: function(text) { return sendMessage('s2t', JSON.stringify(text)); },
-        strToBytes: function(str, charset) { return sendMessage('strToBytes', JSON.stringify([str, charset])); },
-        bytesToStr: function(bytes, charset) { return sendMessage('bytesToStr', JSON.stringify([bytes, charset])); },
+        strToBytes: function(str, charset) {
+          return normalizeByteArray(
+            sendMessage('strToBytes', JSON.stringify([str, charset]))
+          );
+        },
+        bytesToStr: function(bytes, charset) {
+          return sendMessage(
+            'bytesToStr',
+            JSON.stringify([normalizeByteArray(bytes), charset])
+          );
+        },
+        aesBase64DecodeToString: function(data, key, transformation, iv) {
+          return sendMessage('symmetricCrypto', JSON.stringify(['decrypt', transformation, key, iv, data, 'string']));
+        },
+        gzipToString: function(bytes, charset) {
+          var decoded = normalizeByteArray(
+            sendMessage('_gunzipBytes', JSON.stringify(bytes))
+          );
+          return this.bytesToStr(decoded, charset || 'UTF-8');
+        },
 
-        // ─── sync: side-effect only (fire-and-forget) ────────────
-        log: function(msg) { sendMessage('log', JSON.stringify(msg)); },
+        // ─── sync helpers ────────────────────────────────────────
+        // legado 的 java.log / java.put 會回傳原值，部分書源會把它們當成
+        // branch completion value 來傳回正文或中間結果。
+        log: function(msg) { return sendMessage('log', JSON.stringify(msg)); },
         toast: function(msg) { sendMessage('toast', JSON.stringify(msg)); },
+        put: function(key, value) { sendMessage('scopePut', JSON.stringify([key, value])); return value; },
+        getString: function(rule) { return sendMessage('ruleGetString', JSON.stringify(rule)); },
 
         // ─── sync: TTF query/replace (sync helpers) ──────────────
         queryTTF: function(data, useCache) {
@@ -114,7 +223,9 @@ extension JsJavaObject on JsExtensionsBase {
 
       var cache = {
         get: function(key) { return __asyncCall('getCache', key); },
+        getFile: function(key) { return __asyncCall('getCache', key); },
         put: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
+        putFile: function(key, value, time) { sendMessage('putCache', JSON.stringify([key, value, time || 0])); },
         delete: function(key) { sendMessage('deleteCache', JSON.stringify(key)); }
       };
 
@@ -128,6 +239,196 @@ extension JsJavaObject on JsExtensionsBase {
       };
       source.put = function(key, value) { sendMessage('sourcePut', JSON.stringify([key, value])); };
       source.get = function(key) { return __asyncCall('sourceGet', key); };
+
+      function importClass(clazz) { return clazz; }
+
+      function JavaImporter() {
+        this.importPackage = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            var pkg = arguments[i] || {};
+            for (var key in pkg) {
+              if (Object.prototype.hasOwnProperty.call(pkg, key)) {
+                this[key] = pkg[key];
+              }
+            }
+          }
+          return this;
+        };
+      }
+
+      function normalizeByteArray(value) {
+        if (value == null) return [];
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'string') {
+          try {
+            var parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) return parsed;
+          } catch (e) {}
+          return [];
+        }
+        if (typeof value === 'object') {
+          if (typeof value.length === 'number') {
+            var arr = [];
+            for (var i = 0; i < value.length; i++) {
+              arr.push(value[i]);
+            }
+            return arr;
+          }
+          var keys = Object.keys(value).filter(function(key) {
+            return /^[0-9]+$/.test(key);
+          }).sort(function(a, b) {
+            return Number(a) - Number(b);
+          });
+          if (keys.length > 0) {
+            return keys.map(function(key) {
+              return value[key];
+            });
+          }
+        }
+        return [];
+      }
+
+      function JavaString(value) {
+        this._value = globalThis.String(value == null ? '' : value);
+      }
+      JavaString.prototype.getBytes = function(charset) {
+        return java.strToBytes(this._value, charset || 'UTF-8');
+      };
+      JavaString.prototype.toString = function() {
+        return this._value;
+      };
+      JavaString.prototype.valueOf = function() {
+        return this._value;
+      };
+
+      function ByteArrayOutputStream() {
+        this._bytes = [];
+      }
+      ByteArrayOutputStream.prototype.write = function(bytes, offset, len) {
+        bytes = normalizeByteArray(bytes);
+        var start = offset || 0;
+        var end = len == null ? bytes.length : start + len;
+        for (var i = start; i < end && i < bytes.length; i++) {
+          this._bytes.push(bytes[i]);
+        }
+      };
+      ByteArrayOutputStream.prototype.toString = function(charset) {
+        return java.bytesToStr(this._bytes, charset || 'UTF-8');
+      };
+      ByteArrayOutputStream.prototype.close = function() {};
+
+      function ByteArrayInputStream(bytes) {
+        this._bytes = normalizeByteArray(bytes);
+      }
+      ByteArrayInputStream.prototype.close = function() {};
+
+      function GZIPInputStream(inputStream) {
+        this._bytes = normalizeByteArray(
+          sendMessage('_gunzipBytes', JSON.stringify(inputStream._bytes || []))
+        );
+        this._pos = 0;
+      }
+      GZIPInputStream.prototype.read = function(buffer) {
+        if (this._pos >= this._bytes.length) {
+          return -1;
+        }
+        var count = Math.min(buffer.length, this._bytes.length - this._pos);
+        for (var i = 0; i < count; i++) {
+          buffer[i] = this._bytes[this._pos++];
+        }
+        return count;
+      };
+      GZIPInputStream.prototype.close = function() {};
+
+      var Base64 = {
+        getDecoder: function() {
+          return {
+            decode: function(value) {
+              return normalizeByteArray(
+                sendMessage(
+                  '_base64DecodeToBytes',
+                  JSON.stringify(value == null ? '' : value.toString())
+                )
+              );
+            }
+          };
+        }
+      };
+
+      var Jsoup = {
+        parse: function(html) {
+          function createSelection(baseHtml, selector) {
+            return {
+              text: function() {
+                return sendMessage('htmlSelectText', JSON.stringify([baseHtml, selector]));
+              },
+              html: function() {
+                return sendMessage('htmlSelectHtml', JSON.stringify([baseHtml, selector]));
+              },
+              attr: function(name) {
+                return sendMessage('htmlSelectAttr', JSON.stringify([baseHtml, selector, name]));
+              },
+              first: function() {
+                return Jsoup.parse(
+                  sendMessage('htmlSelectHtml', JSON.stringify([baseHtml, selector + ':eq(0)']))
+                );
+              },
+              get: function(index) {
+                return Jsoup.parse(
+                  sendMessage('htmlSelectHtml', JSON.stringify([baseHtml, selector + ':eq(' + index + ')']))
+                );
+              },
+              toString: function() {
+                return this.html();
+              }
+            };
+          }
+          var doc = {
+            __html: String(html || ''),
+            select: function(selector) {
+              return createSelection(this.__html, selector);
+            },
+            text: function() {
+              return sendMessage('htmlSelectText', JSON.stringify([this.__html, 'html']));
+            },
+            attr: function(name) {
+              return sendMessage(
+                'htmlSelectAttr',
+                JSON.stringify([this.__html, 'body > *:eq(0)', name])
+              );
+            },
+            html: function() {
+              return this.__html;
+            },
+            toString: function() {
+              return this.__html;
+            }
+          };
+          return doc;
+        }
+      };
+
+      var org = org || {};
+      org.jsoup = org.jsoup || {};
+      org.jsoup.Jsoup = Jsoup;
+
+      var Packages = {
+        java: {
+          lang: {
+            String: function(value) { return new JavaString(value); }
+          },
+          io: {
+            ByteArrayOutputStream: ByteArrayOutputStream,
+            ByteArrayInputStream: ByteArrayInputStream
+          },
+          util: {
+            Base64: Base64,
+            zip: {
+              GZIPInputStream: GZIPInputStream
+            }
+          }
+        }
+      };
     ''');
   }
 }

@@ -8,19 +8,32 @@ extension JsStringExtensions on JsExtensions {
   void injectStringExtensions() {
     // 實作 java.strToBytes
     runtime.onMessage('strToBytes', (dynamic args) {
-      final str = args[0].toString();
-      final charset = args.length > 1 ? args[1].toString() : 'UTF-8';
+      final payload = _decodeArgs(args);
+      final str =
+          payload is List && payload.isNotEmpty
+              ? payload[0].toString()
+              : payload.toString();
+      final charset =
+          payload is List && payload.length > 1
+              ? payload[1].toString()
+              : 'UTF-8';
       if (charset.toUpperCase().contains('GBK') ||
           charset.toUpperCase().contains('GB2312')) {
-        return gbk.encode(str);
+        return jsonEncode(gbk.encode(str));
       }
-      return utf8.encode(str);
+      return jsonEncode(utf8.encode(str));
     });
 
     // 實作 java.bytesToStr
     runtime.onMessage('bytesToStr', (dynamic args) {
-      final bytes = List<int>.from(args[0]);
-      final charset = args.length > 1 ? args[1].toString() : 'UTF-8';
+      final payload = _decodeArgs(args);
+      final bytesSource =
+          payload is List && payload.isNotEmpty ? payload[0] : payload;
+      final bytes = List<int>.from(bytesSource as List);
+      final charset =
+          payload is List && payload.length > 1
+              ? payload[1].toString()
+              : 'UTF-8';
       if (charset.toUpperCase().contains('GBK') ||
           charset.toUpperCase().contains('GB2312')) {
         return gbk.decode(bytes);
@@ -39,8 +52,14 @@ extension JsStringExtensions on JsExtensions {
       return doc.body?.text ?? '';
     });
 
-    runtime.onMessage('t2s', (dynamic args) => ChineseUtils.t2s(args.toString()));
-    runtime.onMessage('s2t', (dynamic args) => ChineseUtils.s2t(args.toString()));
+    runtime.onMessage(
+      't2s',
+      (dynamic args) => ChineseUtils.t2s(args.toString()),
+    );
+    runtime.onMessage(
+      's2t',
+      (dynamic args) => ChineseUtils.s2t(args.toString()),
+    );
 
     // 實作 java.toNumChapter ((原 Android ))
     runtime.onMessage('_toNumChapter', (dynamic args) {
@@ -55,15 +74,53 @@ extension JsStringExtensions on JsExtensions {
     });
   }
 
+  dynamic _decodeArgs(dynamic args) {
+    if (args is String) {
+      try {
+        return jsonDecode(args);
+      } catch (_) {
+        return args;
+      }
+    }
+    return args;
+  }
+
   /// 中文數字轉整數 (深度還原 Android chineseNumToInt)
   int chineseNumToInt(String chNum) {
     final chnMap = {
-      '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-      '壹': 1, '貳': 2, '叁': 3, '肆': 4, '伍': 5, '陸': 6, '柒': 7, '捌': 8, '玖': 9, '拾': 10,
-      '百': 100, '佰': 100, '千': 1000, '仟': 1000, '萬': 10000, '億': 100000000,
+      '零': 0,
+      '〇': 0,
+      '一': 1,
+      '二': 2,
+      '两': 2,
+      '三': 3,
+      '四': 4,
+      '五': 5,
+      '六': 6,
+      '七': 7,
+      '八': 8,
+      '九': 9,
+      '十': 10,
+      '壹': 1,
+      '貳': 2,
+      '叁': 3,
+      '肆': 4,
+      '伍': 5,
+      '陸': 6,
+      '柒': 7,
+      '捌': 8,
+      '玖': 9,
+      '拾': 10,
+      '百': 100,
+      '佰': 100,
+      '千': 1000,
+      '仟': 1000,
+      '萬': 10000,
+      '億': 100000000,
     };
 
-    if (chNum.length > 1 && RegExp(r'^[〇零一二三四五六七八九壹貳叁肆伍陸柒捌玖]+$').hasMatch(chNum)) {
+    if (chNum.length > 1 &&
+        RegExp(r'^[〇零一二三四五六七八九壹貳叁肆伍陸柒捌玖]+$').hasMatch(chNum)) {
       var res = '';
       for (var i = 0; i < chNum.length; i++) {
         res += (chnMap[chNum[i]] ?? 0).toString();
@@ -82,7 +139,8 @@ extension JsStringExtensions on JsExtensions {
           result += tmp;
           result *= val;
           billion = billion * 100000000 + result;
-          result = 0; tmp = 0;
+          result = 0;
+          tmp = 0;
         } else if (val == 10000) {
           result += tmp;
           result *= val;
@@ -92,9 +150,12 @@ extension JsStringExtensions on JsExtensions {
           result += val * tmp;
           tmp = 0;
         } else {
-          tmp = (i >= 2 && i == chNum.length - 1 && (chnMap[chNum[i - 1]] ?? 0) > 10)
-              ? val * (chnMap[chNum[i - 1]] ?? 0) ~/ 10
-              : tmp * 10 + val;
+          tmp =
+              (i >= 2 &&
+                      i == chNum.length - 1 &&
+                      (chnMap[chNum[i - 1]] ?? 0) > 10)
+                  ? val * (chnMap[chNum[i - 1]] ?? 0) ~/ 10
+                  : tmp * 10 + val;
         }
       }
       return result + tmp + billion;
@@ -103,4 +164,3 @@ extension JsStringExtensions on JsExtensions {
     }
   }
 }
-

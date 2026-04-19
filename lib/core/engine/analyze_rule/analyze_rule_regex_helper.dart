@@ -17,7 +17,10 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
 
   List<SourceRule> splitSourceRule(String ruleStr) {
     final ruleList = <SourceRule>[];
-    final jsPattern = RegExp(r'@js:|(<js>([\w\W]*?)</js>)', caseSensitive: false);
+    final jsPattern = RegExp(
+      r'@js:|(<js>([\w\W]*?)</js>)',
+      caseSensitive: false,
+    );
     var start = 0;
     final matches = jsPattern.allMatches(ruleStr);
 
@@ -56,7 +59,9 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
       regex = AnalyzeRuleBase.regexCache[rule.replaceRegex];
     } else {
       try {
-        regex = RegExp(rule.replaceRegex, multiLine: true, dotAll: true);
+        // Align with Legado's `toRegex()` default behavior: no DOTALL and no
+        // multiline mode unless the rule itself encodes it.
+        regex = RegExp(rule.replaceRegex);
         AnalyzeRuleBase.regexCache[rule.replaceRegex] = regex;
       } catch (e) {
         return result;
@@ -66,6 +71,17 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
       return result;
     }
     if (rule.replaceFirst) {
+      final match = regex.firstMatch(result);
+      if (match == null) {
+        return rule.rule.isEmpty ? '' : result;
+      }
+      var replacement = rule.replacement;
+      for (var i = 0; i <= match.groupCount; i++) {
+        replacement = replacement.replaceAll('\$$i', match.group(i) ?? '');
+      }
+      if (rule.rule.isEmpty) {
+        return replacement;
+      }
       return result.replaceFirstMapped(regex, (match) {
         var res = rule.replacement;
         for (var i = 0; i <= match.groupCount; i++) {
@@ -84,4 +100,3 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
     }
   }
 }
-

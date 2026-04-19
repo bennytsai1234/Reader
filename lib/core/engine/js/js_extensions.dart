@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as html_parser;
 import 'js_extensions_base.dart';
 import 'extensions/js_network_extensions.dart';
 import 'extensions/js_crypto_extensions.dart';
@@ -20,7 +24,7 @@ export 'extensions/js_font_extensions.dart';
 /// JsExtensions - JS 橋接總控 (重構後)
 /// (原 Android help/JsExtensions.kt)
 class JsExtensions extends JsExtensionsBase {
-  JsExtensions(super.runtime, {super.source});
+  JsExtensions(super.runtime, {super.source, super.ruleContext});
 
   /// 注入完整 JS 環境
   ///
@@ -39,23 +43,73 @@ class JsExtensions extends JsExtensionsBase {
 
   void _injectCoreHandlers() {
     // ─── 純同步 (sharedScope / log / toast) ─────────────────────
-    runtime.onMessage('put', (args) {
-      if (args is List && args.length >= 2) {
-        JsExtensionsBase.sharedScope[args[0].toString()] = args[1];
+    runtime.onMessage('scopePut', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        final key = payload[0].toString();
+        final value = payload[1];
+        if (ruleContext != null) {
+          try {
+            ruleContext.put(key, value?.toString());
+          } catch (_) {
+            JsExtensionsBase.sharedScope[key] = value;
+          }
+        } else {
+          JsExtensionsBase.sharedScope[key] = value;
+        }
       }
       return null;
     });
-    runtime.onMessage(
-      'get',
-      (args) => JsExtensionsBase.sharedScope[args.toString()],
-    );
+    runtime.onMessage('scopeGet', (args) {
+      final key = _decodeSyncArgs(args).toString();
+      if (ruleContext != null) {
+        try {
+          return ruleContext.get(key);
+        } catch (_) {}
+      }
+      return JsExtensionsBase.sharedScope[key];
+    });
+    runtime.onMessage('ruleGetString', (args) {
+      final rule = _decodeSyncArgs(args).toString();
+      if (ruleContext != null) {
+        try {
+          return ruleContext.getString(rule);
+        } catch (_) {}
+      }
+      return '';
+    });
     runtime.onMessage('log', (args) {
       debugPrint('JS_LOG: $args');
-      return null;
+      return _decodeSyncArgs(args);
     });
     runtime.onMessage('toast', (args) {
       debugPrint('JS_TOAST: $args');
       return null;
+    });
+    runtime.onMessage('htmlSelectText', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        return _selectHtmlText(payload[0].toString(), payload[1].toString());
+      }
+      return '';
+    });
+    runtime.onMessage('htmlSelectHtml', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        return _selectHtmlHtml(payload[0].toString(), payload[1].toString());
+      }
+      return '';
+    });
+    runtime.onMessage('htmlSelectAttr', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 3) {
+        return _selectHtmlAttr(
+          payload[0].toString(),
+          payload[1].toString(),
+          payload[2].toString(),
+        );
+      }
+      return '';
     });
 
     // ─── Fire-and-forget async (JS 不讀回傳值) ──────────────────
@@ -72,9 +126,8 @@ class JsExtensions extends JsExtensionsBase {
     });
     runtime.onMessage('putCache', (args) {
       if (args is List && args.length >= 2) {
-        final saveTime = args.length > 2
-            ? int.tryParse(args[2].toString()) ?? 0
-            : 0;
+        final saveTime =
+            args.length > 2 ? int.tryParse(args[2].toString()) ?? 0 : 0;
         cacheManager.put(
           args[0].toString(),
           args[1].toString(),
@@ -106,11 +159,14 @@ class JsExtensions extends JsExtensionsBase {
     runtime.onMessage('getCache', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final key = parsed.payload.toString();
-      cacheManager.get(key).then((v) {
-        resolveJsPending(parsed.callId, v ?? '');
-      }).catchError((e) {
-        rejectJsPending(parsed.callId, e);
-      });
+      cacheManager
+          .get(key)
+          .then((v) {
+            resolveJsPending(parsed.callId, v ?? '');
+          })
+          .catchError((e) {
+            rejectJsPending(parsed.callId, e);
+          });
       return null;
     });
 
@@ -121,11 +177,14 @@ class JsExtensions extends JsExtensionsBase {
         return null;
       }
       final key = parsed.payload.toString();
-      cacheManager.get('v_${source!.getKey()}_$key').then((v) {
-        resolveJsPending(parsed.callId, v ?? '');
-      }).catchError((e) {
-        rejectJsPending(parsed.callId, e);
-      });
+      cacheManager
+          .get('v_${source!.getKey()}_$key')
+          .then((v) {
+            resolveJsPending(parsed.callId, v ?? '');
+          })
+          .catchError((e) {
+            rejectJsPending(parsed.callId, e);
+          });
       return null;
     });
 
@@ -135,22 +194,28 @@ class JsExtensions extends JsExtensionsBase {
         resolveJsPending(parsed.callId, '');
         return null;
       }
-      source!.getLoginInfo().then((v) {
-        resolveJsPending(parsed.callId, v ?? '');
-      }).catchError((e) {
-        rejectJsPending(parsed.callId, e);
-      });
+      source!
+          .getLoginInfo()
+          .then((v) {
+            resolveJsPending(parsed.callId, v ?? '');
+          })
+          .catchError((e) {
+            rejectJsPending(parsed.callId, e);
+          });
       return null;
     });
 
     runtime.onMessage('cookieGet', (args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
       final url = parsed.payload.toString();
-      CookieStore().getCookie(url).then((v) {
-        resolveJsPending(parsed.callId, v);
-      }).catchError((e) {
-        rejectJsPending(parsed.callId, e);
-      });
+      CookieStore()
+          .getCookie(url)
+          .then((v) {
+            resolveJsPending(parsed.callId, v);
+          })
+          .catchError((e) {
+            rejectJsPending(parsed.callId, e);
+          });
       return null;
     });
 
@@ -170,6 +235,58 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
+  }
+
+  dynamic _decodeSyncArgs(dynamic args) {
+    if (args is String) {
+      try {
+        return jsonDecode(args);
+      } catch (_) {
+        return args;
+      }
+    }
+    return args;
+  }
+
+  List<dom.Element> _selectHtmlElements(String html, String selector) {
+    final doc = html_parser.parse(html);
+    final eqMatch = RegExp(r'^(.*):eq\((-?\d+)\)\s*$').firstMatch(selector);
+    if (eqMatch != null) {
+      final baseSelector = eqMatch.group(1)!.trim();
+      final index = int.tryParse(eqMatch.group(2)!) ?? 0;
+      final items = doc.querySelectorAll(baseSelector);
+      if (items.isEmpty) return const <dom.Element>[];
+      final resolvedIndex = index < 0 ? items.length + index : index;
+      if (resolvedIndex < 0 || resolvedIndex >= items.length) {
+        return const <dom.Element>[];
+      }
+      return <dom.Element>[items[resolvedIndex]];
+    }
+    return doc.querySelectorAll(selector);
+  }
+
+  String _selectHtmlText(String html, String selector) {
+    final elements = _selectHtmlElements(html, selector);
+    return elements
+        .map((element) => element.text.trim())
+        .where((text) => text.isNotEmpty)
+        .join(' ');
+  }
+
+  String _selectHtmlHtml(String html, String selector) {
+    final elements = _selectHtmlElements(html, selector);
+    return elements.map((element) => element.outerHtml).join();
+  }
+
+  String _selectHtmlAttr(String html, String selector, String attr) {
+    final elements = _selectHtmlElements(html, selector);
+    for (final element in elements) {
+      final value = element.attributes[attr]?.trim();
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
+    }
+    return '';
   }
 
   /// 下載到快取資料夾並回傳內容；目前僅 Dart 內部呼叫 (非 JS 路徑)
