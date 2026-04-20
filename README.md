@@ -13,7 +13,7 @@
 
 ## 版本資訊
 
-- App version：`0.2.6` (build `21`)
+- App version：`0.2.7` (build `22`)
 - Dart SDK：`^3.7.0`
 - 資料庫 schema：v8
 - 開發主線：`main`

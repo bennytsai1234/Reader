@@ -4,6 +4,14 @@
 
 ---
 
+## [0.2.7] — 2026-04-20
+
+### 修復
+
+- 修正 `ReadAloudController` 的 flow-control braces lint
+- 修正 `test_helper.dart` 的 `prefer_const_declarations` lint
+- 補一個 patch release，讓最新遠端版本和 analyzer 狀態一致
+
 ## [0.2.6] — 2026-04-20
 
 ### 新功能 / 整合
@@ -151,6 +159,7 @@
 
 ---
 
+[0.2.7]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.7
 [0.2.6]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.6
 [0.2.1]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.1
 [0.2.5]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.5
