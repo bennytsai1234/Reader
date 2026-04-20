@@ -1,0 +1,90 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="80" x2="1040" y2="580" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7EB"/>
+      <stop offset="1" stop-color="#F2DFC2"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F8EFE2"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#D98A43"/>
+      <stop offset="1" stop-color="#B9652B"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#8C5A31" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" rx="36" fill="url(#bg)"/>
+  <circle cx="1032" cy="112" r="78" fill="#F3D2A5" opacity="0.55"/>
+  <circle cx="1116" cy="184" r="30" fill="#E2B57D" opacity="0.42"/>
+  <circle cx="154" cy="550" r="74" fill="#E9C795" opacity="0.38"/>
+
+  <rect x="72" y="74" width="202" height="38" rx="19" fill="#F3E4CF"/>
+  <text x="96" y="99" fill="#8C5A31" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Flutter Chinese Reader</text>
+
+  <text x="72" y="200" fill="#2D2219" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="800">墨頁 Inkpage</text>
+  <text x="72" y="254" fill="#725543" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="600">以中文閱讀體驗為核心的 Flutter 小說閱讀器</text>
+  <text x="72" y="298" fill="#7A6657" font-family="Arial, Helvetica, sans-serif" font-size="22">
+    <tspan x="72" dy="0">延伸自 Legado 的書源能力，但以跨平台、可維護、</tspan>
+    <tspan x="72" dy="34">可持續發版的閱讀器本體為目標。</tspan>
+  </text>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="360" width="146" height="92" rx="24" fill="url(#panel)"/>
+    <rect x="72" y="470" width="146" height="92" rx="24" fill="url(#panel)"/>
+    <rect x="238" y="360" width="146" height="92" rx="24" fill="url(#panel)"/>
+    <rect x="238" y="470" width="146" height="92" rx="24" fill="url(#panel)"/>
+  </g>
+
+  <g fill="#2F241B" font-family="Arial, Helvetica, sans-serif">
+    <text x="96" y="401" font-size="16" font-weight="700">Reader Runtime</text>
+    <text x="96" y="426" font-size="13" fill="#7A6657">restore / progress / TTS</text>
+
+    <text x="96" y="511" font-size="16" font-weight="700">Source Engine</text>
+    <text x="96" y="536" font-size="13" fill="#7A6657">parser / JS / WebView</text>
+
+    <text x="262" y="401" font-size="16" font-weight="700">Source Health</text>
+    <text x="262" y="426" font-size="13" fill="#7A6657">pass / skip / isolate</text>
+
+    <text x="262" y="511" font-size="16" font-weight="700">Release Pipeline</text>
+    <text x="262" y="536" font-size="13" fill="#7A6657">CI / notes / signed APK</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="700" y="96" width="360" height="438" rx="34" fill="#2C2119"/>
+    <rect x="720" y="122" width="320" height="382" rx="24" fill="#FCF6ED"/>
+    <rect x="836" y="106" width="88" height="10" rx="5" fill="#574336"/>
+  </g>
+
+  <rect x="746" y="154" width="136" height="22" rx="11" fill="#F0DECA"/>
+  <rect x="892" y="154" width="118" height="22" rx="11" fill="#E8CCAA"/>
+
+  <rect x="746" y="196" width="264" height="106" rx="24" fill="url(#accent)"/>
+  <rect x="768" y="220" width="86" height="12" rx="6" fill="#F8EAD7" opacity="0.88"/>
+  <rect x="768" y="244" width="168" height="12" rx="6" fill="#F8EAD7" opacity="0.74"/>
+  <rect x="768" y="268" width="122" height="12" rx="6" fill="#F8EAD7" opacity="0.56"/>
+  <rect x="944" y="220" width="42" height="58" rx="14" fill="#F6E7D3" opacity="0.9"/>
+
+  <rect x="746" y="324" width="264" height="62" rx="20" fill="#F1E2CF"/>
+  <rect x="768" y="344" width="138" height="10" rx="5" fill="#7A6657" opacity="0.9"/>
+  <rect x="768" y="364" width="206" height="10" rx="5" fill="#B09072" opacity="0.76"/>
+
+  <rect x="746" y="404" width="264" height="62" rx="20" fill="#F1E2CF"/>
+  <rect x="768" y="424" width="96" height="10" rx="5" fill="#7A6657" opacity="0.9"/>
+  <rect x="768" y="444" width="188" height="10" rx="5" fill="#B09072" opacity="0.76"/>
+
+  <rect x="760" y="520" width="94" height="12" rx="6" fill="#D1B090"/>
+  <rect x="878" y="520" width="94" height="12" rx="6" fill="#D1B090"/>
+
+  <rect x="1038" y="162" width="118" height="42" rx="21" fill="#F6EBDD"/>
+  <text x="1064" y="188" fill="#8C5A31" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">v0.2.8</text>
+
+  <rect x="1036" y="224" width="116" height="42" rx="21" fill="#F6EBDD"/>
+  <text x="1054" y="250" fill="#8C5A31" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">CI passing</text>
+
+  <rect x="1034" y="286" width="126" height="42" rx="21" fill="#F6EBDD"/>
+  <text x="1052" y="312" fill="#8C5A31" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">Signed APK</text>
+</svg>
