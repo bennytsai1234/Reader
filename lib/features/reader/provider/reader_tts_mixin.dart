@@ -11,9 +11,15 @@ import 'reader_settings_mixin.dart';
 import 'reader_content_mixin.dart';
 import 'reader_auto_page_mixin.dart';
 
-mixin ReaderTtsMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderContentMixin, ReaderAutoPageMixin {
+mixin ReaderTtsMixin
+    on
+        ReaderProviderBase,
+        ReaderSettingsMixin,
+        ReaderContentMixin,
+        ReaderAutoPageMixin {
   late final ReadAloudController readAloudController;
-  final ReaderTtsFollowCoordinator _ttsFollow = const ReaderTtsFollowCoordinator();
+  final ReaderTtsFollowCoordinator _ttsFollow =
+      const ReaderTtsFollowCoordinator();
   int _ttsMode = 0;
   int get ttsMode => _ttsMode;
 
@@ -29,6 +35,8 @@ mixin ReaderTtsMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderContentMi
 
   int get ttsStart => readAloudController.ttsStart;
   int get ttsEnd => readAloudController.ttsEnd;
+  int get ttsWordStart => readAloudController.ttsWordStart;
+  int get ttsWordEnd => readAloudController.ttsWordEnd;
   int get ttsChapterIndex => readAloudController.ttsChapterIndex;
   bool get isTtsActive => readAloudController.isActive;
   bool get stopAfterChapter => readAloudController.stopAfterChapter;
@@ -141,24 +149,34 @@ mixin ReaderTtsMixin on ReaderProviderBase, ReaderSettingsMixin, ReaderContentMi
   }) {
     final chapterIndex =
         ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex;
-    final runtimeChapter = contentCallbacksRef.chapterAt?.call(chapterIndex) as ReaderChapter?;
-    final pages = contentCallbacksRef.pagesForChapter?.call(chapterIndex) ?? chapterPagesCache[chapterIndex] ?? [];
-    
+    final runtimeChapter =
+        contentCallbacksRef.chapterAt?.call(chapterIndex) as ReaderChapter?;
+    final pages =
+        contentCallbacksRef.pagesForChapter?.call(chapterIndex) ??
+        chapterPagesCache[chapterIndex] ??
+        [];
+
     if (((runtimeChapter == null && pages.isEmpty) ||
             (runtimeChapter != null && runtimeChapter.isEmpty)) ||
         ttsStart < 0) {
       return null;
     }
-    
+
     final rawLocalOffset =
         runtimeChapter != null
             ? runtimeChapter.resolveScrollAnchor(ttsStart).localOffset
-            : ChapterPositionResolver.charOffsetToLocalOffset(pages.cast(), ttsStart);
+            : ChapterPositionResolver.charOffsetToLocalOffset(
+              pages.cast(),
+              ttsStart,
+            );
 
-    final chapterHeight = runtimeChapter?.chapterHeight
-        ?? ChapterPositionResolver.chapterHeight(pages.cast());
+    final chapterHeight =
+        runtimeChapter?.chapterHeight ??
+        ChapterPositionResolver.chapterHeight(pages.cast());
     final targetLocalOffset =
-        chapterHeight > 0 ? rawLocalOffset.clamp(0.0, chapterHeight) : rawLocalOffset;
+        chapterHeight > 0
+            ? rawLocalOffset.clamp(0.0, chapterHeight)
+            : rawLocalOffset;
 
     return _ttsFollow.evaluate(
       chapterIndex: chapterIndex,

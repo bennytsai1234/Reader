@@ -54,12 +54,13 @@
 
 本地 full suite 目前不是全綠，主要是兩類問題：
 
-- 某些 VM / WSL 環境缺 `libquickjs_c_bridge_plugin.so`
+- 某些 VM / WSL 環境若直接裸跑 `flutter test`，會缺 `libquickjs_c_bridge_plugin.so`
 - 少數既有 compatibility 測試仍紅
 
 這意味著：
 
 - `flutter analyze` 已可作為穩定護欄
+- Linux / WSL 請優先使用 `tool/flutter_test_with_quickjs.sh`
 - `flutter test` 目前還不能在所有本機環境上直接視為可靠綠燈
 
 ### 2. 書源健康狀態是過渡實作

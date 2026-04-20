@@ -136,10 +136,14 @@ Future<void> flushAsync() async {
 
 void main() {
   group('ReadAloudController', () {
-    test('highlight 不會在同一段落內重複更新', () async {
+    test('同一行內 progress 會保留行高亮並更新詞位置', () async {
       final fakeTts = FakeTtsService();
       final chapters = <int, ReaderChapter>{
-        0: buildChapter(index: 0, title: 'Chapter 0', paragraphs: ['AAAAABBBBB', 'CCCCCDDDDD']),
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB', 'CCCCCDDDDD'],
+        ),
       };
       var stateChanges = 0;
       var pageJumpRequests = 0;
@@ -155,11 +159,12 @@ void main() {
         requestJumpToPage: (_) {
           pageJumpRequests++;
         },
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => 0,
         visibleChapterIndex: () => 0,
@@ -181,6 +186,8 @@ void main() {
 
       final firstStart = controller.ttsStart;
       final firstEnd = controller.ttsEnd;
+      final firstWordStart = controller.ttsWordStart;
+      final firstWordEnd = controller.ttsWordEnd;
       final firstStateChanges = stateChanges;
       final firstPageJumpRequests = pageJumpRequests;
 
@@ -189,7 +196,9 @@ void main() {
 
       expect(controller.ttsStart, firstStart);
       expect(controller.ttsEnd, firstEnd);
-      expect(stateChanges, firstStateChanges);
+      expect(controller.ttsWordStart, isNot(firstWordStart));
+      expect(controller.ttsWordEnd, isNot(firstWordEnd));
+      expect(stateChanges, greaterThan(firstStateChanges));
       expect(pageJumpRequests, firstPageJumpRequests);
 
       controller.detach();
@@ -199,8 +208,16 @@ void main() {
     test('nextPageOrChapter 在有下一頁時翻頁，否則切章', () async {
       final fakeTts = FakeTtsService();
       final chapters = <int, ReaderChapter>{
-        0: buildChapter(index: 0, title: 'Chapter 0', paragraphs: ['AAAAABBBBB', 'CCCCCDDDDD']),
-        1: buildChapter(index: 1, title: 'Chapter 1', paragraphs: ['EEEEFFFFGG']),
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB', 'CCCCCDDDDD'],
+        ),
+        1: buildChapter(
+          index: 1,
+          title: 'Chapter 1',
+          paragraphs: ['EEEEFFFFGG'],
+        ),
       };
       var currentPageIndex = 0;
       var currentChapterIndex = 0;
@@ -226,11 +243,12 @@ void main() {
         canMoveToNextPage: () => currentPageIndex == 0,
         canMoveToPrevPage: () => currentPageIndex > 0,
         requestJumpToPage: (_) {},
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => currentChapterIndex,
         visibleChapterIndex: () => currentChapterIndex,
@@ -266,8 +284,16 @@ void main() {
     test('prevPageOrChapter 在有上一頁時翻頁，否則切章', () async {
       final fakeTts = FakeTtsService();
       final chapters = <int, ReaderChapter>{
-        0: buildChapter(index: 0, title: 'Chapter 0', paragraphs: ['AAAAABBBBB']),
-        1: buildChapter(index: 1, title: 'Chapter 1', paragraphs: ['CCCCCDDDDD', 'EEEEFFFFGG']),
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB'],
+        ),
+        1: buildChapter(
+          index: 1,
+          title: 'Chapter 1',
+          paragraphs: ['CCCCCDDDDD', 'EEEEFFFFGG'],
+        ),
       };
       var currentPageIndex = 1;
       var currentChapterIndex = 1;
@@ -293,11 +319,12 @@ void main() {
         canMoveToNextPage: () => true,
         canMoveToPrevPage: () => currentPageIndex > 0,
         requestJumpToPage: (_) {},
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => currentChapterIndex,
         visibleChapterIndex: () => currentChapterIndex,
@@ -333,8 +360,16 @@ void main() {
     test('prefetched handoff 會在章節完成後接續下一章', () async {
       final fakeTts = FakeTtsService();
       final chapters = <int, ReaderChapter>{
-        0: buildChapter(index: 0, title: 'Chapter 0', paragraphs: ['AAAAABBBBB']),
-        1: buildChapter(index: 1, title: 'Chapter 1', paragraphs: ['CCCCCDDDDD']),
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB'],
+        ),
+        1: buildChapter(
+          index: 1,
+          title: 'Chapter 1',
+          paragraphs: ['CCCCCDDDDD'],
+        ),
       };
       var currentChapterIndex = 0;
       var nextChapterCalls = 0;
@@ -351,11 +386,12 @@ void main() {
         canMoveToNextPage: () => false,
         canMoveToPrevPage: () => false,
         requestJumpToPage: (_) {},
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => currentChapterIndex,
         visibleChapterIndex: () => currentChapterIndex,
@@ -405,11 +441,12 @@ void main() {
         canMoveToNextPage: () => true,
         canMoveToPrevPage: () => false,
         requestJumpToPage: pageJumpRequests.add,
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => 0,
         visibleChapterIndex: () => 0,
@@ -430,6 +467,11 @@ void main() {
       expect(controller.ttsChapterIndex, 0);
       expect(controller.ttsStart, greaterThanOrEqualTo(0));
       expect(controller.ttsEnd, greaterThan(controller.ttsStart));
+      expect(
+        controller.ttsWordStart,
+        greaterThanOrEqualTo(controller.ttsStart),
+      );
+      expect(controller.ttsWordEnd, greaterThan(controller.ttsWordStart));
       expect(pageJumpRequests, [1]);
 
       controller.detach();
@@ -439,8 +481,16 @@ void main() {
     test('跨章 handoff 後第一筆 progress 仍會產生下一章高亮', () async {
       final fakeTts = FakeTtsService();
       final chapters = <int, ReaderChapter>{
-        0: buildChapter(index: 0, title: 'Chapter 0', paragraphs: ['AAAAABBBBB']),
-        1: buildChapter(index: 1, title: 'Chapter 1', paragraphs: ['CCCCCDDDDD', 'EEEEFFFFGG']),
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB'],
+        ),
+        1: buildChapter(
+          index: 1,
+          title: 'Chapter 1',
+          paragraphs: ['CCCCCDDDDD', 'EEEEFFFFGG'],
+        ),
       };
       var currentChapterIndex = 0;
 
@@ -455,11 +505,12 @@ void main() {
         canMoveToNextPage: () => false,
         canMoveToPrevPage: () => false,
         requestJumpToPage: (_) {},
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => currentChapterIndex,
         visibleChapterIndex: () => currentChapterIndex,
@@ -482,7 +533,9 @@ void main() {
 
       expect(controller.ttsChapterIndex, 1);
       expect(controller.ttsStart, 0);
-      expect(controller.ttsEnd, 10);
+      expect(controller.ttsEnd, 5);
+      expect(controller.ttsWordStart, 0);
+      expect(controller.ttsWordEnd, 2);
 
       controller.detach();
       await fakeTts.disposeStreams();
@@ -508,11 +561,12 @@ void main() {
         canMoveToNextPage: () => false,
         canMoveToPrevPage: () => false,
         requestJumpToPage: (_) {},
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => 0,
         visibleChapterIndex: () => 0,
@@ -537,7 +591,11 @@ void main() {
     test('handoff 到空下一章時會安全回退到 idle', () async {
       final fakeTts = FakeTtsService();
       final chapters = <int, ReaderChapter>{
-        0: buildChapter(index: 0, title: 'Chapter 0', paragraphs: ['AAAAABBBBB']),
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB'],
+        ),
         1: ReaderChapter(
           chapter: BookChapter(title: 'Empty', index: 1, url: 'chapter-1'),
           index: 1,
@@ -558,11 +616,12 @@ void main() {
         canMoveToNextPage: () => false,
         canMoveToPrevPage: () => false,
         requestJumpToPage: (_) {},
-        requestJumpToChapter: ({
-          required int chapterIndex,
-          required double alignment,
-          required double localOffset,
-        }) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
         chapterOf: (chapterIndex) => chapters[chapterIndex],
         currentChapterIndex: () => currentChapterIndex,
         visibleChapterIndex: () => currentChapterIndex,

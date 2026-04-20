@@ -170,6 +170,18 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final mediaPadding = MediaQuery.paddingOf(context);
+        final insetsChanged = provider.updateContentInsets(
+          top: mediaPadding.top + 8,
+          bottom: mediaPadding.bottom + 28,
+        );
+        if (insetsChanged && provider.viewSize == size && provider.isReady) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              provider.doPaginate();
+            }
+          });
+        }
         if (provider.viewSize != size) {
           WidgetsBinding.instance.addPostFrameCallback((_) => provider.setViewSize(size));
         }

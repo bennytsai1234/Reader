@@ -36,7 +36,8 @@ class ReadAloudController extends ChangeNotifier {
     required int chapterIndex,
     required double alignment,
     required double localOffset,
-  }) requestJumpToChapter;
+  })
+  requestJumpToChapter;
   final ReaderChapter? Function(int chapterIndex) chapterOf;
   final int Function() currentChapterIndex;
   final int Function() visibleChapterIndex;
@@ -71,6 +72,8 @@ class ReadAloudController extends ChangeNotifier {
   int _opVersion = 0;
   int _ttsStart = -1;
   int _ttsEnd = -1;
+  int _ttsWordStart = -1;
+  int _ttsWordEnd = -1;
   int _anchorChapterIdx = -1;
   int _lastHighlightStart = -1;
   int _lastHighlightEnd = -1;
@@ -80,6 +83,8 @@ class ReadAloudController extends ChangeNotifier {
 
   int get ttsStart => _ttsStart;
   int get ttsEnd => _ttsEnd;
+  int get ttsWordStart => _ttsWordStart;
+  int get ttsWordEnd => _ttsWordEnd;
   int get ttsChapterIndex => _session?.chapterIndex ?? -1;
   bool get isActive =>
       _state != ReadAloudState.idle || _tts.isPlaying || _ttsStart >= 0;
@@ -177,6 +182,8 @@ class ReadAloudController extends ChangeNotifier {
     _opVersion++;
     _ttsStart = -1;
     _ttsEnd = -1;
+    _ttsWordStart = -1;
+    _ttsWordEnd = -1;
     _lastHighlightStart = -1;
     _lastHighlightEnd = -1;
     _session = null;
@@ -210,9 +217,10 @@ class ReadAloudController extends ChangeNotifier {
     final targetChapterIndex =
         isScrollMode() ? visibleChapterIndex() : currentChapterIndex();
     final targetChapter = chapterOf(targetChapterIndex);
-    final startOffset = targetChapter?.firstPage == null
-        ? 0
-        : targetChapter!.firstCharOffset(targetChapter.firstPage!);
+    final startOffset =
+        targetChapter?.firstPage == null
+            ? 0
+            : targetChapter!.firstCharOffset(targetChapter.firstPage!);
     unawaited(
       _start(
         operationVersion: version,
@@ -239,7 +247,8 @@ class ReadAloudController extends ChangeNotifier {
     final version = operationVersion ?? _begin(ReadAloudState.speaking);
     if (!_isCurrent(version)) return;
 
-    final targetChapterIndex = startChapterIndex ??
+    final targetChapterIndex =
+        startChapterIndex ??
         (isScrollMode() ? visibleChapterIndex() : currentChapterIndex());
     final targetChapter = chapterOf(targetChapterIndex);
     if (targetChapter == null || targetChapter.isEmpty) {
@@ -248,18 +257,19 @@ class ReadAloudController extends ChangeNotifier {
     }
 
     final pages = targetChapter.pages;
-    final startCharPos = startLineIndex >= 0
-        ? pages
-            .expand((page) => page.lines)
-            .where((line) => line.image == null)
-            .elementAt(startLineIndex)
-            .chapterPosition
-        : (startCharOffset ??
-            (isScrollMode()
-                ? visibleCharOffset()
-                : currentCharOffset()));
+    final startCharPos =
+        startLineIndex >= 0
+            ? pages
+                .expand((page) => page.lines)
+                .where((line) => line.image == null)
+                .elementAt(startLineIndex)
+                .chapterPosition
+            : (startCharOffset ??
+                (isScrollMode() ? visibleCharOffset() : currentCharOffset()));
 
-    final data = targetChapter.buildReadAloudData(startCharOffset: startCharPos);
+    final data = targetChapter.buildReadAloudData(
+      startCharOffset: startCharPos,
+    );
     if (data == null || data.text.trim().isEmpty) {
       _failCurrentStart(version);
       return;
@@ -292,7 +302,10 @@ class ReadAloudController extends ChangeNotifier {
     final chapter = chapterOf(nextIdx);
     if (chapter == null || chapter.isEmpty) return;
     final data = chapter.buildReadAloudData(
-      startCharOffset: chapter.firstPage == null ? 0 : chapter.firstCharOffset(chapter.firstPage!),
+      startCharOffset:
+          chapter.firstPage == null
+              ? 0
+              : chapter.firstCharOffset(chapter.firstPage!),
     );
     if (data == null || data.text.trim().isEmpty) return;
     _session?.prefetchedNext = ReadAloudSession(
@@ -322,7 +335,8 @@ class ReadAloudController extends ChangeNotifier {
     required int chapterOffset,
     int? pageIndex,
   }) {
-    final resolvedPageIndex = pageIndex ?? chapter.getPageIndexByCharIndex(chapterOffset);
+    final resolvedPageIndex =
+        pageIndex ?? chapter.getPageIndexByCharIndex(chapterOffset);
     if (isScrollMode()) {
       final anchor = chapter.resolveScrollAnchor(chapterOffset);
       requestJumpToChapter(
@@ -336,32 +350,57 @@ class ReadAloudController extends ChangeNotifier {
   }
 
   void _onTtsProgressUpdate() {
-    if (!_tts.isPlaying || _session == null || _session!.offsetMap.isEmpty) return;
+    if (!_tts.isPlaying || _session == null || _session!.offsetMap.isEmpty)
+      return;
     final rawStart = _tts.currentWordStart;
+    final rawEnd = _tts.currentWordEnd;
     if (rawStart < 0) return;
 
     final chapterBase = _chapterOffsetFromTtsOffset(_session!, rawStart);
-
-    if (_lastHighlightStart >= 0 &&
-        chapterBase >= _lastHighlightStart &&
-        chapterBase < _lastHighlightEnd) {
-      return;
-    }
+    final chapterWordEnd =
+        rawEnd <= rawStart
+            ? chapterBase + 1
+            : _chapterOffsetFromTtsOffset(
+              _session!,
+              rawEnd,
+            ).clamp(chapterBase + 1, double.infinity).toInt();
 
     final chapter = chapterOf(ttsChapterIndex);
     if (chapter == null) return;
-    final highlight = chapter.resolveHighlightRange(chapterBase);
+    final line = chapter.lineAtCharOffset(chapterBase);
+    final highlightStart = line?.chapterPosition ?? chapterBase;
+    final highlightEnd =
+        line == null ? chapterWordEnd : line.chapterPosition + line.text.length;
 
-    _lastHighlightStart = highlight.start;
-    _lastHighlightEnd = highlight.end;
-    _ttsStart = highlight.start;
-    _ttsEnd = highlight.end;
+    if (_lastHighlightStart >= 0 &&
+        _lastHighlightStart == highlightStart &&
+        _lastHighlightEnd == highlightEnd &&
+        _ttsWordStart == chapterBase &&
+        _ttsWordEnd == chapterWordEnd) {
+      return;
+    }
+
+    _lastHighlightStart = highlightStart;
+    _lastHighlightEnd = highlightEnd;
+    _ttsStart = highlightStart;
+    _ttsEnd = highlightEnd;
+    _ttsWordStart = chapterBase;
+    _ttsWordEnd = chapterWordEnd;
 
     if (!isScrollMode()) {
+      final targetPageIndex = chapter.getPageIndexByCharIndex(chapterBase);
+      final visiblePageIndex =
+          currentChapterIndex() == ttsChapterIndex
+              ? chapter.getPageIndexByCharIndex(currentCharOffset())
+              : -1;
+      if (visiblePageIndex == targetPageIndex) {
+        notifyController();
+        return;
+      }
       _jumpToChapterOffset(
         chapter: chapter,
-        chapterOffset: highlight.start,
-        pageIndex: highlight.pageIndex,
+        chapterOffset: chapterBase,
+        pageIndex: targetPageIndex,
       );
     }
     notifyController();
@@ -374,6 +413,8 @@ class ReadAloudController extends ChangeNotifier {
     try {
       _ttsStart = -1;
       _ttsEnd = -1;
+      _ttsWordStart = -1;
+      _ttsWordEnd = -1;
       _lastHighlightStart = -1;
       _lastHighlightEnd = -1;
       notifyController();
@@ -420,9 +461,13 @@ class ReadAloudController extends ChangeNotifier {
     _suppressStopReset = true;
     await _tts.stop();
     if (isScrollMode()) {
-      final chapterIndex = ttsChapterIndex >= 0 ? ttsChapterIndex : visibleChapterIndex();
+      final chapterIndex =
+          ttsChapterIndex >= 0 ? ttsChapterIndex : visibleChapterIndex();
       final chapter = chapterOf(chapterIndex);
-      final currentOffset = _ttsStart >= 0 ? _ttsStart : visibleCharOffset();
+      final currentOffset =
+          _ttsWordStart >= 0
+              ? _ttsWordStart
+              : (_ttsStart >= 0 ? _ttsStart : visibleCharOffset());
       final nextOffset = chapter?.nextPageStartCharOffset(currentOffset) ?? -1;
       final nextPageIndex =
           nextOffset >= 0 ? chapter!.getPageIndexByCharIndex(nextOffset) : -1;
@@ -463,9 +508,13 @@ class ReadAloudController extends ChangeNotifier {
     _suppressStopReset = true;
     await _tts.stop();
     if (isScrollMode()) {
-      final chapterIndex = ttsChapterIndex >= 0 ? ttsChapterIndex : visibleChapterIndex();
+      final chapterIndex =
+          ttsChapterIndex >= 0 ? ttsChapterIndex : visibleChapterIndex();
       final chapter = chapterOf(chapterIndex);
-      final currentOffset = _ttsStart >= 0 ? _ttsStart : visibleCharOffset();
+      final currentOffset =
+          _ttsWordStart >= 0
+              ? _ttsWordStart
+              : (_ttsStart >= 0 ? _ttsStart : visibleCharOffset());
       final prevOffset = chapter?.prevPageStartCharOffset(currentOffset) ?? -1;
       final prevPageIndex =
           prevOffset >= 0 ? chapter!.getPageIndexByCharIndex(prevOffset) : -1;
@@ -504,9 +553,10 @@ class ReadAloudController extends ChangeNotifier {
   Future<void> saveProgress({
     required void Function(int chapterIndex, int charOffset) persist,
   }) async {
-    if (_tts.isPlaying || _ttsStart >= 0) {
-      final savedStart = _ttsStart;
-      final chapterIndex = ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex();
+    if (_tts.isPlaying || _ttsStart >= 0 || _ttsWordStart >= 0) {
+      final savedStart = _ttsWordStart >= 0 ? _ttsWordStart : _ttsStart;
+      final chapterIndex =
+          ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex();
       await _tts.stop();
       _resetState();
       if (savedStart >= 0) {

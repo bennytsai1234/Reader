@@ -325,7 +325,7 @@ class JsExtensions extends JsExtensionsBase {
       cacheManager
           .get(key)
           .then((v) {
-            resolveJsPending(parsed.callId, v ?? '');
+            resolveJsPending(parsed.callId, v);
           })
           .catchError((e) {
             rejectJsPending(parsed.callId, e);

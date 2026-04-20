@@ -207,6 +207,8 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
         paragraphSpacing: paragraphSpacing,
         textIndent: textIndent,
         textFullJustify: textFullJustify,
+        contentPaddingTop: contentTopInset,
+        contentPaddingBottom: contentBottomInset,
       ),
     );
   }

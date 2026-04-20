@@ -46,11 +46,12 @@ class _ReaderPageState extends State<ReaderPage> {
     super.initState();
     _pageCtrl = PageController(initialPage: 0);
     _slideCtrl = SlidePageController(_pageCtrl);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _slideCtrl.dispose();
     _pageCtrl.dispose();
     super.dispose();
@@ -80,8 +81,7 @@ class _ReaderPageState extends State<ReaderPage> {
   void _pollRecenter(ReaderProvider p) {
     _recenterPollScheduled = false;
     if (!mounted || !p.hasPendingSlideRecenter) return;
-    if (_pageCtrl.hasClients &&
-        _pageCtrl.position.isScrollingNotifier.value) {
+    if (_pageCtrl.hasClients && _pageCtrl.position.isScrollingNotifier.value) {
       // Still animating — retry next frame.
       _recenterPollScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _pollRecenter(p));
@@ -129,180 +129,206 @@ class _ReaderPageState extends State<ReaderPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _key,
-      body: Consumer<ReaderProvider>(
-        builder: (context, p, _) {
-          // Controller reset: recreate PageController at the correct page
-          // to avoid the one-frame glitch during chapter recentering.
-          // This is only called AFTER the scroll has settled (via
-          // applyPendingSlideRecenter), so no animation is in progress here.
-          final resetTarget = p.consumeControllerReset();
-          if (resetTarget != null) {
-            _resetController(resetTarget);
-          }
+    return Consumer<ReaderProvider>(
+      builder: (context, p, _) {
+        final theme = p.currentTheme;
+        final isDarkBackground = theme.backgroundColor.computeLuminance() < 0.5;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness:
+                isDarkBackground ? Brightness.light : Brightness.dark,
+            statusBarBrightness:
+                isDarkBackground ? Brightness.dark : Brightness.light,
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarIconBrightness:
+                isDarkBackground ? Brightness.light : Brightness.dark,
+          ),
+          child: Scaffold(
+            key: _key,
+            body: _buildBody(context, p),
+            drawer: ReaderChaptersDrawer(provider: p),
+          ),
+        );
+      },
+    );
+  }
 
-          // If a slide window recenter is pending (chapter just changed
-          // mid-animation), poll until the scroll settles then apply it.
-          if (p.hasPendingSlideRecenter) {
-            _ensureRecenterPoll(p);
-          }
+  Widget _buildBody(BuildContext context, ReaderProvider p) {
+    // Controller reset: recreate PageController at the correct page
+    // to avoid the one-frame glitch during chapter recentering.
+    // This is only called AFTER the scroll has settled (via
+    // applyPendingSlideRecenter), so no animation is in progress here.
+    final resetTarget = p.consumeControllerReset();
+    if (resetTarget != null) {
+      _resetController(resetTarget);
+    }
 
-          final pendingJump = p.consumePendingJump();
-          if (pendingJump != null) {
-            _slideCtrl.jumpTo(
-              pendingJump,
-              onWillJump: p.consumePendingSlideJumpReason,
-            );
-          }
-          return Container(
-            color: p.currentTheme.backgroundColor,
-            child: Stack(
-              children: [
-                // 1. 底層自定義背景圖片 (對標 Android bgImage)
-                if (p.currentTheme.backgroundImage != null &&
-                    File(p.currentTheme.backgroundImage!).existsSync())
-                  Positioned.fill(
-                    child: Image.file(
-                      File(p.currentTheme.backgroundImage!),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+    // If a slide window recenter is pending (chapter just changed
+    // mid-animation), poll until the scroll settles then apply it.
+    if (p.hasPendingSlideRecenter) {
+      _ensureRecenterPoll(p);
+    }
 
-                // 2. 背景模糊特效 (對標 Android backgroundBlur)
-                if (p.currentTheme.backgroundImage != null &&
-                    p.backgroundBlur > 0)
-                  Positioned.fill(
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(
-                        sigmaX: p.backgroundBlur,
-                        sigmaY: p.backgroundBlur,
-                      ),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.1),
-                      ),
-                    ),
-                  ),
+    final pendingJump = p.consumePendingJump();
+    if (pendingJump != null) {
+      _slideCtrl.jumpTo(
+        pendingJump,
+        onWillJump: p.consumePendingSlideJumpReason,
+      );
+    }
 
-                ReadViewRuntime(
-                  key: ValueKey(_controllerGeneration),
-                  provider: p,
-                  pageController: _pageCtrl,
-                ),
-                if (((p.pageTurnMode == PageAnim.scroll &&
-                            p.chapterPagesCache.isNotEmpty) ||
-                        (p.pageTurnMode != PageAnim.scroll &&
-                            p.slidePages.isNotEmpty)) &&
-                    !p.isLoading)
-                  _buildPermanentInfo(p),
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTapUp:
-                        (d) =>
-                            p.showControls
-                                ? p.toggleControls()
-                                : _handleTap(
-                                  d.localPosition,
-                                  MediaQuery.of(context).size,
-                                  p,
-                                ),
-                  ),
-                ),
-                IgnorePointer(
-                  child: Container(
-                    color: Colors.black.withValues(
-                      alpha: (1.0 - p.brightness).clamp(0.0, 0.8),
-                    ),
-                  ),
-                ),
-                ReaderTopMenu(provider: p, onMore: () => _showMore(context)),
-                ReaderBrightnessBar(provider: p),
-                ReaderBottomMenu(
-                  provider: p,
-                  onOpenDrawer: () => _key.currentState?.openDrawer(),
-                  onTts: () => TtsDialog.show(context),
-                  onInterface:
-                      () => ReaderSettingsSheets.showInterfaceSettings(
-                        context,
-                        p,
-                      ),
-                  onSettings:
-                      () => ReaderSettingsSheets.showMoreSettings(context, p),
-                  onAutoPage: () async {
-                    if (!p.isAutoPaging) p.toggleAutoPage();
-                    await AutoReadDialog.show(context);
-                  },
-                  onToggleDayNight: () => p.setTheme(p.themeIndex == 1 ? 0 : 1),
-                  onSearch: () {
-                    p.toggleControls();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SearchPage()),
-                    );
-                  },
-                  onReplaceRule: () {
-                    p.toggleControls();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ReplaceRulePage(),
-                      ),
-                    );
-                  },
-                ),
-              ],
+    return Container(
+      color: p.currentTheme.backgroundColor,
+      child: Stack(
+        children: [
+          // 1. 底層自定義背景圖片 (對標 Android bgImage)
+          if (p.currentTheme.backgroundImage != null &&
+              File(p.currentTheme.backgroundImage!).existsSync())
+            Positioned.fill(
+              child: Image.file(
+                File(p.currentTheme.backgroundImage!),
+                fit: BoxFit.cover,
+              ),
             ),
-          );
-        },
-      ),
-      drawer: Consumer<ReaderProvider>(
-        builder: (context, p, _) => ReaderChaptersDrawer(provider: p),
+
+          // 2. 背景模糊特效 (對標 Android backgroundBlur)
+          if (p.currentTheme.backgroundImage != null && p.backgroundBlur > 0)
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(
+                  sigmaX: p.backgroundBlur,
+                  sigmaY: p.backgroundBlur,
+                ),
+                child: Container(color: Colors.black.withValues(alpha: 0.1)),
+              ),
+            ),
+
+          ReadViewRuntime(
+            key: ValueKey(_controllerGeneration),
+            provider: p,
+            pageController: _pageCtrl,
+          ),
+
+          if (((p.pageTurnMode == PageAnim.scroll &&
+                      p.chapterPagesCache.isNotEmpty) ||
+                  (p.pageTurnMode != PageAnim.scroll &&
+                      p.slidePages.isNotEmpty)) &&
+              !p.isLoading)
+            _buildPermanentInfo(context, p),
+
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: p.showControls,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapUp:
+                    (d) => _handleTap(
+                      d.localPosition,
+                      MediaQuery.sizeOf(context),
+                      p,
+                    ),
+              ),
+            ),
+          ),
+
+          if (p.showControls)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: p.toggleControls,
+              ),
+            ),
+
+          IgnorePointer(
+            child: Container(
+              color: Colors.black.withValues(
+                alpha: (1.0 - p.brightness).clamp(0.0, 0.8),
+              ),
+            ),
+          ),
+
+          ReaderTopMenu(provider: p, onMore: () => _showMore(context)),
+          ReaderBrightnessBar(provider: p),
+          ReaderBottomMenu(
+            provider: p,
+            onOpenDrawer: () => _key.currentState?.openDrawer(),
+            onTts: () => TtsDialog.show(context),
+            onInterface:
+                () => ReaderSettingsSheets.showInterfaceSettings(context, p),
+            onSettings: () => ReaderSettingsSheets.showMoreSettings(context, p),
+            onAutoPage: () async {
+              if (!p.isAutoPaging) p.toggleAutoPage();
+              await AutoReadDialog.show(context);
+            },
+            onToggleDayNight: () => p.setTheme(p.themeIndex == 1 ? 0 : 1),
+            onSearch: () {
+              p.toggleControls();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SearchPage()),
+              );
+            },
+            onReplaceRule: () {
+              p.toggleControls();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReplaceRulePage()),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildPermanentInfo(ReaderProvider p) => Positioned(
-    bottom: 0,
-    left: 0,
-    right: 0,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              p.book.name,
-              style: TextStyle(
-                color: p.currentTheme.textColor.withValues(alpha: 0.4),
-                fontSize: 10,
+  Widget _buildPermanentInfo(BuildContext context, ReaderProvider p) =>
+      Positioned(
+        bottom: 0,
+        left: 0,
+        right: 0,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            MediaQuery.of(context).padding.bottom + 8,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  p.book.name,
+                  style: TextStyle(
+                    color: p.currentTheme.textColor.withValues(alpha: 0.4),
+                    fontSize: 10,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text(
-            p.displayPageLabel,
-            style: TextStyle(
-              color: p.currentTheme.textColor.withValues(alpha: 0.4),
-              fontSize: 10,
-            ),
-          ),
-          SizedBox(
-            width: 60,
-            child: Text(
-              p.displayChapterPercentLabel,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: p.currentTheme.textColor.withValues(alpha: 0.4),
-                fontSize: 10,
+              Text(
+                p.displayPageLabel,
+                style: TextStyle(
+                  color: p.currentTheme.textColor.withValues(alpha: 0.4),
+                  fontSize: 10,
+                ),
               ),
-            ),
+              SizedBox(
+                width: 60,
+                child: Text(
+                  p.displayChapterPercentLabel,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: p.currentTheme.textColor.withValues(alpha: 0.4),
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   void _showMore(BuildContext context) {
     AppBottomSheet.show(
@@ -316,7 +342,10 @@ class _ReaderPageState extends State<ReaderPage> {
           subtitle: const Text('自定義字詞替換與屏蔽'),
           onTap: () {
             Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const ReplaceRulePage()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ReplaceRulePage()),
+            );
           },
         ),
         ListTile(
@@ -325,7 +354,10 @@ class _ReaderPageState extends State<ReaderPage> {
           subtitle: const Text('備份、還原與解析引擎配置'),
           onTap: () {
             Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsPage()),
+            );
           },
         ),
       ],

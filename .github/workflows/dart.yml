@@ -26,4 +26,4 @@ jobs:
         run: flutter analyze
 
       - name: Test
-        run: flutter test
+        run: tool/flutter_test_with_quickjs.sh

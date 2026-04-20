@@ -20,6 +20,8 @@ class PageViewWidget extends StatelessWidget {
   final double autoPageProgress;
   final int ttsStart;
   final int ttsEnd;
+  final int ttsWordStart;
+  final int ttsWordEnd;
   final bool isScrollMode;
   final void Function(int lineIndex)? onLineTap;
   final Color pageBackgroundColor;
@@ -41,6 +43,8 @@ class PageViewWidget extends StatelessWidget {
     this.autoPageProgress = 0.0,
     this.ttsStart = -1,
     this.ttsEnd = -1,
+    this.ttsWordStart = -1,
+    this.ttsWordEnd = -1,
     this.ttsChapterIndex = -1,
     this.isScrollMode = false,
     this.onLineTap,
@@ -50,7 +54,7 @@ class PageViewWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ReaderProvider>();
-    final double currentPaddingTop = isScrollMode ? 0.0 : paddingTop;
+    final double currentPaddingTop = paddingTop;
     final failureMessage = provider.chapterFailureMessage(page.chapterIndex);
 
     if (failureMessage != null && failureMessage.trim().isNotEmpty) {
@@ -108,6 +112,8 @@ class PageViewWidget extends StatelessWidget {
                                 pageBackgroundColor: pageBackgroundColor,
                                 ttsStart: ttsStart,
                                 ttsEnd: ttsEnd,
+                                ttsWordStart: ttsWordStart,
+                                ttsWordEnd: ttsWordEnd,
                                 ttsChapterIndex: ttsChapterIndex,
                               ),
                             ),
@@ -123,6 +129,8 @@ class PageViewWidget extends StatelessWidget {
                           autoPageProgress: 0.0,
                           ttsStart: ttsStart,
                           ttsEnd: ttsEnd,
+                          ttsWordStart: ttsWordStart,
+                          ttsWordEnd: ttsWordEnd,
                           ttsChapterIndex: ttsChapterIndex,
                         ),
                       ),
@@ -298,6 +306,8 @@ class _TextPagePainter extends CustomPainter {
   final Color pageBackgroundColor;
   final int ttsStart;
   final int ttsEnd;
+  final int ttsWordStart;
+  final int ttsWordEnd;
   final int ttsChapterIndex;
 
   _TextPagePainter({
@@ -313,6 +323,8 @@ class _TextPagePainter extends CustomPainter {
     this.pageBackgroundColor = Colors.white,
     this.ttsStart = -1,
     this.ttsEnd = -1,
+    this.ttsWordStart = -1,
+    this.ttsWordEnd = -1,
     this.ttsChapterIndex = -1,
   });
 
@@ -384,17 +396,66 @@ class _TextPagePainter extends CustomPainter {
         final highlightPaint =
             Paint()
               ..color =
-                  contentStyle.color?.withValues(alpha: 0.2) ??
-                  Colors.yellow.withValues(alpha: 0.3);
-        canvas.drawRect(
-          Rect.fromLTWH(
-            paddingLeft,
-            paddingTop + line.lineTop,
-            width,
-            line.height,
-          ),
+                  contentStyle.color?.withValues(alpha: 0.12) ??
+                  Colors.yellow.withValues(alpha: 0.22);
+        final lineRect = Rect.fromLTWH(
+          paddingLeft,
+          paddingTop + line.lineTop,
+          width,
+          line.height,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(lineRect, const Radius.circular(4)),
           highlightPaint,
         );
+      }
+
+      final hasWordFocus =
+          ttsWordStart >= 0 &&
+          (ttsChapterIndex < 0 || targetPage.chapterIndex == ttsChapterIndex) &&
+          lineEnd > ttsWordStart &&
+          lineStart < ttsWordEnd;
+      if (hasWordFocus && !line.shouldJustify && line.text.isNotEmpty) {
+        final activeStart = (ttsWordStart - lineStart).clamp(
+          0,
+          line.text.length,
+        );
+        final activeEnd = (ttsWordEnd - lineStart).clamp(
+          activeStart,
+          line.text.length,
+        );
+        if (activeEnd > activeStart) {
+          final lineStyle = line.isTitle ? titleStyle : contentStyle;
+          final prefixPainter = TextPainter(
+            text: TextSpan(
+              text: line.text.substring(0, activeStart),
+              style: lineStyle,
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          final activePainter = TextPainter(
+            text: TextSpan(
+              text: line.text.substring(activeStart, activeEnd),
+              style: lineStyle,
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          final wordRect = Rect.fromLTWH(
+            paddingLeft + prefixPainter.width - 1,
+            paddingTop + line.lineTop,
+            activePainter.width + 2,
+            line.height,
+          );
+          final shadowPaint =
+              Paint()
+                ..color =
+                    contentStyle.color?.withValues(alpha: 0.2) ??
+                    Colors.yellow.withValues(alpha: 0.28);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(wordRect, const Radius.circular(4)),
+            shadowPaint,
+          );
+        }
       }
 
       textPainter.text = TextSpan(
@@ -417,6 +478,8 @@ class _TextPagePainter extends CustomPainter {
         oldDelegate.nextPage != nextPage ||
         oldDelegate.ttsStart != ttsStart ||
         oldDelegate.ttsEnd != ttsEnd ||
+        oldDelegate.ttsWordStart != ttsWordStart ||
+        oldDelegate.ttsWordEnd != ttsWordEnd ||
         oldDelegate.ttsChapterIndex != ttsChapterIndex ||
         oldDelegate.isAutoPaging != isAutoPaging ||
         oldDelegate.pageBackgroundColor != pageBackgroundColor;

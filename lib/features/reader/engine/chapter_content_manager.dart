@@ -15,6 +15,8 @@ class PaginationConfig {
   final int textIndent;
   final bool textFullJustify;
   final double padding;
+  final double contentPaddingTop;
+  final double contentPaddingBottom;
 
   const PaginationConfig({
     required this.viewSize,
@@ -24,6 +26,8 @@ class PaginationConfig {
     this.textIndent = 2,
     this.textFullJustify = true,
     this.padding = 16.0,
+    this.contentPaddingTop = 0.0,
+    this.contentPaddingBottom = 0.0,
   });
 }
 
@@ -561,6 +565,8 @@ class ChapterContentManager {
         paragraphSpacing: config.paragraphSpacing,
         textIndent: config.textIndent,
         textFullJustify: config.textFullJustify,
+        contentPaddingTop: config.contentPaddingTop,
+        contentPaddingBottom: config.contentPaddingBottom,
       ),
     );
 
@@ -834,6 +840,8 @@ class ChapterContentManager {
       paragraphSpacing: config.paragraphSpacing,
       textIndent: config.textIndent,
       textFullJustify: config.textFullJustify,
+      contentPaddingTop: config.contentPaddingTop,
+      contentPaddingBottom: config.contentPaddingBottom,
     )) {
       if (_disposed) return;
       if (capturedVersion != null && _configVersion != capturedVersion) {

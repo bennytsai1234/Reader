@@ -20,6 +20,7 @@ typedef ExploreKindsLoader =
 class ExploreProvider extends ChangeNotifier {
   final BookSourceDao _sourceDao;
   final ExploreKindsLoader _kindsLoader;
+  StreamSubscription<List<BookSource>>? _sourceSubscription;
 
   // --- 書源列表 ---
   List<BookSource> _allSources = [];
@@ -51,14 +52,37 @@ class ExploreProvider extends ChangeNotifier {
   ExploreProvider({BookSourceDao? sourceDao, ExploreKindsLoader? kindsLoader})
     : _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
       _kindsLoader = kindsLoader ?? ExploreUrlParser.parseAsync {
+    _bindSources();
+  }
+
+  void _bindSources() {
+    _sourceSubscription = _sourceDao.watchAll().listen((sources) {
+      _reloadFromSnapshot(sources);
+    });
     _loadSources();
   }
 
   /// 載入所有啟用探索的書源
   Future<void> _loadSources() async {
-    final allEnabled = await _sourceDao.getEnabled();
+    final allSources = await _sourceDao.getAll();
+    _reloadFromSnapshot(allSources);
+  }
+
+  void _reloadFromSnapshot(List<BookSource> sources) {
+    final expandedSourceUrl =
+        _expandedIndex >= 0 && _expandedIndex < _filteredSources.length
+            ? _filteredSources[_expandedIndex].bookSourceUrl
+            : null;
+
     _allSources =
-        allEnabled.where((s) => s.enabledExplore && s.hasExploreUrl).toList()
+        sources
+            .where(
+              (source) =>
+                  source.enabled &&
+                  source.enabledExplore &&
+                  source.hasExploreUrl,
+            )
+            .toList()
           ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
 
     // 提取分組
@@ -74,6 +98,17 @@ class ExploreProvider extends ChangeNotifier {
     _groups = groupSet.toList()..sort();
 
     _applyFilter();
+    if (expandedSourceUrl != null) {
+      final newIndex = _filteredSources.indexWhere(
+        (source) => source.bookSourceUrl == expandedSourceUrl,
+      );
+      if (newIndex >= 0) {
+        _expandedIndex = newIndex;
+      } else {
+        _expandedIndex = -1;
+        _expandedKinds = [];
+      }
+    }
     notifyListeners();
   }
 
@@ -179,6 +214,7 @@ class ExploreProvider extends ChangeNotifier {
   /// 刷新分類快取 (對標 Android menu_refresh / clearExploreKindsCache)
   Future<void> refreshKindsCache(BookSource source) async {
     _kindsCache.remove(source.bookSourceUrl);
+    await ExploreUrlParser.clearCache(source, exploreUrl: source.exploreUrl);
     if (_expandedIndex >= 0 &&
         _expandedIndex < _filteredSources.length &&
         _filteredSources[_expandedIndex].bookSourceUrl ==
@@ -224,5 +260,11 @@ class ExploreProvider extends ChangeNotifier {
     _expandedKinds = [];
     notifyListeners();
     return true;
+  }
+
+  @override
+  void dispose() {
+    _sourceSubscription?.cancel();
+    super.dispose();
   }
 }

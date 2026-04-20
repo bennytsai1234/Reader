@@ -8,10 +8,27 @@ import 'package:inkpage_reader/features/explore/explore_provider.dart';
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
   List<BookSource> sources = [];
+  final StreamController<List<BookSource>> _controller =
+      StreamController<List<BookSource>>.broadcast();
 
   @override
   Future<List<BookSource>> getEnabled() async =>
       sources.where((source) => source.enabled).toList();
+
+  @override
+  Future<List<BookSource>> getAll() async => List<BookSource>.from(sources);
+
+  @override
+  Stream<List<BookSource>> watchAll() => _controller.stream;
+
+  void pushSources(List<BookSource> nextSources) {
+    sources = List<BookSource>.from(nextSources);
+    _controller.add(List<BookSource>.from(sources));
+  }
+
+  Future<void> dispose() async {
+    await _controller.close();
+  }
 }
 
 Future<void> _settleAsync() async {
@@ -19,10 +36,13 @@ Future<void> _settleAsync() async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late _FakeSourceDao fakeSourceDao;
 
   setUp(() {
     fakeSourceDao = _FakeSourceDao();
+    addTearDown(fakeSourceDao.dispose);
   });
 
   test('toggleExpand waits for async kinds and reuses cache', () async {
@@ -112,4 +132,47 @@ void main() {
     expect(provider.expandedKinds.first.title, '熱門');
     expect(loaderCalls, 2);
   });
+
+  test(
+    'watchAll refreshes sources after import without recreating provider',
+    () async {
+      fakeSourceDao.sources = [
+        BookSource(
+          bookSourceUrl: 'source://one',
+          bookSourceName: '第一個書源',
+          enabled: true,
+          enabledExplore: true,
+          exploreUrl: '最新::https://example.com/one',
+        ),
+      ];
+
+      final provider = ExploreProvider(
+        sourceDao: fakeSourceDao,
+        kindsLoader: (exploreUrl, {source}) async => const [],
+      );
+      addTearDown(provider.dispose);
+
+      await _settleAsync();
+      expect(provider.sources.map((source) => source.bookSourceUrl), [
+        'source://one',
+      ]);
+
+      fakeSourceDao.pushSources([
+        ...fakeSourceDao.sources,
+        BookSource(
+          bookSourceUrl: 'source://two',
+          bookSourceName: '第二個書源',
+          enabled: true,
+          enabledExplore: true,
+          exploreUrl: '最新::https://example.com/two',
+        ),
+      ]);
+
+      await _settleAsync();
+      expect(provider.sources.map((source) => source.bookSourceUrl), [
+        'source://one',
+        'source://two',
+      ]);
+    },
+  );
 }

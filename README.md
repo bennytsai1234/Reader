@@ -13,7 +13,7 @@
 
 ## 版本資訊
 
-- App version：`0.2.5` (build `20`)
+- App version：`0.2.6` (build `21`)
 - Dart SDK：`^3.7.0`
 - 資料庫 schema：v8
 - 開發主線：`main`
@@ -67,7 +67,7 @@ release-notes/  各版本 release note
 flutter pub get              # 安裝依賴
 flutter pub run build_runner build --delete-conflicting-outputs  # 重新生成 Drift 程式碼
 flutter analyze              # 靜態分析
-flutter test                 # 跑全部測試
+tool/flutter_test_with_quickjs.sh                 # 跑全部測試（自動補 QuickJS 測試環境）
 flutter test test/features/reader/read_book_controller_test.dart  # 跑單一檔
 flutter run                  # 啟動
 flutter build apk --release  # Android release
@@ -112,13 +112,15 @@ CI 自動觸發 build-release workflow，約 25 分鐘後 GitHub Releases 頁面
 
 注意：
 
-- 在某些 WSL / VM 環境，若缺少 QuickJS native library（`libquickjs_c_bridge_plugin.so`），部分 JS / compatibility 測試會失敗。
-- 這類情況下，請以 CI 或具備完整 native library 的本機環境確認 full suite。
+- Linux / WSL 的 `flutter test` 需要 `flutter_js` 提供的 `libquickjs_c_bridge_plugin.so`。
+- repo 已提供 `tool/flutter_test_with_quickjs.sh`，會自動從 `~/.pub-cache` 尋找這顆 `.so`，並設定 `LIBQUICKJSC_TEST_PATH` / `LD_LIBRARY_PATH`。
+- 如果要跑 source validation，也請使用 repo 內的 script，例如 `tool/run_source_validation.sh`，不要自己裸跑 `flutter test tool/...`。
 
 提交前最低要求：
 
 ```bash
-flutter analyze && flutter test
+flutter analyze
+tool/flutter_test_with_quickjs.sh
 ```
 
 ## 授權與使用說明

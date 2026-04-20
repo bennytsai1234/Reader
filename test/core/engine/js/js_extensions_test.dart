@@ -173,6 +173,29 @@ void main() {
       );
     });
 
+    test('cache.getFile returns null on cache miss like Legado', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final rewritten = AsyncJsRewriter.rewrite(r'''
+        var cached = cache.getFile("missing-key");
+        cached == null ? "null" : String(cached);
+      ''');
+      final (callId, future) = ext.registerRuleCall();
+      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+
+      final evalResult = runtime!.evaluate(wrapped);
+      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+      runtime!.executePendingJob();
+
+      final resolved = await future;
+      expect(resolved, 'null');
+    });
+
     test('source bridge is exposed when source exists', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);

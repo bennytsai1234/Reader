@@ -44,11 +44,12 @@ class ScrollModeDelegate extends PageModeDelegate {
       itemCount: provider.chapters.length,
       itemScrollController: itemScrollController,
       itemPositionsListener: itemPositionsListener,
-      initialScrollIndex: provider.chapters.isEmpty
-          ? 0
-          : provider.currentChapterIndex
-              .clamp(0, provider.chapters.length - 1)
-              .toInt(),
+      initialScrollIndex:
+          provider.chapters.isEmpty
+              ? 0
+              : provider.currentChapterIndex
+                  .clamp(0, provider.chapters.length - 1)
+                  .toInt(),
       initialAlignment:
           provider.visibleChapterAlignment.clamp(0.0, 1.0).toDouble(),
       physics: const BouncingScrollPhysics(),
@@ -57,14 +58,18 @@ class ScrollModeDelegate extends PageModeDelegate {
         var pages = runtimeChapter?.pages;
 
         // Fast path: eagerly paginate for local books to avoid placeholder flash
-        if ((pages == null || pages.isEmpty) && provider.book.origin == 'local') {
+        if ((pages == null || pages.isEmpty) &&
+            provider.book.origin == 'local') {
           // trySyncPaginate is actually async, but we fire-and-forget here
           // and rely on the notifyListeners callback to rebuild with real pages
           unawaited(provider.trySyncPaginate(chapterIndex));
         }
 
         if (pages == null || pages.isEmpty) {
-          final estimatedHeight = _estimateChapterHeight(provider, chapterIndex);
+          final estimatedHeight = _estimateChapterHeight(
+            provider,
+            chapterIndex,
+          );
           return Container(
             color: provider.currentTheme.backgroundColor,
             height: estimatedHeight,
@@ -90,16 +95,21 @@ class ScrollModeDelegate extends PageModeDelegate {
                     '$chapterIndex:${page.index}',
                     GlobalKey.new,
                   ),
-                  height: runtimeChapter?.pageHeightAt(page.index) ?? 0,
+                  height:
+                      (runtimeChapter?.pageHeightAt(page.index) ?? 0) +
+                      provider.contentTopInset +
+                      provider.contentBottomInset,
                   child: PageViewWidget(
                     page: page,
                     contentStyle: contentStyle,
                     titleStyle: titleStyle,
                     isScrollMode: true,
-                    paddingTop: 0,
-                    paddingBottom: 0,
+                    paddingTop: provider.contentTopInset,
+                    paddingBottom: provider.contentBottomInset,
                     ttsStart: provider.ttsStart,
                     ttsEnd: provider.ttsEnd,
+                    ttsWordStart: provider.ttsWordStart,
+                    ttsWordEnd: provider.ttsWordEnd,
                     ttsChapterIndex: provider.ttsChapterIndex,
                     pageBackgroundColor: provider.currentTheme.backgroundColor,
                   ),

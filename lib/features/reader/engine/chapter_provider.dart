@@ -26,6 +26,8 @@ class PaginationMetrics {
   factory PaginationMetrics.fromInputs({
     required Size viewSize,
     required double padding,
+    required double contentPaddingTop,
+    required double contentPaddingBottom,
     required double titleTopSpacing,
     required double titleBottomSpacing,
     required double paragraphSpacing,
@@ -35,7 +37,9 @@ class PaginationMetrics {
   }) {
     return PaginationMetrics(
       width: viewSize.width - (padding * 2),
-      height: viewSize.height - 80,
+      height: (viewSize.height - contentPaddingTop - contentPaddingBottom)
+          .clamp(1.0, double.infinity)
+          .toDouble(),
       titleTopSpacing: titleTopSpacing,
       titleBottomSpacing: titleBottomSpacing,
       paragraphSpacing: paragraphSpacing,
@@ -100,10 +104,14 @@ class ChapterProvider {
     double titleBottomSpacing = 10.0,
     bool textFullJustify = true,
     double padding = 16.0,
+    double contentPaddingTop = 0.0,
+    double contentPaddingBottom = 0.0,
   }) async {
     final metrics = PaginationMetrics.fromInputs(
       viewSize: viewSize,
       padding: padding,
+      contentPaddingTop: contentPaddingTop,
+      contentPaddingBottom: contentPaddingBottom,
       titleTopSpacing: titleTopSpacing,
       titleBottomSpacing: titleBottomSpacing,
       paragraphSpacing: paragraphSpacing,
@@ -146,10 +154,14 @@ class ChapterProvider {
     double titleBottomSpacing = 10.0,
     bool textFullJustify = true,
     double padding = 16.0,
+    double contentPaddingTop = 0.0,
+    double contentPaddingBottom = 0.0,
   }) async* {
     final metrics = PaginationMetrics.fromInputs(
       viewSize: viewSize,
       padding: padding,
+      contentPaddingTop: contentPaddingTop,
+      contentPaddingBottom: contentPaddingBottom,
       titleTopSpacing: titleTopSpacing,
       titleBottomSpacing: titleBottomSpacing,
       paragraphSpacing: paragraphSpacing,

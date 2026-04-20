@@ -34,7 +34,7 @@ class BookListParser {
     }
 
     final rule = AnalyzeRule(source: source).setContent(body, baseUrl: baseUrl);
-    final dynamic listRule = isSearch ? source.ruleSearch : source.ruleExplore;
+    dynamic listRule = isSearch ? source.ruleSearch : _resolveExploreRule(source);
     if (listRule == null) return [];
 
     String ruleList = listRule.bookList ?? '';
@@ -48,10 +48,33 @@ class BookListParser {
       ruleList = ruleList.substring(1);
     }
 
-    final elements =
+    var elements =
         listRuleNeedsAsync
             ? await rule.getElementsAsync(ruleList)
             : rule.getElements(ruleList);
+
+    if (!isSearch &&
+        elements.isEmpty &&
+        _shouldFallbackToSearchRule(source, listRule)) {
+      final fallbackRule = source.ruleSearch;
+      if (fallbackRule != null) {
+        listRule = fallbackRule;
+        ruleList = fallbackRule.bookList ?? '';
+        final fallbackNeedsAsync = _ruleNeedsAsync(ruleList);
+        isReverse = false;
+        if (ruleList.startsWith('-')) {
+          isReverse = true;
+          ruleList = ruleList.substring(1);
+        }
+        if (ruleList.startsWith('+')) {
+          ruleList = ruleList.substring(1);
+        }
+        elements =
+            fallbackNeedsAsync
+                ? await rule.getElementsAsync(ruleList)
+                : rule.getElements(ruleList);
+      }
+    }
 
     // 2. 如果列表為空且未配置 bookUrlPattern，嘗試按詳情頁解析 (對標 Android 邏輯)
     if (elements.isEmpty &&
@@ -179,6 +202,25 @@ class BookListParser {
       }
     }
 
+    if (!isSearch &&
+        books.isEmpty &&
+        _shouldFallbackToSearchRule(source, listRule)) {
+      final originalExploreRule = source.ruleExplore;
+      source.ruleExplore = _copySearchRuleAsExploreRule(source.ruleSearch!);
+      try {
+        return parse(
+          source: source,
+          body: body,
+          baseUrl: baseUrl,
+          isSearch: false,
+          filter: filter,
+          shouldBreak: shouldBreak,
+        );
+      } finally {
+        source.ruleExplore = originalExploreRule;
+      }
+    }
+
     return isReverse ? books.reversed.toList() : books;
   }
 
@@ -256,5 +298,40 @@ class BookListParser {
       return rule.getStringListAsync(ruleText, isUrl: isUrl);
     }
     return rule.getStringList(ruleText, isUrl: isUrl);
+  }
+
+  static dynamic _resolveExploreRule(BookSource source) {
+    final exploreRule = source.ruleExplore;
+    final exploreBookList = exploreRule?.bookList?.trim() ?? '';
+    if (exploreBookList.isNotEmpty) {
+      return exploreRule;
+    }
+    return source.ruleSearch ?? exploreRule;
+  }
+
+  static bool _shouldFallbackToSearchRule(BookSource source, dynamic activeRule) {
+    final searchRule = source.ruleSearch;
+    if (searchRule == null) return false;
+    final searchBookList = searchRule.bookList?.trim() ?? '';
+    if (searchBookList.isEmpty) return false;
+    if (identical(activeRule, searchRule)) return false;
+    final activeBookList =
+        (activeRule?.bookList as String?)?.trim() ?? '';
+    return activeBookList != searchBookList;
+  }
+
+  static ExploreRule _copySearchRuleAsExploreRule(SearchRule rule) {
+    return ExploreRule(
+      bookList: rule.bookList,
+      name: rule.name,
+      author: rule.author,
+      intro: rule.intro,
+      kind: rule.kind,
+      lastChapter: rule.lastChapter,
+      updateTime: rule.updateTime,
+      bookUrl: rule.bookUrl,
+      coverUrl: rule.coverUrl,
+      wordCount: rule.wordCount,
+    );
   }
 }

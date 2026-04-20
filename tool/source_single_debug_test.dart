@@ -26,6 +26,9 @@ void main() {
   final searchOnly = Platform.environment['SEARCH_ONLY'] == '1';
   final exploreOnly = Platform.environment['EXPLORE_ONLY'] == '1';
   final debugSearchParse = Platform.environment['DEBUG_SEARCH_PARSE'] == '1';
+  final debugExploreParse = Platform.environment['DEBUG_EXPLORE_PARSE'] == '1';
+  final debugExploreKindIndex =
+      int.tryParse(Platform.environment['DEBUG_EXPLORE_KIND_INDEX'] ?? '') ?? 1;
   final debugRawCss = Platform.environment['DEBUG_RAW_CSS']?.trim();
   final debugPattern = Platform.environment['DEBUG_PATTERN']?.trim();
   final debugJsIntermediate =
@@ -76,6 +79,68 @@ void main() {
             );
           }
         }
+      }
+      return;
+    }
+
+    if (debugExploreParse) {
+      final exploreUrl = source.exploreUrl?.trim() ?? '';
+      final kinds = await ExploreUrlParser.parseAsync(exploreUrl, source: source);
+      // ignore: avoid_print
+      print('[debug] explore kinds=${kinds.length}');
+      for (final kind in kinds.take(5)) {
+        // ignore: avoid_print
+        print('[debug] explore kind=${kind.title} | url=${kind.url}');
+      }
+      if (kinds.isEmpty) {
+        return;
+      }
+
+      final selectedIndex = (debugExploreKindIndex - 1).clamp(0, kinds.length - 1);
+      final selectedKind = kinds[selectedIndex];
+      final analyzeUrl = await AnalyzeUrl.create(
+        selectedKind.url ?? '',
+        source: source,
+        page: 1,
+      );
+      final response = await analyzeUrl.getStrResponse();
+      // ignore: avoid_print
+      print(
+        '[debug] explore response url=${response.url} '
+        'len=${response.body.length}',
+      );
+      // ignore: avoid_print
+      print('[debug] explore body=${_previewBody(response.body)}');
+
+      final listRule =
+          source.ruleExplore?.bookList?.trim().isNotEmpty == true
+              ? source.ruleExplore?.bookList ?? ''
+              : source.ruleSearch?.bookList ?? '';
+      final parser = rule_engine.AnalyzeRule(
+        source: source,
+      ).setContent(response.body, baseUrl: response.url);
+      final elements = parser.getElements(listRule);
+      // ignore: avoid_print
+      print('[debug] explore rule=$listRule elements=${elements.length}');
+      for (final element in elements.take(3)) {
+        // ignore: avoid_print
+        print('[debug] explore element=${_previewBody(element.toString())}');
+      }
+
+      final books = await BookListParser.parse(
+        source: source,
+        body: response.body,
+        baseUrl: response.url,
+        isSearch: false,
+      );
+      // ignore: avoid_print
+      print('[debug] explore books=${books.length}');
+      for (final book in books.take(5)) {
+        // ignore: avoid_print
+        print(
+          '[debug] explore result=${book.name} | '
+          'author=${book.author ?? ''} | url=${book.bookUrl}',
+        );
       }
       return;
     }

@@ -280,6 +280,16 @@ class WebBook {
       }
     }
 
+    // legado 會在書源規則歸一後，再依 book.reverseToc 決定最終顯示順序。
+    // 預設 reverseToc=false，因此會再 reverse 一次，讓大多數來源維持正序。
+    final reverseToc = book.readConfig?.reverseToc ?? false;
+    if (!reverseToc && deduped.length > 1) {
+      final finalOrder = deduped.reversed.toList();
+      deduped
+        ..clear()
+        ..addAll(finalOrder);
+    }
+
     // 重新編號所有章節
     for (var i = 0; i < deduped.length; i++) {
       deduped[i] = deduped[i].copyWith(index: i);

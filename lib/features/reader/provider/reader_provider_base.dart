@@ -43,6 +43,8 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   double visibleChapterAlignment = 0.0;
   double visibleChapterLocalOffset = 0.0;
   Size? viewSize;
+  double contentTopInset = 0.0;
+  double contentBottomInset = 0.0;
 
   final Map<int, List<TextPage>> _chapterPagesCache = {};
   Map<int, List<TextPage>> get chapterPagesCache => _chapterPagesCache;
@@ -99,6 +101,21 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   }
 
   ReaderProviderBase(this.book);
+
+  bool updateContentInsets({
+    required double top,
+    required double bottom,
+  }) {
+    final normalizedTop = top < 0 ? 0.0 : top;
+    final normalizedBottom = bottom < 0 ? 0.0 : bottom;
+    if ((contentTopInset - normalizedTop).abs() < 0.5 &&
+        (contentBottomInset - normalizedBottom).abs() < 0.5) {
+      return false;
+    }
+    contentTopInset = normalizedTop;
+    contentBottomInset = normalizedBottom;
+    return true;
+  }
 
   bool _isDisposed = false;
   bool get isDisposed => _isDisposed;

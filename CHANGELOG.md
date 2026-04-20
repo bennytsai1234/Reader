@@ -4,6 +4,26 @@
 
 ---
 
+## [0.2.6] — 2026-04-20
+
+### 新功能 / 整合
+
+- **發現頁對齊 Legado**：收斂成頂部搜尋列、緊湊書源標題列、框線分類容器與精簡長按選單，操作流更接近 Legado
+- **發現規則 JS 快取與回退**：`exploreUrl` 的 JS 結果現在會持久化快取，重新整理時可同步清空；JS 執行失敗時改為顯式 `ERROR:*` 分類，而不是靜默空白
+- **QuickJS 測試環境收口**：新增 `tool/flutter_test_with_quickjs.sh` 與通用 QuickJS wrapper，CI 與 source validation 共用同一套本地/CI QuickJS 測試入口
+
+### 修復
+
+- 修正部分書源目錄順序與 Legado 不一致，導致「開始閱讀」從最新章節而非第一章開始的問題
+- 修正發現頁展開、分類與 JS 探索錯誤回顯的穩定性
+- 修正 TTS 跟讀、閱讀頁上下邊界與閱讀控制層的若干行為細節，減少誤觸與跟隨不準確
+- 修正 QuickJS 測試探測邏輯，避免在 test zone 外誤啟動 runtime 導致 JS 測試自身失敗
+
+### 體驗優化
+
+- 發現頁分類空狀態、錯誤狀態與長按操作更直接，出錯時可直接看到規則訊息
+- README 與交接文檔補齊 Linux / WSL 下 QuickJS 測試正確用法
+
 ## [0.2.5] — 2026-04-20
 
 ### 新功能 / 整合
@@ -131,6 +151,7 @@
 
 ---
 
+[0.2.6]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.6
 [0.2.1]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.1
 [0.2.5]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.5
 [0.2.4]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.4
