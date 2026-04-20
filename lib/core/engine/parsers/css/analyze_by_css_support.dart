@@ -624,20 +624,23 @@ bool _isEscaped(String input, int index) {
 }
 
 String normalizeCssSelectorCompat(String selector) {
-  return selector.replaceAllMapped(RegExp(r'\[([^\]=~\^\$\*\|]+)=([^\]]+)\]'), (
-    match,
-  ) {
-    final attr = match.group(1)!.trim();
-    final value = match.group(2)!.trim();
-    if (value.startsWith('"') || value.startsWith("'")) {
-      return match.group(0)!;
-    }
-    return '[$attr="$value"]';
-  });
+  return selector.replaceAllMapped(
+    RegExp(r'\[([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]'),
+    (match) {
+      final attr = match.group(1)!.trim();
+      final value = match.group(2)!.trim();
+      if (value.startsWith('"') || value.startsWith("'")) {
+        return match.group(0)!;
+      }
+      return '[$attr="$value"]';
+    },
+  );
 }
 
 bool _hasExactAttributeSelector(String selector) {
-  return RegExp(r'\[\s*([^\s~=\]]+)\s*=\s*([^\]]+)\]').hasMatch(selector);
+  return RegExp(
+    r'\[\s*([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]',
+  ).hasMatch(selector);
 }
 
 bool _hasRegexAttributeSelector(String selector) {
@@ -675,7 +678,7 @@ _extractRegexAttributeSelectors(String selector) {
 _extractExactAttributeSelectors(String selector) {
   final attributeSelectors = <_AttributeExactSelector>[];
   final normalized = selector.replaceAllMapped(
-    RegExp(r'\[\s*([^\s~=\]]+)\s*=\s*([^\]]+)\]'),
+    RegExp(r'\[\s*([^\s~\^\$\*\|=\]]+)\s*=\s*([^\]]+)\]'),
     (match) {
       final name = match.group(1)!.trim();
       final rawValue = match.group(2)!.trim();

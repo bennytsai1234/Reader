@@ -9,6 +9,7 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import '../../test_helper.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setupTestDI();
 
   group('User Source Compatibility', () {
@@ -441,19 +442,21 @@ void main() {
       expect(results.first.wordCount, isNotEmpty);
     });
 
-    test('Legado-style bare JSON list rules parse from raw JSON strings', () async {
-      final source = BookSource.fromJson({
-        'bookSourceName': '七猫小说',
-        'bookSourceUrl': 'https://api-bc.wtzw.com',
-        'ruleSearch': {
-          'bookList': 'data.books',
-          'name': 'original_title',
-          'author': 'original_author',
-          'bookUrl': r'https://api.example.com/book/{{$.id}}',
-        },
-      });
+    test(
+      'Legado-style bare JSON list rules parse from raw JSON strings',
+      () async {
+        final source = BookSource.fromJson({
+          'bookSourceName': '七猫小说',
+          'bookSourceUrl': 'https://api-bc.wtzw.com',
+          'ruleSearch': {
+            'bookList': 'data.books',
+            'name': 'original_title',
+            'author': 'original_author',
+            'bookUrl': r'https://api.example.com/book/{{$.id}}',
+          },
+        });
 
-      const searchJson = '''
+        const searchJson = '''
       {
         "data": {
           "books": [
@@ -467,18 +470,19 @@ void main() {
       }
       ''';
 
-      final results = await BookListParser.parse(
-        source: source,
-        body: searchJson,
-        baseUrl: 'https://api-bc.wtzw.com/api/v5/search/words',
-        isSearch: true,
-      );
+        final results = await BookListParser.parse(
+          source: source,
+          body: searchJson,
+          baseUrl: 'https://api-bc.wtzw.com/api/v5/search/words',
+          isSearch: true,
+        );
 
-      expect(results, hasLength(1));
-      expect(results.first.name, '我的吊带裙');
-      expect(results.first.author, '作者A');
-      expect(results.first.bookUrl, 'https://api.example.com/book/1885648');
-    });
+        expect(results, hasLength(1));
+        expect(results.first.name, '我的吊带裙');
+        expect(results.first.author, '作者A');
+        expect(results.first.bookUrl, 'https://api.example.com/book/1885648');
+      },
+    );
 
     test(
       'Search parsing keeps valid items when optional metadata rules are unusable',

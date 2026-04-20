@@ -10,6 +10,7 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import '../../test_helper.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setupTestDI();
 
   // ───────────────────────────────────────────────────

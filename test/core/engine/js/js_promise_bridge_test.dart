@@ -368,6 +368,10 @@ void main() {
           expect(runtimeError, isNotNull);
           return;
         }
+        runtime!.evaluate(r'''
+          var result = '{"url":"https://api.example.com/content"}';
+          var baseUrl = 'https://api.example.com/book/1';
+        ''');
         responses['https://api.example.com/content'] =
             '{"content":"chapter body"}';
 

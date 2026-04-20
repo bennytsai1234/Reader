@@ -182,21 +182,26 @@ class AsyncJsRewriter {
 
       // 嘗試 <owner>.<asyncMethod>( 匹配
       if (_isIdentStartChar(c) && _isIdentifierStart(source, i)) {
-        final callEnd = _tryMatchAsyncCall(source, i);
-        if (callEnd != null) {
+        final asyncCall = _tryMatchAsyncCall(source, i);
+        if (asyncCall != null) {
           hasAsync = true;
           if (!rewrite) {
             return const _ScanResult(result: '', hasAsync: true);
           }
+          final rewrittenCall = _rewriteAsyncCall(
+            source,
+            startIdx: i,
+            match: asyncCall,
+          );
           final awaited = _sbPrecededByAwait(sb!);
           if (awaited) {
-            sb.write(source.substring(i, callEnd));
+            sb.write(rewrittenCall);
           } else {
             sb.write('(await ');
-            sb.write(source.substring(i, callEnd));
+            sb.write(rewrittenCall);
             sb.write(')');
           }
-          i = callEnd;
+          i = asyncCall.endIndex;
           continue;
         }
       }
@@ -282,7 +287,7 @@ class AsyncJsRewriter {
   /// 嘗試從 [startIdx] 開始匹配 `<owner>.<asyncMethod>(...)`
   ///
   /// 成功回傳整個 call expression 結束後下一個 index；失敗回傳 null。
-  static int? _tryMatchAsyncCall(String source, int startIdx) {
+  static _AsyncCallMatch? _tryMatchAsyncCall(String source, int startIdx) {
     final n = source.length;
     // 讀 owner identifier
     var i = startIdx;
@@ -312,6 +317,7 @@ class AsyncJsRewriter {
       i++;
     }
     if (i >= n || source.codeUnitAt(i) != _lparen) return null;
+    final openParenIdx = i;
 
     // 括號配對 — 找出對應的 ')' 位置
     final closeIdx = _matchParen(source, i);
@@ -328,7 +334,26 @@ class AsyncJsRewriter {
       }
     }
 
-    return closeIdx + 1;
+    return _AsyncCallMatch(
+      openParenIndex: openParenIdx,
+      closeParenIndex: closeIdx,
+      endIndex: closeIdx + 1,
+    );
+  }
+
+  static String _rewriteAsyncCall(
+    String source, {
+    required int startIdx,
+    required _AsyncCallMatch match,
+  }) {
+    final beforeArgs = source.substring(startIdx, match.openParenIndex + 1);
+    final rawArgs = source.substring(
+      match.openParenIndex + 1,
+      match.closeParenIndex,
+    );
+    final rewrittenArgs =
+        rawArgs.isEmpty ? rawArgs : _scan(rawArgs, rewrite: true).result;
+    return '$beforeArgs$rewrittenArgs)';
   }
 
   static bool _isIdentStartChar(int cu) {
@@ -737,4 +762,16 @@ class _ScanResult {
   const _ScanResult({required this.result, required this.hasAsync});
   final String result;
   final bool hasAsync;
+}
+
+class _AsyncCallMatch {
+  const _AsyncCallMatch({
+    required this.openParenIndex,
+    required this.closeParenIndex,
+    required this.endIndex,
+  });
+
+  final int openParenIndex;
+  final int closeParenIndex;
+  final int endIndex;
 }

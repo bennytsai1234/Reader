@@ -23,6 +23,7 @@ class MockRuleData extends RuleDataInterface {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setupTestDI();
   group('Parsing Integration Tests', () {
     const bookSourceJson = {
@@ -34,8 +35,8 @@ void main() {
         'name': r'$.title',
         'author': r'$.author',
         'bookUrl': r"$.id@js: 'https://api.example.com/book/' + result",
-        'kind': r'$.category && $.status'
-      }
+        'kind': r'$.category && $.status',
+      },
     };
 
     const mockApiResponse = {
@@ -46,17 +47,17 @@ void main() {
             'title': 'Dart in Action',
             'author': 'John Doe',
             'category': 'Tech',
-            'status': 'Completed'
+            'status': 'Completed',
           },
           {
             'id': '456',
             'title': 'Flutter Magic',
             'author': 'Jane Smith',
             'category': 'Tech',
-            'status': 'Ongoing'
-          }
-        ]
-      }
+            'status': 'Ongoing',
+          },
+        ],
+      },
     };
 
     test('Full search flow integration', () async {
@@ -68,14 +69,17 @@ void main() {
         baseUrl: bookSourceJson['bookSourceUrl'] as String,
       );
 
-      expect(analyzeUrl.url, 'https://api.example.com/search?keyword=flutter&page=1');
+      expect(
+        analyzeUrl.url,
+        'https://api.example.com/search?keyword=flutter&page=1',
+      );
 
       // 2. Result Parsing
       final analyzer = AnalyzeRule(ruleData: MockRuleData());
       analyzer.setContent(jsonEncode(mockApiResponse));
 
       final ruleSearch = bookSourceJson['ruleSearch'] as Map<String, dynamic>;
-      
+
       // Get Book List
       final bookList = analyzer.getElements(ruleSearch['bookList'] as String);
       expect(bookList.length, 2);
@@ -94,7 +98,7 @@ void main() {
       expect(author, 'John Doe');
       expect(bookUrl, 'https://api.example.com/book/123');
       expect(kind, 'Tech\nCompleted');
-      
+
       analyzer.dispose();
       itemAnalyzer.dispose();
     });
@@ -102,19 +106,21 @@ void main() {
     test('Variable @put and @get integration', () {
       final mockData = MockRuleData();
       final analyzer = AnalyzeRule(ruleData: mockData);
-      
+
       // Simulate a rule that saves a variable
       analyzer.setContent({'id': '999', 'temp': 'Secret'});
-      
+
       // Rule with @put
       analyzer.getString(r'$.id@put:{"myVar": "$.temp"}');
-      
+
       expect(mockData.getVariable('myVar'), 'Secret');
-      
+
       // Get variable in another rule
-      final result = analyzer.getString(r'The ID is {$.id} and var is @get:{myVar}');
+      final result = analyzer.getString(
+        r'The ID is {$.id} and var is @get:{myVar}',
+      );
       expect(result, 'The ID is 999 and var is Secret');
-      
+
       analyzer.dispose();
     });
   });
