@@ -40,6 +40,8 @@ If a command will compile, analyze, generate code, watch files, or run the full 
 6. If VS Code is already open on this repo, prefer not to run extra `dart analyze` unless it is required for the task.
 7. After an interrupted heavy command, do not start another one until the previous process has fully exited.
 8. If the task does not require a full-repo check, prefer targeted commands.
+9. Never create or publish a release without first running `flutter analyze` on the current worktree.
+10. If any code changed after the last `flutter analyze`, run `flutter analyze` again before tagging, pushing a release commit, or creating a GitHub release.
 
 ## Default Execution Strategy
 
@@ -51,6 +53,26 @@ Use this order when verification is needed:
 4. `flutter test` once, or a targeted test file if full-suite coverage is unnecessary.
 
 Run these steps sequentially, never in parallel.
+
+## Release Gate
+
+If the task includes any release action such as:
+
+- bumping the app version
+- creating a release commit
+- creating or pushing a tag
+- creating a GitHub release
+- building a release artifact for distribution
+
+then the minimum verification flow is:
+
+1. `flutter pub get` only if dependencies changed.
+2. `build_runner build --delete-conflicting-outputs` only if Drift schema or generator inputs changed.
+3. `flutter analyze` once on the current worktree.
+4. Run targeted tests for the changed areas, or `flutter test` if the release scope is broad.
+5. Only after steps 1-4 pass, proceed with commit/tag/push/release actions.
+
+Do not skip step 3 for release work, even if targeted tests already passed.
 
 ## Preferred Commands
 
