@@ -1,7 +1,7 @@
 name: inkpage_reader
 description: "墨頁 Inkpage - a Flutter novel reader inspired by Legado"
 publish_to: 'none'
-version: 0.2.7+22
+version: 0.2.8+23
 homepage: https://github.com/bennytsai1234/reader
 repository: https://github.com/bennytsai1234/reader
 issue_tracker: https://github.com/bennytsai1234/reader/issues

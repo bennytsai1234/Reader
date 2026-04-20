@@ -4,6 +4,21 @@
 
 ---
 
+## [0.2.8] — 2026-04-20
+
+### 新功能 / 發版基礎設施
+
+- **固定 Android release signing**：release APK 改為讀取正式 keystore，不再沿用每次 runner 都不同的 debug 簽名
+- **GitHub Actions release workflow 補齊 signing secrets 流程**：CI 會從 repo secrets 還原 keystore 並用固定 release key 產生 APK
+
+### 修復
+
+- 修正 QuickJS 啟用後在 CI 上暴露出的 6 個測試回歸
+- 補 `TestWidgetsFlutterBinding.ensureInitialized()` 到相關 integration tests，避免 `flutter_js` 在 CI 上因 asset binding 未初始化而失敗
+- 修正 CSS attribute selector compat，避免把 `^=` 這類 selector 誤判成 exact match
+- 修正 nested async JS rewrite，讓 `java.ajax(java.ajax(...))` 這類巢狀呼叫正確等待內層結果
+- 修正 Promise bridge 測試上下文，避免 `result/baseUrl` 未定義造成假失敗
+
 ## [0.2.7] — 2026-04-20
 
 ### 修復
@@ -159,6 +174,7 @@
 
 ---
 
+[0.2.8]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.8
 [0.2.7]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.7
 [0.2.6]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.6
 [0.2.1]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.1
