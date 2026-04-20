@@ -15,7 +15,7 @@ class PreferKey {
   static const String coverShowNameN = 'coverShowNameN';
   static const String coverShowAuthorN = 'coverShowAuthorN';
   static const String hideStatusBar = 'hideStatusBar';
-  
+
   static const String clickActionTL = 'clickActionTopLeft';
   static const String clickActionTC = 'clickActionTopCenter';
   static const String clickActionTR = 'clickActionTopRight';
@@ -25,7 +25,7 @@ class PreferKey {
   static const String clickActionBL = 'clickActionBottomLeft';
   static const String clickActionBC = 'clickActionBottomCenter';
   static const String clickActionBR = 'clickActionBottomRight';
-  
+
   static const String hideNavigationBar = 'hideNavigationBar';
   static const String precisionSearch = 'precisionSearch';
   static const String readAloudByPage = 'readAloudByPage';
@@ -38,7 +38,7 @@ class PreferKey {
   static const String enableReview = 'enableReview';
   static const String bookshelfLayout = 'bookshelfLayout';
   static const String bookshelfSort = 'bookshelfSort';
-  
+
   static const String bookExportFileName = 'bookExportFileName';
   static const String bookImportFileName = 'bookImportFileName';
   static const String episodeExportFileName = 'episodeExportFileName';
@@ -51,17 +51,17 @@ class PreferKey {
   static const String restoreIgnore = 'restoreIgnore';
   static const String threadCount = 'threadCount';
   static const String keepLight = 'keep_light';
-  
+
   static const String enableCustomExport = 'enableCustomExport';
   static const String exportNoChapterName = 'exportNoChapterName';
   static const String exportType = 'exportType';
   static const String exportPictureFile = 'exportPictureFile';
-  
+
   static const String changeSourceCheckAuthor = 'changeSourceCheckAuthor';
   static const String changeSourceLoadToc = 'changeSourceLoadToc';
   static const String changeSourceLoadInfo = 'changeSourceLoadInfo';
   static const String changeSourceLoadWordCount = 'changeSourceLoadWordCount';
-  
+
   static const String chineseConverterType = 'chineseConverterType';
   static const String launcherIcon = 'launcherIcon';
   static const String textSelectAble = 'selectText';
@@ -96,7 +96,8 @@ class PreferKey {
   static const String mangaAutoPageSpeed = 'mangaAutoPageSpeed';
   static const String mangaFooterConfig = 'mangaFooterConfig';
   static const String disableClickScroll = 'disableClickScroll';
-  static const String enableMangaHorizontalScroll = 'enableMangaHorizontalScroll';
+  static const String enableMangaHorizontalScroll =
+      'enableMangaHorizontalScroll';
   static const String hideMangaTitle = 'hideMangaTitle';
   static const String mangaColorFilter = 'mangaColorFilter';
   static const String enableMangaEInk = 'enableMangaEInk';
@@ -115,12 +116,19 @@ class PreferKey {
   static const String readUrlOpenInBrowser = 'readUrlInBrowser';
   static const String defaultBookTreeUri = 'defaultBookTreeUri';
   static const String checkSource = 'checkSource';
+  static const String checkSourceKeyword = 'checkSourceKeyword';
+  static const String checkSourceTimeout = 'checkSourceTimeout';
+  static const String checkSourceSearch = 'checkSourceSearch';
+  static const String checkSourceDiscovery = 'checkSourceDiscovery';
+  static const String checkSourceInfo = 'checkSourceInfo';
+  static const String checkSourceCategory = 'checkSourceCategory';
+  static const String checkSourceContent = 'checkSourceContent';
   static const String uploadRule = 'uploadRule';
   static const String tocUiUseReplace = 'tocUiUseReplace';
   static const String tocCountWords = 'tocCountWords';
   static const String enableReadRecord = 'enableReadRecord';
   static const String localBookImportSort = 'localBookImportSort';
-  
+
   static const String customWelcome = 'customWelcome';
   static const String welcomeImage = 'welcomeImagePath';
   static const String welcomeImageDark = 'welcomeImagePathDark';
@@ -128,7 +136,7 @@ class PreferKey {
   static const String welcomeShowTextDark = 'welcomeShowTextDark';
   static const String welcomeShowIcon = 'welcomeShowIcon';
   static const String welcomeShowIconDark = 'welcomeShowIconDark';
-  
+
   static const String pageTouchSlop = 'pageTouchSlop';
   static const String showAddToShelfAlert = 'showAddToShelfAlert';
   static const String ignoreAudioFocus = 'ignoreAudioFocus';
@@ -159,32 +167,33 @@ class PreferKey {
   static const String optimizeRender = 'optimizeRender';
   static const String updateToVariant = 'updateToVariant';
   static const String streamReadAloudAudio = 'streamReadAloudAudio';
-  static const String pauseReadAloudWhilePhoneCalls = 'pauseReadAloudWhilePhoneCalls';
+  static const String pauseReadAloudWhilePhoneCalls =
+      'pauseReadAloudWhilePhoneCalls';
   static const String readAloudByMediaButton = 'readAloudByMediaButton';
   static const String showMangaUi = 'showMangaUi';
   static const String disableMangaScale = 'disableMangaScale';
   static const String disableMangaPageAnim = 'disableMangaPageAnim';
   static const String paddingDisplayCutouts = 'paddingDisplayCutouts';
   static const String autoCheckNewBackup = 'autoCheckNewBackup';
-  
+
   static const String cPrimary = 'colorPrimary';
   static const String cAccent = 'colorAccent';
   static const String cBackground = 'colorBackground';
   static const String cBBackground = 'colorBottomBackground';
   static const String bgImage = 'backgroundImage';
   static const String bgImageBlurring = 'backgroundImageBlurring';
-  
+
   static const String cNPrimary = 'colorPrimaryNight';
   static const String cNAccent = 'colorAccentNight';
   static const String cNBackground = 'colorBackgroundNight';
   static const String cNBBackground = 'colorBottomBackgroundNight';
   static const String bgImageN = 'backgroundImageNight';
   static const String bgImageNBlurring = 'backgroundImageNightBlurring';
-  
+
   static const String showReadTitleAddition = 'showReadTitleAddition';
   static const String readBarStyleFollowPage = 'readBarStyleFollowPage';
   static const String contentSelectSpeakMod = 'contentReadAloudMod';
-  
+
   // Reader settings
   static const String readerFontSize = 'reader_font_size';
   static const String readerLineHeight = 'reader_line_height';
@@ -231,4 +240,3 @@ class PreferKey {
   static const String coverTimeout = 'cover_timeout';
   static const String globalCoverRule = 'global_cover_rule';
 }
-

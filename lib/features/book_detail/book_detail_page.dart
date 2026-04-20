@@ -145,7 +145,6 @@ class BookDetailPage extends StatelessWidget {
                 const PopupMenuItem(value: 'change_cover', child: Text('換封面')),
                 const PopupMenuItem(value: 'export', child: Text('匯出全書')),
                 const PopupMenuItem(value: 'clear_cache', child: Text('清理快取')),
-                const PopupMenuItem(value: 'preload', child: Text('預加載')),
                 const PopupMenuItem(value: 'edit', child: Text('編輯資訊')),
               ],
         ),
@@ -165,8 +164,6 @@ class BookDetailPage extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('已清理快取')));
-    } else if (val == 'preload') {
-      _showPreloadDialog(context, provider);
     } else if (val == 'edit') {
       _showEditBookInfoDialog(context, provider);
     } else if (val == 'change_cover') {
@@ -284,37 +281,6 @@ class BookDetailPage extends StatelessWidget {
               ],
             ),
       );
-
-  void _showPreloadDialog(BuildContext context, BookDetailProvider p) {
-    final ctrl = TextEditingController(text: '50');
-    showDialog(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: const Text('預加載'),
-            content: TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () {
-                  p.preloadChapters(
-                    p.book.durChapterIndex,
-                    int.tryParse(ctrl.text) ?? 50,
-                  );
-                  Navigator.pop(ctx);
-                },
-                child: const Text('確定'),
-              ),
-            ],
-          ),
-    );
-  }
 
   void _showEditBookInfoDialog(BuildContext context, BookDetailProvider p) {
     final n = TextEditingController(text: p.book.name),

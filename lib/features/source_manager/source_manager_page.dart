@@ -72,6 +72,12 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                         builder: (_) => const SourceEditorPage(),
                       ),
                     ),
+                onCheckAllSources:
+                    () => SourceManagerDialogs.showCheckConfigDialog(
+                      context,
+                      provider,
+                      checkAll: true,
+                    ),
                 onClearInvalid:
                     (p) => SourceManagerDialogs.confirmClearInvalid(context, p),
                 onDeleteNonNovel:
@@ -145,7 +151,7 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
             },
             onShare: () => provider.shareSelectedSources(),
             onCheckSource: () {
-              _showCheckSourceDialog(context, provider);
+              SourceManagerDialogs.showCheckConfigDialog(context, provider);
             },
             onDelete: () {
               _confirmDeleteSelected(context, provider);
@@ -187,10 +193,14 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
       index: index,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl),
       onTap: () async {
+        if (p.selectedUrls.isNotEmpty) {
+          p.toggleSelect(s.bookSourceUrl);
+          return;
+        }
         await _openEditor(p, s.bookSourceUrl);
       },
       onLongPress: () {
-        _showSourceMenu(context, p, s);
+        p.toggleSelect(s.bookSourceUrl);
       },
       onEdit: () async {
         await _openEditor(p, s.bookSourceUrl);
@@ -363,29 +373,7 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
 
   /// 校驗選中書源 — 輸入關鍵字後開始 (對標 legado checkSource)
   void _showCheckSourceDialog(BuildContext context, SourceManagerProvider p) {
-    final count = p.selectedUrls.length;
-    if (count == 0) return;
-    showDialog(
-      context: context,
-      builder:
-          (ctx) => AlertDialog(
-            title: Text('校驗選中書源 ($count)'),
-            content: const Text('會依書源自己的校驗關鍵字執行檢查，若未設定則使用預設值。'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  p.checkSelectedSources();
-                },
-                child: const Text('開始校驗'),
-              ),
-            ],
-          ),
-    );
+    SourceManagerDialogs.showCheckConfigDialog(context, p);
   }
 
   /// 加入分組 (對標 legado selectionAddToGroups)

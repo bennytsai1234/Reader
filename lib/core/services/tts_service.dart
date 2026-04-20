@@ -62,7 +62,10 @@ class TTSService extends ChangeNotifier {
       );
       _isInitialized = true;
     } catch (e) {
-      AppLog.e('TTSService: AudioService.init failed (notification disabled): $e', error: e);
+      AppLog.e(
+        'TTSService: AudioService.init failed (notification disabled): $e',
+        error: e,
+      );
     }
     await _initTts();
   }
@@ -103,10 +106,16 @@ class TTSService extends ChangeNotifier {
       notifyListeners();
     });
 
-    _flutterTts.setProgressHandler((String text, int start, int end, String word) {
+    _flutterTts.setProgressHandler((
+      String text,
+      int start,
+      int end,
+      String word,
+    ) {
       final adjustedStart = start + _resumeOffset;
       final adjustedEnd = end + _resumeOffset;
-      if (adjustedStart == currentWordStart && adjustedEnd == currentWordEnd) return;
+      if (adjustedStart == currentWordStart && adjustedEnd == currentWordEnd)
+        return;
       currentSpokenText = text;
       currentWordStart = adjustedStart;
       currentWordEnd = adjustedEnd;
@@ -115,9 +124,10 @@ class TTSService extends ChangeNotifier {
 
     _languages = await _flutterTts.getLanguages;
     // 優先繁中 → 簡中 → 第一個可用語言
-    _language = _languages.contains('zh-TW')
-        ? 'zh-TW'
-        : _languages.contains('zh-CN')
+    _language =
+        _languages.contains('zh-TW')
+            ? 'zh-TW'
+            : _languages.contains('zh-CN')
             ? 'zh-CN'
             : (_languages.isNotEmpty ? _languages.first.toString() : 'zh-CN');
 
@@ -128,16 +138,28 @@ class TTSService extends ChangeNotifier {
   }
 
   /// 更新系統通知欄書名/作者/封面
-  void updateMediaInfo({required String title, required String author, String? coverUrl}) {
-    _audioHandler?.updateMetadata(title: title, author: author, artUri: coverUrl);
+  void updateMediaInfo({
+    required String title,
+    required String author,
+    String? coverUrl,
+  }) {
+    _audioHandler?.updateMetadata(
+      title: title,
+      author: author,
+      artUri: coverUrl,
+    );
   }
 
   Future<void> speak(String text) async {
     if (text.trim().isEmpty) return;
     _resumeOffset = 0;
+    currentSpokenText = text;
     // 重置進度位置，防止 startHandler 的 notifyListeners 用舊值觸發錯誤高亮
     currentWordStart = -1;
     currentWordEnd = -1;
+    _isPlaying = true;
+    _audioHandler?.setPlaying(true);
+    notifyListeners();
     await _flutterTts.speak(text);
   }
 
@@ -146,6 +168,10 @@ class TTSService extends ChangeNotifier {
     _sleepTimer = null;
     _remainingMinutes = 0;
     await _flutterTts.stop();
+    currentSpokenText = '';
+    currentWordStart = -1;
+    currentWordEnd = -1;
+    _resumeOffset = 0;
     _isPlaying = false;
     _audioHandler?.setPlaying(false);
     notifyListeners();
@@ -162,7 +188,10 @@ class TTSService extends ChangeNotifier {
     if (currentSpokenText.isNotEmpty) {
       // 從暫停位置繼續，而非從段落開頭重播
       // 注意：currentWordStart 已包含 _resumeOffset，需還原為原始文本位置
-      final rawStart = (currentWordStart - _resumeOffset).clamp(0, currentSpokenText.length);
+      final rawStart = (currentWordStart - _resumeOffset).clamp(
+        0,
+        currentSpokenText.length,
+      );
       final remaining = currentSpokenText.substring(rawStart);
       if (remaining.trim().isNotEmpty) {
         _resumeOffset = rawStart;

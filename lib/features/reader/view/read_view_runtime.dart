@@ -84,14 +84,18 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       _fadeCtrl.value = 1.0;
     }
     widget.provider.addListener(_onProviderStateChanged);
-    _itemPositionsListener.itemPositions.addListener(_handleItemPositionsChanged);
+    _itemPositionsListener.itemPositions.addListener(
+      _handleItemPositionsChanged,
+    );
   }
 
   @override
   void dispose() {
     _fadeCtrl.dispose();
     widget.provider.removeListener(_onProviderStateChanged);
-    _itemPositionsListener.itemPositions.removeListener(_handleItemPositionsChanged);
+    _itemPositionsListener.itemPositions.removeListener(
+      _handleItemPositionsChanged,
+    );
     widget.provider.detachAutoPageTicker();
     _userScrollResetTimer?.cancel();
     widget.provider.setScrollInteractionActive(false);
@@ -145,17 +149,28 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   void _handleItemPositionsChanged() {
     final p = widget.provider;
     if (p.pageTurnMode != PageAnim.scroll) return;
-    final positions = _itemPositionsListener.itemPositions.value.toList()
-      ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
+    final positions =
+        _itemPositionsListener.itemPositions.value.toList()
+          ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
     if (positions.isEmpty) return;
-    final visible = positions
-        .where((item) => item.itemTrailingEdge > 0 && item.itemLeadingEdge < 1)
-        .toList();
+    final visible =
+        positions
+            .where(
+              (item) => item.itemTrailingEdge > 0 && item.itemLeadingEdge < 1,
+            )
+            .toList();
     if (visible.isEmpty) return;
     final topItem = visible.first;
     final chapterIndex = topItem.index;
     final viewportHeight = context.size?.height ?? 1.0;
-    final localOffset = (-topItem.itemLeadingEdge * viewportHeight).clamp(0.0, double.infinity);
+    final rawLocalOffset = (-topItem.itemLeadingEdge * viewportHeight).clamp(
+      0.0,
+      double.infinity,
+    );
+    final localOffset = (rawLocalOffset - p.contentTopInset).clamp(
+      0.0,
+      double.infinity,
+    );
     p.handleVisibleScrollState(
       chapterIndex: chapterIndex,
       localOffset: localOffset,
@@ -183,17 +198,21 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           });
         }
         if (provider.viewSize != size) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => provider.setViewSize(size));
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => provider.setViewSize(size),
+          );
         }
 
         // Show theme-colored placeholder during init
-        if (provider.lifecycle == ReaderLifecycle.loading && !_contentRevealed) {
+        if (provider.lifecycle == ReaderLifecycle.loading &&
+            !_contentRevealed) {
           return Container(color: provider.currentTheme.backgroundColor);
         }
 
-        final hasVisibleData = provider.pageTurnMode == PageAnim.scroll
-            ? provider.pageFactory.orderedChapters.isNotEmpty
-            : provider.slidePages.isNotEmpty;
+        final hasVisibleData =
+            provider.pageTurnMode == PageAnim.scroll
+                ? provider.pageFactory.orderedChapters.isNotEmpty
+                : provider.slidePages.isNotEmpty;
 
         final waitingForFirstContent = _coordinator.shouldWaitForFirstContent(
           provider,
@@ -220,18 +239,20 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           );
         }
 
-        final delegate = provider.pageTurnMode == PageAnim.scroll
-            ? ScrollModeDelegate(
-                itemScrollController: _itemScrollController,
-                itemPositionsListener: _itemPositionsListener,
-                pageKeys: _pageKeys,
-                isUserScrolling: () => _isUserScrolling,
-              )
-            : const PageModeDelegate();
+        final delegate =
+            provider.pageTurnMode == PageAnim.scroll
+                ? ScrollModeDelegate(
+                  itemScrollController: _itemScrollController,
+                  itemPositionsListener: _itemPositionsListener,
+                  pageKeys: _pageKeys,
+                  isUserScrolling: () => _isUserScrolling,
+                )
+                : const PageModeDelegate();
 
         final content = NotificationListener<ScrollNotification>(
-          onNotification: (notification) =>
-              _handleScrollNotification(notification, provider),
+          onNotification:
+              (notification) =>
+                  _handleScrollNotification(notification, provider),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             child: delegate.build(
@@ -243,7 +264,10 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
         );
 
         return FadeTransition(
-          opacity: _contentRevealed ? _fadeAnimation : const AlwaysStoppedAnimation(1.0),
+          opacity:
+              _contentRevealed
+                  ? _fadeAnimation
+                  : const AlwaysStoppedAnimation(1.0),
           child: content,
         );
       },

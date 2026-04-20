@@ -1,0 +1,81 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+
+import 'package:inkpage_reader/core/database/dao/book_dao.dart';
+import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
+import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
+import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/book_source.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/models/search_book.dart';
+import 'package:inkpage_reader/features/book_detail/book_detail_provider.dart';
+import 'package:inkpage_reader/features/book_detail/widgets/book_info_header.dart';
+
+class _FakeBookDao extends Fake implements BookDao {
+  @override
+  Future<Book?> getByUrl(String url) async => null;
+}
+
+class _FakeChapterDao extends Fake implements ChapterDao {
+  @override
+  Future<List<BookChapter>> getChapters(String bookUrl) async =>
+      const <BookChapter>[];
+}
+
+class _FakeSourceDao extends Fake implements BookSourceDao {
+  @override
+  Future<BookSource?> getByUrl(String url) async => null;
+}
+
+void main() {
+  setUp(() {
+    GetIt.instance.registerLazySingleton<BookDao>(() => _FakeBookDao());
+    GetIt.instance.registerLazySingleton<ChapterDao>(() => _FakeChapterDao());
+    GetIt.instance.registerLazySingleton<BookSourceDao>(() => _FakeSourceDao());
+  });
+
+  tearDown(() async {
+    await GetIt.instance.reset();
+  });
+
+  testWidgets(
+    'BookInfoHeader renders consistent primary and secondary actions',
+    (tester) async {
+      final provider = BookDetailProvider(
+        AggregatedSearchBook(
+          book: SearchBook(
+            bookUrl: 'https://example.com/book/1',
+            name: '測試書',
+            author: '作者甲',
+            origin: 'https://example.com',
+            originName: '測試書源',
+          ),
+          sources: const <String>['測試書源'],
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BookInfoHeader(
+              book: provider.book,
+              provider: provider,
+              showPhotoView: (_, __) {},
+              onEdit: () {},
+              showSourceOptions: (_, __) {},
+              navigateToReader: (_, __, ___, ____) {},
+              showChangeSource: (_, __) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.widgetWithText(FilledButton, '開始閱讀'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '放入書架'), findsOneWidget);
+      expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.library_add), findsOneWidget);
+    },
+  );
+}

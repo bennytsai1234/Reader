@@ -66,10 +66,12 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   ReaderLifecycle lifecycle = ReaderLifecycle.loading;
   bool get isReady => lifecycle == ReaderLifecycle.ready;
 
-  List<int> clickActions = [2, 1, 1, 2, 0, 1, 2, 1, 1];
+  List<int> clickActions = [0, 0, 0, 0, 0, 0, 0, 0, 0];
   List<Bookmark> bookmarks = [];
   final ValueNotifier<int> batteryLevelNotifier = ValueNotifier<int>(100);
-  final ValueNotifier<double> autoPageProgressNotifier = ValueNotifier<double>(0.0);
+  final ValueNotifier<double> autoPageProgressNotifier = ValueNotifier<double>(
+    0.0,
+  );
 
   // ── Batch update support ──────────────────────────────────────────
   bool _isBatching = false;
@@ -102,10 +104,7 @@ abstract class ReaderProviderBase extends ChangeNotifier {
 
   ReaderProviderBase(this.book);
 
-  bool updateContentInsets({
-    required double top,
-    required double bottom,
-  }) {
+  bool updateContentInsets({required double top, required double bottom}) {
     final normalizedTop = top < 0 ? 0.0 : top;
     final normalizedBottom = bottom < 0 ? 0.0 : bottom;
     if ((contentTopInset - normalizedTop).abs() < 0.5 &&
@@ -151,7 +150,8 @@ abstract class ReaderProviderBase extends ChangeNotifier {
     double alignment,
     double localOffset,
     ReaderCommandReason reason,
-  })? consumePendingChapterJump() {
+  })?
+  consumePendingChapterJump() {
     final chapterIndex = _pendingJumpChapterIndex;
     if (chapterIndex == null) return null;
     final alignment = _pendingJumpAlignment ?? 0.0;
@@ -188,6 +188,7 @@ abstract class ReaderProviderBase extends ChangeNotifier {
     _pendingControllerReset = null;
     return value;
   }
+
   @override
   void dispose() {
     _isDisposed = true;

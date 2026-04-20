@@ -29,7 +29,7 @@ mixin ReaderSettingsMixin on ReaderProviderBase {
     paragraphSpacing = p.getDouble(PreferKey.readerParagraphSpacing) ?? 1.0;
     textIndent = p.getInt(PreferKey.readerTextIndent) ?? 2;
     themeIndex = p.getInt(PreferKey.readerThemeIndex) ?? 0;
-    brightness = p.getDouble(PreferKey.readerBrightness) ?? 0.5;
+    brightness = p.getDouble(PreferKey.readerBrightness) ?? 1.0;
     pageTurnMode = p.getInt(PreferKey.readerPageTurnMode) ?? 1;
     AppConfig.readerPageAnim = pageTurnMode;
     chineseConvert = p.getInt(PreferKey.readerChineseConvert) ?? 0;
@@ -42,7 +42,8 @@ mixin ReaderSettingsMixin on ReaderProviderBase {
     TTSService().setPitch(ttsPitch);
     if (ttsLang != null) TTSService().setLanguage(ttsLang);
 
-    final actionsStr = p.getString(PreferKey.readerClickActions) ?? '2,2,1,2,0,1,2,1,1';
+    final actionsStr =
+        p.getString(PreferKey.readerClickActions) ?? '0,0,0,0,0,0,0,0,0';
     clickActions = actionsStr.split(',').map((e) => int.parse(e)).toList();
     notifyListeners();
   }
@@ -61,13 +62,58 @@ mixin ReaderSettingsMixin on ReaderProviderBase {
     }
   }
 
-  void setFontSize(double s) { fontSize = s; saveSetting('font_size', s); onSettingsChangedRepaginate?.call(); }
-  void setLineHeight(double v) { lineHeight = v; saveSetting('line_height', v); onSettingsChangedRepaginate?.call(); }
-  void setParagraphSpacing(double v) { paragraphSpacing = v; saveSetting('paragraph_spacing', v); onSettingsChangedRepaginate?.call(); }
-  void setLetterSpacing(double v) { letterSpacing = v; saveSetting('letter_spacing', v); onSettingsChangedRepaginate?.call(); }
-  void setTextFullJustify(bool v) { textFullJustify = v; saveSetting('text_full_justify', v); onSettingsChangedRepaginate?.call(); }
-  void setTextIndent(int v) { textIndent = v; saveSetting('text_indent', v); onSettingsChangedRepaginate?.call(); }
-  void setPageTurnMode(int v) { pageTurnMode = v; AppConfig.readerPageAnim = v; saveSetting('page_turn_mode', v); notifyListeners(); }
-  void setTheme(int i) { themeIndex = i; saveSetting('theme_index', i); onSettingsChangedRepaginate?.call(); }
-  void setBrightness(double v) { brightness = v; saveSetting('brightness', v); notifyListeners(); }
+  void setFontSize(double s) {
+    fontSize = s;
+    saveSetting('font_size', s);
+    onSettingsChangedRepaginate?.call();
+  }
+
+  void setLineHeight(double v) {
+    lineHeight = v;
+    saveSetting('line_height', v);
+    onSettingsChangedRepaginate?.call();
+  }
+
+  void setParagraphSpacing(double v) {
+    paragraphSpacing = v;
+    saveSetting('paragraph_spacing', v);
+    onSettingsChangedRepaginate?.call();
+  }
+
+  void setLetterSpacing(double v) {
+    letterSpacing = v;
+    saveSetting('letter_spacing', v);
+    onSettingsChangedRepaginate?.call();
+  }
+
+  void setTextFullJustify(bool v) {
+    textFullJustify = v;
+    saveSetting('text_full_justify', v);
+    onSettingsChangedRepaginate?.call();
+  }
+
+  void setTextIndent(int v) {
+    textIndent = v;
+    saveSetting('text_indent', v);
+    onSettingsChangedRepaginate?.call();
+  }
+
+  void setPageTurnMode(int v) {
+    pageTurnMode = v;
+    AppConfig.readerPageAnim = v;
+    saveSetting('page_turn_mode', v);
+    notifyListeners();
+  }
+
+  void setTheme(int i) {
+    themeIndex = i;
+    saveSetting('theme_index', i);
+    onSettingsChangedRepaginate?.call();
+  }
+
+  void setBrightness(double v) {
+    brightness = v;
+    saveSetting('brightness', v);
+    notifyListeners();
+  }
 }

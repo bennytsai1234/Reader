@@ -3,6 +3,10 @@ import 'book_source_rules.dart';
 import '../../constant/source_type.dart';
 
 const String searchBrokenSourceGroupTag = '搜尋失效';
+const String discoveryBrokenSourceGroupTag = '發現失效';
+const String discoveryDetailBrokenSourceGroupTag = '發現詳情失效';
+const String discoveryTocBrokenSourceGroupTag = '發現目錄失效';
+const String discoveryContentBrokenSourceGroupTag = '發現正文失效';
 const String detailBrokenSourceGroupTag = '詳情失效';
 const String tocBrokenSourceGroupTag = '目錄失效';
 const String contentBrokenSourceGroupTag = '正文失效';
@@ -16,6 +20,10 @@ const String loginRequiredSourceGroupTag = '需要登入';
 
 const List<String> sourceRuntimeStatusTags = <String>[
   searchBrokenSourceGroupTag,
+  discoveryBrokenSourceGroupTag,
+  discoveryDetailBrokenSourceGroupTag,
+  discoveryTocBrokenSourceGroupTag,
+  discoveryContentBrokenSourceGroupTag,
   detailBrokenSourceGroupTag,
   tocBrokenSourceGroupTag,
   contentBrokenSourceGroupTag,
@@ -64,6 +72,10 @@ enum SourceHealthCategory {
   loginRequired,
   downloadOnly,
   searchBroken,
+  discoveryBroken,
+  discoveryDetailBroken,
+  discoveryTocBroken,
+  discoveryContentBroken,
   detailBroken,
   tocBroken,
   contentBroken,
@@ -243,6 +255,54 @@ extension BookSourceLogic on BookSourceBase {
         label: searchBrokenSourceGroupTag,
         description: '搜尋已失效，會自動從預設搜尋池排除',
         allowsSearch: false,
+        allowsReading: true,
+        cleanupCandidate: false,
+        quarantined: false,
+      );
+    }
+
+    if (hasGroupTag(discoveryDetailBrokenSourceGroupTag)) {
+      return const SourceRuntimeHealth(
+        category: SourceHealthCategory.discoveryDetailBroken,
+        label: discoveryDetailBrokenSourceGroupTag,
+        description: '發現書籍詳情失效，不影響一般搜尋與閱讀',
+        allowsSearch: true,
+        allowsReading: true,
+        cleanupCandidate: false,
+        quarantined: false,
+      );
+    }
+
+    if (hasGroupTag(discoveryTocBrokenSourceGroupTag)) {
+      return const SourceRuntimeHealth(
+        category: SourceHealthCategory.discoveryTocBroken,
+        label: discoveryTocBrokenSourceGroupTag,
+        description: '發現書籍目錄失效，不影響一般搜尋與閱讀',
+        allowsSearch: true,
+        allowsReading: true,
+        cleanupCandidate: false,
+        quarantined: false,
+      );
+    }
+
+    if (hasGroupTag(discoveryContentBrokenSourceGroupTag)) {
+      return const SourceRuntimeHealth(
+        category: SourceHealthCategory.discoveryContentBroken,
+        label: discoveryContentBrokenSourceGroupTag,
+        description: '發現書籍正文失效，不影響一般搜尋與閱讀',
+        allowsSearch: true,
+        allowsReading: true,
+        cleanupCandidate: false,
+        quarantined: false,
+      );
+    }
+
+    if (hasGroupTag(discoveryBrokenSourceGroupTag)) {
+      return const SourceRuntimeHealth(
+        category: SourceHealthCategory.discoveryBroken,
+        label: discoveryBrokenSourceGroupTag,
+        description: '發現已失效，不影響一般搜尋與閱讀',
+        allowsSearch: true,
         allowsReading: true,
         cleanupCandidate: false,
         quarantined: false,

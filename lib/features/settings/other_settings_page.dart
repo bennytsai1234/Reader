@@ -28,10 +28,13 @@ class OtherSettingsPage extends StatelessWidget {
                 title: const Text('存儲與下載'),
                 subtitle: const Text('管理下載任務、清理快取空間'),
                 leading: const Icon(Icons.storage_outlined),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const StorageManagementPage()),
-                ),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StorageManagementPage(),
+                      ),
+                    ),
               ),
               const Divider(),
 
@@ -69,22 +72,6 @@ class OtherSettingsPage extends StatelessWidget {
                 title: const Text('顯示漫畫 UI (測試)'),
                 value: settings.showMangaUi,
                 onChanged: (v) => settings.setShowMangaUi(v),
-              ),
-              
-              const Divider(),
-              _buildSectionTitle('系統診斷'),
-              ListTile(
-                title: const Text('記錄運行日誌'),
-                subtitle: const Text('開發者調試使用'),
-                trailing: Switch(
-                  value: settings.recordLog,
-                  onChanged: (v) => _showComingSoon(context),
-                ),
-              ),
-              ListTile(
-                title: const Text('並行下載線程數'),
-                subtitle: Text('${settings.threadCount}'),
-                onTap: () => _showComingSoon(context),
               ),
               const SizedBox(height: 24),
             ],
@@ -167,12 +154,6 @@ class OtherSettingsPage extends StatelessWidget {
             ),
           ),
     );
-  }
-
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('功能開發中')));
   }
 
   void _showUserAgentDialog(BuildContext context, SettingsProvider settings) {

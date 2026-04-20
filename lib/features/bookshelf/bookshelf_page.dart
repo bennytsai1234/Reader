@@ -12,8 +12,6 @@ import 'package:inkpage_reader/features/bookshelf/group_manage_page.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/search/search_page.dart';
-
-import 'package:inkpage_reader/features/settings/settings_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'widgets/group_select_dialog.dart';
 
@@ -123,17 +121,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
                               ],
                             ),
                           ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: 'update_toc',
-                            child: Row(
-                              children: [
-                                Icon(Icons.refresh, size: 20),
-                                SizedBox(width: 12),
-                                Text('更新目錄'),
-                              ],
-                            ),
-                          ),
                           const PopupMenuItem(
                             value: 'add_local',
                             child: Row(
@@ -195,26 +182,11 @@ class _BookshelfPageState extends State<BookshelfPage> {
                               ],
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'log',
-                            child: Row(
-                              children: [
-                                Icon(Icons.bug_report_outlined, size: 20),
-                                SizedBox(width: 12),
-                                Text('日誌'),
-                              ],
-                            ),
-                          ),
                         ],
                     onSelected: (value) async {
                       switch (value) {
                         case 'grid':
                           provider.setGridView(!provider.isGridView);
-                          break;
-                        case 'update_toc':
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('正在背景更新...')),
-                          );
                           break;
                         case 'add_local':
                           final result = await FilePicker.platform.pickFiles(
@@ -254,14 +226,6 @@ class _BookshelfPageState extends State<BookshelfPage> {
                         case 'export':
                           await _handleBookshelfExport(context, provider);
                           break;
-                        case 'log':
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SettingsPage(),
-                            ),
-                          );
-                          break; // 暫代
                       }
                     },
                   ),
@@ -296,9 +260,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
     try {
       final ok = await provider.importLocalBookPath(path);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '匯入成功' : '匯入失敗')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(ok ? '匯入成功' : '匯入失敗')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -314,26 +278,25 @@ class _BookshelfPageState extends State<BookshelfPage> {
     final controller = TextEditingController();
     final url = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('從網址匯入'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '輸入匯入網址',
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('從網址匯入'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: '輸入匯入網址'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                child: const Text('匯入'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('匯入'),
-          ),
-        ],
-      ),
     );
     if (url == null || url.isEmpty || !context.mounted) return;
     try {
@@ -355,7 +318,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
       type: FileType.custom,
       allowedExtensions: ['json', 'zip'],
     );
-    if (result == null || result.files.single.path == null || !context.mounted) {
+    if (result == null ||
+        result.files.single.path == null ||
+        !context.mounted) {
       return;
     }
     final path = result.files.single.path!;
@@ -364,11 +329,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         final restored = await RestoreService().restoreFromZip(File(path));
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              restored ? '備份還原完成，請重新開啟相關頁面確認資料' : '備份還原失敗',
-            ),
-          ),
+          SnackBar(content: Text(restored ? '備份還原完成，請重新開啟相關頁面確認資料' : '備份還原失敗')),
         );
       } else {
         final imported = await BookshelfExchangeService().importFromFile(
@@ -460,7 +421,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
+              AspectRatio(
+                aspectRatio: 0.72,
                 child: BookCoverWidget(
                   bookName: book.name,
                   coverUrl: book.getDisplayCover(),
@@ -469,15 +431,19 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                book.name,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 36,
+                child: Text(
+                  book.name,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -599,30 +565,30 @@ class _BookshelfPageState extends State<BookshelfPage> {
 
   void _openBook(BuildContext context, Book book) {
     if (book.type == 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('有聲書播放功能已移除，請選擇文本書籍。')));
       return;
     }
     Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (_) => ChangeNotifierProvider(
-                create:
-                    (ctx) => ReaderProvider(
-                      book: book,
-                      chapterIndex: book.durChapterIndex,
-                      chapterPos: book.durChapterPos,
-                    ),
-                child: ReaderPage(
-                  book: book,
-                  chapterIndex: book.durChapterIndex,
-                  chapterPos: book.durChapterPos,
-                ),
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => ChangeNotifierProvider(
+              create:
+                  (ctx) => ReaderProvider(
+                    book: book,
+                    chapterIndex: book.durChapterIndex,
+                    chapterPos: book.durChapterPos,
+                  ),
+              child: ReaderPage(
+                book: book,
+                chapterIndex: book.durChapterIndex,
+                chapterPos: book.durChapterPos,
               ),
-        ),
-      );
+            ),
+      ),
+    );
   }
 
   void _showDeleteConfirm(BuildContext context, BookshelfProvider p) {

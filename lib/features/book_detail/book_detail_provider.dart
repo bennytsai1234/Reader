@@ -237,11 +237,6 @@ class BookDetailProvider extends ChangeNotifier {
     _chapterDao.deleteContentByBook(_book.bookUrl);
   }
 
-  void preloadChapters(int start, int count) {
-    // 預加載邏輯實作
-    AppLog.d('Preloading $count chapters from $start');
-  }
-
   @override
   void dispose() {
     _debounce?.cancel();

@@ -11,7 +11,6 @@ import 'package:inkpage_reader/features/replace_rule/replace_rule_page.dart';
 import 'package:inkpage_reader/features/search/search_page.dart';
 import 'widgets/reader/reader_top_menu.dart';
 import 'widgets/reader/reader_bottom_menu.dart';
-import 'widgets/reader_brightness_bar.dart';
 import 'widgets/reader_chapters_drawer.dart';
 import 'widgets/reader_settings_sheets.dart';
 import 'view/read_view_runtime.dart';
@@ -40,6 +39,7 @@ class _ReaderPageState extends State<ReaderPage> {
   late SlidePageController _slideCtrl;
   int _controllerGeneration = 0;
   bool _recenterPollScheduled = false;
+  bool _isHandlingExit = false;
 
   @override
   void initState() {
@@ -144,10 +144,16 @@ class _ReaderPageState extends State<ReaderPage> {
             systemNavigationBarIconBrightness:
                 isDarkBackground ? Brightness.light : Brightness.dark,
           ),
-          child: Scaffold(
-            key: _key,
-            body: _buildBody(context, p),
-            drawer: ReaderChaptersDrawer(provider: p),
+          child: WillPopScope(
+            onWillPop: () async {
+              await _handleExitIntent(context, p);
+              return false;
+            },
+            child: Scaffold(
+              key: _key,
+              body: _buildBody(context, p),
+              drawer: ReaderChaptersDrawer(provider: p),
+            ),
           ),
         );
       },
@@ -240,16 +246,11 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
 
-          IgnorePointer(
-            child: Container(
-              color: Colors.black.withValues(
-                alpha: (1.0 - p.brightness).clamp(0.0, 0.8),
-              ),
-            ),
+          ReaderTopMenu(
+            provider: p,
+            onBack: () => _handleExitIntent(context, p),
+            onMore: () => _showMore(context),
           ),
-
-          ReaderTopMenu(provider: p, onMore: () => _showMore(context)),
-          ReaderBrightnessBar(provider: p),
           ReaderBottomMenu(
             provider: p,
             onOpenDrawer: () => _key.currentState?.openDrawer(),
@@ -279,6 +280,54 @@ class _ReaderPageState extends State<ReaderPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _handleExitIntent(BuildContext context, ReaderProvider p) async {
+    if (_isHandlingExit || !mounted) return;
+    if (_key.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+      return;
+    }
+
+    _isHandlingExit = true;
+    try {
+      if (!p.shouldPromptAddToBookshelfOnExit()) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      final addToBookshelf = await _showAddToBookshelfDialog(context, p.book);
+      if (!mounted) return;
+      if (addToBookshelf == true) {
+        await p.addCurrentBookToBookshelf();
+      }
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } finally {
+      _isHandlingExit = false;
+    }
+  }
+
+  Future<bool?> _showAddToBookshelfDialog(BuildContext context, Book book) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('加入書架？'),
+            content: Text('《${book.name}》尚未加入書架，是否在退出前加入書架以保留目前閱讀進度？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('直接退出'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('加入書架'),
+              ),
+            ],
+          ),
     );
   }
 

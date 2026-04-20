@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/config/app_config.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
+import 'package:inkpage_reader/core/engine/app_event_bus.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/bookmark.dart';
@@ -734,6 +735,45 @@ class ReadBookController extends ReaderProviderBase
   String get currentChapterTitle => displayChapterTitleAt(currentChapterIndex);
   String get currentChapterUrl =>
       chapters.isNotEmpty ? chapters[currentChapterIndex].url : '';
+
+  ReaderLocation resolveExitLocation() {
+    if (pageTurnMode == PageAnim.scroll) {
+      return ReaderLocation(
+        chapterIndex: visibleChapterIndex,
+        charOffset: _resolveVisibleCharOffset(),
+      ).normalized();
+    }
+    return _resolveModeSwitchLocation().normalized();
+  }
+
+  bool shouldPromptAddToBookshelfOnExit() {
+    if (book.isInBookshelf) return false;
+    final location = resolveExitLocation();
+    return location.chapterIndex > 0 || location.charOffset > 0;
+  }
+
+  Future<void> addCurrentBookToBookshelf() async {
+    final location = resolveExitLocation();
+    final title =
+        location.chapterIndex >= 0 && location.chapterIndex < chapters.length
+            ? chapters[location.chapterIndex].title
+            : book.durChapterTitle;
+    _progressStore.updateBookProgress(
+      book: book,
+      chapterIndex: location.chapterIndex,
+      charOffset: location.charOffset,
+      title: title,
+    );
+    book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
+    book.isInBookshelf = true;
+    await bookDao.upsert(book);
+    if (chapters.isNotEmpty) {
+      await chapterDao.insertChapters(chapters);
+    }
+    AppEventBus().fire(AppEventBus.upBookshelf, data: book.bookUrl);
+    notifyListeners();
+  }
+
   String get displayChapterPercentLabel {
     return _displayCoordinator.formatChapterPercent(
       _displayPageChapterIndex,

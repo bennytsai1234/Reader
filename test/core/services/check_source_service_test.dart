@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/exception/app_exception.dart';
 import 'package:inkpage_reader/core/models/book.dart';
@@ -23,6 +24,7 @@ class _FakeBookSourceDao extends Fake implements BookSourceDao {
 
 class _FakeBookSourceService extends Fake implements BookSourceService {
   List<SearchBook> searchResults = [];
+  List<SearchBook> exploreResults = [];
   Book? hydratedBook;
   List<BookChapter> chapters = [];
   String content = '';
@@ -33,6 +35,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
   Book? contentRequestBook;
   BookChapter? contentRequestChapter;
   String? capturedNextChapterUrl;
+  String? capturedExploreUrl;
 
   @override
   Future<List<SearchBook>> searchBooks(
@@ -75,15 +78,30 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     capturedNextChapterUrl = nextChapterUrl;
     return content;
   }
+
+  @override
+  Future<List<SearchBook>> exploreBooks(
+    BookSource source,
+    String url, {
+    int page = 1,
+  }) async {
+    capturedExploreUrl = url;
+    return exploreResults;
+  }
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+  });
+
   test(
     'check hydrates book info before toc and passes next readable chapter',
     () async {
       final source = BookSource(
         bookSourceUrl: 'source://bb',
         bookSourceName: 'BB成人小说',
+        searchUrl: '/search?key={{key}}',
         bookSourceGroup: '搜尋失效',
         bookSourceComment: '// Error: 舊錯誤',
       );
@@ -161,6 +179,8 @@ void main() {
       expect(saved.bookSourceGroup?.contains('正文失效') ?? false, isFalse);
       expect(saved.bookSourceComment?.contains('// Error:') ?? false, isFalse);
       expect(saved.respondTime, greaterThanOrEqualTo(0));
+      expect(service.progressOf(source.bookSourceUrl)?.message, '校驗成功');
+      expect(service.progressOf(source.bookSourceUrl)?.isFinal, isTrue);
     },
   );
 
@@ -168,6 +188,7 @@ void main() {
     final source = BookSource(
       bookSourceUrl: 'source://login',
       bookSourceName: '登入牆來源',
+      searchUrl: '/search?key={{key}}',
     );
 
     final fakeDao = _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
@@ -213,5 +234,271 @@ void main() {
       isTrue,
     );
     expect(saved.bookSourceComment, contains('正文需要登入後閱讀'));
+    expect(service.progressOf(source.bookSourceUrl)?.message, contains('需要登入'));
+    expect(service.progressOf(source.bookSourceUrl)?.hasIssue, isTrue);
   });
+
+  test('loadConfig reads persisted validation preferences', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'checkSourceKeyword': '測試詞',
+      'checkSourceTimeout': 9,
+      'checkSourceSearch': false,
+      'checkSourceDiscovery': true,
+      'checkSourceInfo': true,
+      'checkSourceCategory': false,
+      'checkSourceContent': false,
+    });
+
+    final service = CheckSourceService(
+      service: _FakeBookSourceService(),
+      sourceDao: _FakeBookSourceDao(),
+      eventBus: AppEventBus(),
+    );
+
+    await service.loadConfig();
+
+    expect(service.config.keyword, '測試詞');
+    expect(service.config.timeoutSeconds, 9);
+    expect(service.config.checkSearch, isFalse);
+    expect(service.config.checkDiscovery, isTrue);
+    expect(service.config.checkInfo, isTrue);
+    expect(service.config.checkCategory, isFalse);
+    expect(service.config.checkContent, isFalse);
+  });
+
+  test(
+    'discovery-only check marks discovery failures without disabling search',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'source://discovery',
+        bookSourceName: '發現源',
+        exploreUrl: '玄幻::/explore',
+      );
+
+      final fakeDao =
+          _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+      final fakeService = _FakeBookSourceService()..exploreResults = [];
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+
+      await service.updateConfig(
+        SourceCheckConfig.defaults.copyWith(
+          checkSearch: false,
+          checkDiscovery: true,
+          checkInfo: false,
+          checkCategory: false,
+          checkContent: false,
+        ),
+      );
+      await service.check([source.bookSourceUrl]);
+
+      final saved = fakeDao.store[source.bookSourceUrl]!;
+      expect(
+        saved.bookSourceGroup?.contains(discoveryBrokenSourceGroupTag) ?? false,
+        isTrue,
+      );
+      expect(saved.isSearchEnabledByRuntime, isTrue);
+      expect(saved.isReadingEnabledByRuntime, isTrue);
+      expect(fakeService.capturedExploreUrl, '/explore');
+      expect(service.logs, isNotEmpty);
+    },
+  );
+
+  test(
+    'discovery toc failures use specific tag without disabling search',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'source://discovery-toc',
+        bookSourceName: '發現目錄失效源',
+        exploreUrl: '玄幻::/explore',
+      );
+
+      final fakeDao =
+          _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+      final fakeService =
+          _FakeBookSourceService()
+            ..exploreResults = [
+              SearchBook(
+                bookUrl: 'https://example.com/book/discovery-toc',
+                name: '發現測試書',
+                author: '作者甲',
+                origin: source.bookSourceUrl,
+                originName: source.bookSourceName,
+              ),
+            ]
+            ..hydratedBook = Book(
+              bookUrl: 'https://example.com/book/discovery-toc',
+              tocUrl: 'https://example.com/book/discovery-toc/catalog',
+              origin: source.bookSourceUrl,
+              originName: source.bookSourceName,
+              name: '發現測試書',
+              author: '作者甲',
+            )
+            ..chapters = [];
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+
+      await service.updateConfig(
+        SourceCheckConfig.defaults.copyWith(
+          checkSearch: false,
+          checkDiscovery: true,
+          checkInfo: true,
+          checkCategory: true,
+          checkContent: true,
+        ),
+      );
+      await service.check([source.bookSourceUrl]);
+
+      final saved = fakeDao.store[source.bookSourceUrl]!;
+      expect(
+        saved.bookSourceGroup?.contains(discoveryTocBrokenSourceGroupTag) ??
+            false,
+        isTrue,
+      );
+      expect(
+        saved.runtimeHealth.category,
+        SourceHealthCategory.discoveryTocBroken,
+      );
+      expect(saved.isSearchEnabledByRuntime, isTrue);
+      expect(saved.isReadingEnabledByRuntime, isTrue);
+    },
+  );
+
+  test(
+    'discovery detail failures use specific tag without disabling search',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'source://discovery-detail',
+        bookSourceName: '發現詳情失效源',
+        exploreUrl: '玄幻::/explore',
+      );
+
+      final fakeDao =
+          _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+      final fakeService =
+          _FakeBookSourceService()
+            ..exploreResults = [
+              SearchBook(
+                bookUrl: 'https://example.com/book/discovery-detail',
+                name: '發現測試書',
+                author: '作者甲',
+                origin: source.bookSourceUrl,
+                originName: source.bookSourceName,
+              ),
+            ]
+            ..hydratedBook = Book(
+              bookUrl: '',
+              tocUrl: '',
+              origin: source.bookSourceUrl,
+              originName: source.bookSourceName,
+              name: '',
+              author: '作者甲',
+            );
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+
+      await service.updateConfig(
+        SourceCheckConfig.defaults.copyWith(
+          checkSearch: false,
+          checkDiscovery: true,
+          checkInfo: true,
+          checkCategory: true,
+          checkContent: true,
+        ),
+      );
+      await service.check([source.bookSourceUrl]);
+
+      final saved = fakeDao.store[source.bookSourceUrl]!;
+      expect(
+        saved.bookSourceGroup?.contains(discoveryDetailBrokenSourceGroupTag) ??
+            false,
+        isTrue,
+      );
+      expect(
+        saved.runtimeHealth.category,
+        SourceHealthCategory.discoveryDetailBroken,
+      );
+      expect(saved.isSearchEnabledByRuntime, isTrue);
+      expect(saved.isReadingEnabledByRuntime, isTrue);
+    },
+  );
+
+  test(
+    'discovery content failures use specific tag without disabling search',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'source://discovery-content',
+        bookSourceName: '發現正文失效源',
+        exploreUrl: '玄幻::/explore',
+      );
+
+      final fakeDao =
+          _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+      final fakeService =
+          _FakeBookSourceService()
+            ..exploreResults = [
+              SearchBook(
+                bookUrl: 'https://example.com/book/discovery-content',
+                name: '發現測試書',
+                author: '作者甲',
+                origin: source.bookSourceUrl,
+                originName: source.bookSourceName,
+              ),
+            ]
+            ..hydratedBook = Book(
+              bookUrl: 'https://example.com/book/discovery-content',
+              tocUrl: 'https://example.com/book/discovery-content/catalog',
+              origin: source.bookSourceUrl,
+              originName: source.bookSourceName,
+              name: '發現測試書',
+              author: '作者甲',
+            )
+            ..chapters = [
+              BookChapter(
+                title: '第1章 開始',
+                url: 'https://example.com/book/discovery-content/1.html',
+                bookUrl: 'https://example.com/book/discovery-content',
+              ),
+            ]
+            ..content = '太短';
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+
+      await service.updateConfig(
+        SourceCheckConfig.defaults.copyWith(
+          checkSearch: false,
+          checkDiscovery: true,
+          checkInfo: true,
+          checkCategory: true,
+          checkContent: true,
+        ),
+      );
+      await service.check([source.bookSourceUrl]);
+
+      final saved = fakeDao.store[source.bookSourceUrl]!;
+      expect(
+        saved.bookSourceGroup?.contains(discoveryContentBrokenSourceGroupTag) ??
+            false,
+        isTrue,
+      );
+      expect(
+        saved.runtimeHealth.category,
+        SourceHealthCategory.discoveryContentBroken,
+      );
+      expect(saved.isSearchEnabledByRuntime, isTrue);
+      expect(saved.isReadingEnabledByRuntime, isTrue);
+    },
+  );
 }

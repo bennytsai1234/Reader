@@ -27,6 +27,20 @@ class BookInfoHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coverUrl = book.getDisplayCover();
+    final actionButtonStyle = ButtonStyle(
+      minimumSize: const WidgetStatePropertyAll(Size.fromHeight(44)),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      textStyle: WidgetStatePropertyAll(
+        Theme.of(
+          context,
+        ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
@@ -90,7 +104,7 @@ class BookInfoHeader extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: FilledButton(
+                        child: FilledButton.icon(
                           onPressed:
                               () => navigateToReader(
                                 context,
@@ -98,7 +112,9 @@ class BookInfoHeader extends StatelessWidget {
                                 book.durChapterIndex,
                                 provider.allChapters,
                               ),
-                          child: Text(
+                          style: actionButtonStyle,
+                          icon: const Icon(Icons.menu_book_rounded, size: 18),
+                          label: Text(
                             book.durChapterIndex == 0 && book.durChapterPos == 0
                                 ? '開始閱讀'
                                 : '繼續閱讀',
@@ -109,10 +125,12 @@ class BookInfoHeader extends StatelessWidget {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: provider.toggleInBookshelf,
+                          style: actionButtonStyle,
                           icon: Icon(
                             provider.isInBookshelf
                                 ? Icons.library_add_check
                                 : Icons.library_add,
+                            size: 18,
                           ),
                           label: Text(provider.isInBookshelf ? '移出書架' : '放入書架'),
                         ),

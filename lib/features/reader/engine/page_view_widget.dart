@@ -267,24 +267,9 @@ class PageViewWidget extends StatelessWidget {
               children: [
                 CachedNetworkImage(imageUrl: url),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('關閉'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('已保存圖片 (模擬)')),
-                        );
-                      },
-                      child: const Text('保存'),
-                    ),
-                  ],
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('關閉'),
                 ),
               ],
             ),

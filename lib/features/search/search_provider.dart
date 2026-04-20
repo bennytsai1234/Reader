@@ -234,6 +234,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   @override
   void dispose() {
+    _searchModel.cancelSearch();
+    _isSearching = false;
     _bookshelfTracker.dispose();
     _searchModel.dispose();
     super.dispose();

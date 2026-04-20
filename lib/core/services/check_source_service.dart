@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:inkpage_reader/core/constant/prefer_key.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
+import 'package:inkpage_reader/core/engine/explore_url_parser.dart';
 import 'package:inkpage_reader/core/exception/app_exception.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
@@ -60,6 +64,162 @@ class SourceCheckReport {
       '可用 $healthyCount / 需處理 $affectedCount / 建議清理 $cleanupCandidateCount';
 }
 
+class SourceCheckLogEntry {
+  final DateTime time;
+  final String message;
+
+  const SourceCheckLogEntry({required this.time, required this.message});
+
+  String get formattedTime =>
+      '[${_twoDigits(time.hour)}:${_twoDigits(time.minute)}:${_twoDigits(time.second)}.${_threeDigits(time.millisecond)}]';
+}
+
+class SourceCheckProgress {
+  final String sourceName;
+  final String message;
+  final bool isFinal;
+  final bool hasIssue;
+
+  const SourceCheckProgress({
+    required this.sourceName,
+    required this.message,
+    required this.isFinal,
+    required this.hasIssue,
+  });
+}
+
+class SourceCheckConfig {
+  final String keyword;
+  final int timeoutSeconds;
+  final bool checkSearch;
+  final bool checkDiscovery;
+  final bool checkInfo;
+  final bool checkCategory;
+  final bool checkContent;
+
+  const SourceCheckConfig({
+    required this.keyword,
+    required this.timeoutSeconds,
+    required this.checkSearch,
+    required this.checkDiscovery,
+    required this.checkInfo,
+    required this.checkCategory,
+    required this.checkContent,
+  });
+
+  static const SourceCheckConfig defaults = SourceCheckConfig(
+    keyword: '我的',
+    timeoutSeconds: 15,
+    checkSearch: true,
+    checkDiscovery: true,
+    checkInfo: true,
+    checkCategory: true,
+    checkContent: true,
+  );
+
+  factory SourceCheckConfig.fromPreferences(SharedPreferences prefs) {
+    return SourceCheckConfig(
+      keyword:
+          prefs.getString(PreferKey.checkSourceKeyword) ?? defaults.keyword,
+      timeoutSeconds:
+          prefs.getInt(PreferKey.checkSourceTimeout) ?? defaults.timeoutSeconds,
+      checkSearch:
+          prefs.getBool(PreferKey.checkSourceSearch) ?? defaults.checkSearch,
+      checkDiscovery:
+          prefs.getBool(PreferKey.checkSourceDiscovery) ??
+          defaults.checkDiscovery,
+      checkInfo: prefs.getBool(PreferKey.checkSourceInfo) ?? defaults.checkInfo,
+      checkCategory:
+          prefs.getBool(PreferKey.checkSourceCategory) ??
+          defaults.checkCategory,
+      checkContent:
+          prefs.getBool(PreferKey.checkSourceContent) ?? defaults.checkContent,
+    ).normalized();
+  }
+
+  SourceCheckConfig copyWith({
+    String? keyword,
+    int? timeoutSeconds,
+    bool? checkSearch,
+    bool? checkDiscovery,
+    bool? checkInfo,
+    bool? checkCategory,
+    bool? checkContent,
+  }) {
+    return SourceCheckConfig(
+      keyword: keyword ?? this.keyword,
+      timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+      checkSearch: checkSearch ?? this.checkSearch,
+      checkDiscovery: checkDiscovery ?? this.checkDiscovery,
+      checkInfo: checkInfo ?? this.checkInfo,
+      checkCategory: checkCategory ?? this.checkCategory,
+      checkContent: checkContent ?? this.checkContent,
+    );
+  }
+
+  SourceCheckConfig normalized() {
+    var normalizedSearch = checkSearch;
+    var normalizedDiscovery = checkDiscovery;
+    if (!normalizedSearch && !normalizedDiscovery) {
+      normalizedSearch = true;
+    }
+
+    var normalizedInfo = checkInfo;
+    var normalizedCategory = checkCategory;
+    var normalizedContent = checkContent;
+    if (!normalizedInfo) {
+      normalizedCategory = false;
+      normalizedContent = false;
+    } else if (!normalizedCategory) {
+      normalizedContent = false;
+    }
+
+    final trimmedKeyword =
+        keyword.trim().isEmpty ? defaults.keyword : keyword.trim();
+    final normalizedTimeout = timeoutSeconds < 1 ? 1 : timeoutSeconds;
+    return SourceCheckConfig(
+      keyword: trimmedKeyword,
+      timeoutSeconds: normalizedTimeout,
+      checkSearch: normalizedSearch,
+      checkDiscovery: normalizedDiscovery,
+      checkInfo: normalizedInfo,
+      checkCategory: normalizedCategory,
+      checkContent: normalizedContent,
+    );
+  }
+
+  Duration get timeoutDuration => Duration(seconds: timeoutSeconds);
+
+  String get summary {
+    final parts = <String>[
+      if (checkSearch) '搜尋',
+      if (checkDiscovery) '發現',
+      if (checkInfo) '詳情',
+      if (checkCategory) '目錄',
+      if (checkContent) '正文',
+    ];
+    return '超時 ${timeoutSeconds}s · ${parts.join('/')}';
+  }
+}
+
+class _SourceCheckIssue {
+  final String stage;
+  final String message;
+  final SourceRuntimeHealth health;
+
+  const _SourceCheckIssue({
+    required this.stage,
+    required this.message,
+    required this.health,
+  });
+}
+
+enum _SourceCheckMode { search, discovery }
+
+extension on _SourceCheckMode {
+  String get label => this == _SourceCheckMode.search ? '搜尋' : '發現';
+}
+
 /// CheckSourceService - 書源校驗服務
 /// 參考 legado CheckSourceService，以 group/comment 持久化校驗結果，
 /// 讓來源管理、搜尋池與執行期策略共用同一套狀態。
@@ -75,6 +235,10 @@ class CheckSourceService extends ChangeNotifier {
   int _currentCount = 0;
   String _statusMsg = '';
   SourceCheckReport _lastReport = SourceCheckReport.empty;
+  SourceCheckConfig _config = SourceCheckConfig.defaults;
+  final List<SourceCheckLogEntry> _logs = <SourceCheckLogEntry>[];
+  final Map<String, SourceCheckProgress> _sourceProgress =
+      <String, SourceCheckProgress>{};
 
   CheckSourceService({
     BookSourceService? service,
@@ -90,20 +254,63 @@ class CheckSourceService extends ChangeNotifier {
   String get statusMsg => _statusMsg;
   SourceCheckReport get lastReport => _lastReport;
   bool get hasLastReport => _lastReport.hasEntries;
+  SourceCheckConfig get config => _config;
+  UnmodifiableListView<SourceCheckLogEntry> get logs =>
+      UnmodifiableListView<SourceCheckLogEntry>(_logs);
+  UnmodifiableMapView<String, SourceCheckProgress> get sourceProgress =>
+      UnmodifiableMapView<String, SourceCheckProgress>(_sourceProgress);
 
-  void _postLog(String msg) {
-    _eventBus.fire(AppEvent(AppEventBus.checkSource, data: msg));
+  SourceCheckProgress? progressOf(String sourceUrl) =>
+      _sourceProgress[sourceUrl];
+
+  Future<void> loadConfig() async {
+    final prefs = await _safeGetPreferences();
+    if (prefs == null) return;
+    _config = SourceCheckConfig.fromPreferences(prefs);
+    notifyListeners();
+  }
+
+  Future<void> updateConfig(SourceCheckConfig next) async {
+    final normalized = next.normalized();
+    _config = normalized;
+    final prefs = await _safeGetPreferences();
+    if (prefs != null) {
+      await prefs.setString(PreferKey.checkSourceKeyword, normalized.keyword);
+      await prefs.setInt(
+        PreferKey.checkSourceTimeout,
+        normalized.timeoutSeconds,
+      );
+      await prefs.setBool(PreferKey.checkSourceSearch, normalized.checkSearch);
+      await prefs.setBool(
+        PreferKey.checkSourceDiscovery,
+        normalized.checkDiscovery,
+      );
+      await prefs.setBool(PreferKey.checkSourceInfo, normalized.checkInfo);
+      await prefs.setBool(
+        PreferKey.checkSourceCategory,
+        normalized.checkCategory,
+      );
+      await prefs.setBool(
+        PreferKey.checkSourceContent,
+        normalized.checkContent,
+      );
+      await prefs.setString(PreferKey.checkSource, normalized.summary);
+    }
+    notifyListeners();
   }
 
   Future<SourceCheckReport> check(List<String> urls) async {
     if (_isChecking) return _lastReport;
 
+    final config = _config.normalized();
     _isChecking = true;
     _totalCount = urls.length;
     _currentCount = 0;
     _statusMsg = '準備校驗';
     _lastReport = SourceCheckReport.empty;
-    _postLog('開始校驗，共 $_totalCount 個書源');
+    _logs.clear();
+    _sourceProgress.clear();
+    _appendLog('開始校驗，共 $_totalCount 個書源 (${config.summary})');
     notifyListeners();
 
     const maxConcurrent = 5;
@@ -116,7 +323,7 @@ class CheckSourceService extends ChangeNotifier {
 
       while (queue.isNotEmpty && tasks.length < maxConcurrent) {
         final url = queue.removeAt(0);
-        final task = _checkSingleSource(url).then((entry) {
+        final task = _checkSingleSource(url, config).then((entry) {
           if (entry != null) {
             entries.add(entry);
           }
@@ -131,21 +338,29 @@ class CheckSourceService extends ChangeNotifier {
       }
     }
 
+    if (!_isChecking) {
+      _appendLog('校驗已取消，已完成 $_currentCount / $_totalCount');
+    }
+
     _isChecking = false;
     _lastReport = SourceCheckReport(entries);
     _statusMsg = _lastReport.summary;
-    _postLog('校驗完成：${_lastReport.summary}');
+    _appendLog('校驗完成：${_lastReport.summary}');
     _eventBus.fire(AppEvent(AppEventBus.checkSourceDone, data: _lastReport));
     notifyListeners();
     return _lastReport;
   }
 
-  Future<SourceCheckEntry?> _checkSingleSource(String url) async {
+  Future<SourceCheckEntry?> _checkSingleSource(
+    String url,
+    SourceCheckConfig config,
+  ) async {
     final source = await _sourceDao.getByUrl(url);
     if (source == null) return null;
 
     _statusMsg = '正在校驗: ${source.bookSourceName}';
-    _postLog('⇒ 正在校驗 [${source.bookSourceName}] ...');
+    _appendLog('⇒ 正在校驗 [${source.bookSourceName}] ...');
+    _setSourceProgress(source, '等待校驗', isFinal: false, hasIssue: false);
     notifyListeners();
 
     source.removeInvalidGroups();
@@ -156,106 +371,433 @@ class CheckSourceService extends ChangeNotifier {
     final preflight = _resolvePreflightStatus(source);
     if (preflight != null) {
       await _persistStatus(source, preflight.health, preflight.message);
+      _appendLog('  ✕ [${source.bookSourceName}] ${preflight.message}');
+      _setSourceProgress(
+        source,
+        preflight.message,
+        isFinal: true,
+        hasIssue: true,
+      );
       return preflight;
     }
 
-    var stage = 'search';
-    try {
-      final searchWord = source.getCheckKeyword('我的');
-      _postLog('  ◇ 測試搜尋: $searchWord');
-      final searchResults = await _service
-          .searchBooks(source, searchWord)
-          .timeout(const Duration(seconds: 15));
+    final issues = <_SourceCheckIssue>[];
 
-      if (searchResults.isEmpty) {
-        return await _markAndPersist(
-          source,
-          stage: stage,
-          health: const SourceRuntimeHealth(
+    if (config.checkSearch) {
+      await _runSearchCheck(source, config, issues);
+    } else {
+      _appendLog('  ≡ 跳過搜尋檢查');
+    }
+
+    if (config.checkDiscovery) {
+      await _runDiscoveryCheck(source, config, issues);
+    } else {
+      _appendLog('  ≡ 跳過發現檢查');
+    }
+
+    if (issues.isEmpty) {
+      await _persistStatus(source, SourceRuntimeHealth.healthy, '');
+      _appendLog('  ✓ [${source.bookSourceName}] 校驗成功');
+      _setSourceProgress(source, '校驗成功', isFinal: true, hasIssue: false);
+      return SourceCheckEntry(
+        sourceUrl: source.bookSourceUrl,
+        sourceName: source.bookSourceName,
+        stage: 'done',
+        message: '校驗成功',
+        health: SourceRuntimeHealth.healthy,
+      );
+    }
+
+    final primary = _pickPrimaryIssue(issues);
+    final mergedMessage = _composeIssueMessage(issues);
+    await _persistStatus(
+      source,
+      primary.health,
+      mergedMessage,
+      extraHealths: issues
+          .where((issue) => !identical(issue, primary))
+          .map((issue) => issue.health),
+    );
+    _appendLog(
+      '  ✕ [${source.bookSourceName}] ${source.runtimeHealth.label}: $mergedMessage',
+    );
+    _setSourceProgress(
+      source,
+      '${source.runtimeHealth.label}: $mergedMessage',
+      isFinal: true,
+      hasIssue: true,
+    );
+    return SourceCheckEntry(
+      sourceUrl: source.bookSourceUrl,
+      sourceName: source.bookSourceName,
+      stage: primary.stage,
+      message: mergedMessage,
+      health: source.runtimeHealth,
+    );
+  }
+
+  Future<void> _runSearchCheck(
+    BookSource source,
+    SourceCheckConfig config,
+    List<_SourceCheckIssue> issues,
+  ) async {
+    final searchWord = source.getCheckKeyword(config.keyword);
+    final searchUrl = source.searchUrl?.trim() ?? '';
+    if (searchUrl.isEmpty) {
+      _recordIssue(
+        source,
+        issues,
+        const _SourceCheckIssue(
+          stage: 'search',
+          message: '搜尋連結規則為空',
+          health: SourceRuntimeHealth(
             category: SourceHealthCategory.searchBroken,
             label: searchBrokenSourceGroupTag,
-            description: '搜尋沒有結果',
+            description: '搜尋規則已失效',
             allowsSearch: false,
             allowsReading: true,
             cleanupCandidate: false,
             quarantined: false,
           ),
-          message: '搜尋結果為空 ($searchWord)',
+        ),
+      );
+      return;
+    }
+
+    _setSourceProgress(
+      source,
+      '搜尋: $searchWord',
+      isFinal: false,
+      hasIssue: false,
+    );
+    _appendLog('  ◇ 測試搜尋: $searchWord');
+    try {
+      final searchResults = await _service
+          .searchBooks(source, searchWord)
+          .timeout(config.timeoutDuration);
+      if (searchResults.isEmpty) {
+        _recordIssue(
+          source,
+          issues,
+          _SourceCheckIssue(
+            stage: 'search',
+            message: '搜尋結果為空 ($searchWord)',
+            health: const SourceRuntimeHealth(
+              category: SourceHealthCategory.searchBroken,
+              label: searchBrokenSourceGroupTag,
+              description: '搜尋沒有結果',
+              allowsSearch: false,
+              allowsReading: true,
+              cleanupCandidate: false,
+              quarantined: false,
+            ),
+          ),
         );
+        return;
       }
 
-      var book = searchResults.first.toBook().copyWith(
+      final seedBook = searchResults.first.toBook().copyWith(
         origin: source.bookSourceUrl,
         originName: source.bookSourceName,
         originOrder: source.customOrder,
       );
+      await _checkBookFlow(
+        source,
+        seedBook,
+        config: config,
+        issues: issues,
+        mode: _SourceCheckMode.search,
+      );
+    } on TimeoutException catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: 'search',
+          error: error,
+          fallbackMessage: '搜尋超時',
+          mode: _SourceCheckMode.search,
+        ),
+      );
+    } catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: 'search',
+          error: error,
+          fallbackMessage: error.toString(),
+          mode: _SourceCheckMode.search,
+        ),
+      );
+    }
+  }
 
-      stage = 'detail';
-      _postLog('  ◇ 測試詳情: ${book.name}');
+  Future<void> _runDiscoveryCheck(
+    BookSource source,
+    SourceCheckConfig config,
+    List<_SourceCheckIssue> issues,
+  ) async {
+    final exploreUrl = source.exploreUrl?.trim() ?? '';
+    if (exploreUrl.isEmpty) {
+      _appendLog('  ≡ 跳過發現檢查: 未配置發現網址');
+      return;
+    }
+
+    _setSourceProgress(source, '發現: 解析入口', isFinal: false, hasIssue: false);
+    _appendLog('  ◇ 解析發現規則');
+    try {
+      final kinds = await ExploreUrlParser.parseAsync(
+        exploreUrl,
+        source: source,
+      ).timeout(config.timeoutDuration);
+
+      String? targetUrl;
+      for (final kind in kinds) {
+        final candidate = kind.url?.trim();
+        if (candidate == null || candidate.isEmpty) {
+          continue;
+        }
+        if (kind.title.startsWith('ERROR:')) {
+          continue;
+        }
+        targetUrl = candidate;
+        break;
+      }
+
+      if (targetUrl == null || targetUrl.isEmpty) {
+        _recordIssue(
+          source,
+          issues,
+          const _SourceCheckIssue(
+            stage: 'discovery',
+            message: '發現規則為空或沒有可用入口',
+            health: SourceRuntimeHealth(
+              category: SourceHealthCategory.discoveryBroken,
+              label: discoveryBrokenSourceGroupTag,
+              description: '發現規則已失效',
+              allowsSearch: true,
+              allowsReading: true,
+              cleanupCandidate: false,
+              quarantined: false,
+            ),
+          ),
+        );
+        return;
+      }
+
+      _setSourceProgress(
+        source,
+        '發現: $targetUrl',
+        isFinal: false,
+        hasIssue: false,
+      );
+      _appendLog('  ◇ 測試發現: $targetUrl');
+      final books = await _service
+          .exploreBooks(source, targetUrl)
+          .timeout(config.timeoutDuration);
+      if (books.isEmpty) {
+        _recordIssue(
+          source,
+          issues,
+          const _SourceCheckIssue(
+            stage: 'discovery',
+            message: '發現頁沒有結果',
+            health: SourceRuntimeHealth(
+              category: SourceHealthCategory.discoveryBroken,
+              label: discoveryBrokenSourceGroupTag,
+              description: '發現規則已失效',
+              allowsSearch: true,
+              allowsReading: true,
+              cleanupCandidate: false,
+              quarantined: false,
+            ),
+          ),
+        );
+        return;
+      }
+
+      final seedBook = books.first.toBook().copyWith(
+        origin: source.bookSourceUrl,
+        originName: source.bookSourceName,
+        originOrder: source.customOrder,
+      );
+      await _checkBookFlow(
+        source,
+        seedBook,
+        config: config,
+        issues: issues,
+        mode: _SourceCheckMode.discovery,
+      );
+    } on TimeoutException catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: 'discovery',
+          error: error,
+          fallbackMessage: '發現檢查超時',
+          mode: _SourceCheckMode.discovery,
+        ),
+      );
+    } catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: 'discovery',
+          error: error,
+          fallbackMessage: error.toString(),
+          mode: _SourceCheckMode.discovery,
+        ),
+      );
+    }
+  }
+
+  Future<void> _checkBookFlow(
+    BookSource source,
+    Book seedBook, {
+    required SourceCheckConfig config,
+    required List<_SourceCheckIssue> issues,
+    required _SourceCheckMode mode,
+  }) async {
+    if (!config.checkInfo) {
+      return;
+    }
+
+    Book book = seedBook;
+    try {
+      _setSourceProgress(
+        source,
+        '${mode.label}詳情: ${book.name}',
+        isFinal: false,
+        hasIssue: false,
+      );
+      _appendLog('  ◇ 測試${mode.label}詳情: ${book.name}');
       book = await _service
           .getBookInfo(source, book)
-          .timeout(const Duration(seconds: 10));
+          .timeout(config.timeoutDuration);
       if (book.name.trim().isEmpty || book.bookUrl.trim().isEmpty) {
-        return await _markAndPersist(
+        _recordIssue(
           source,
-          stage: stage,
-          health: const SourceRuntimeHealth(
-            category: SourceHealthCategory.detailBroken,
-            label: detailBrokenSourceGroupTag,
-            description: '詳情頁無法正常解析',
-            allowsSearch: false,
-            allowsReading: false,
-            cleanupCandidate: false,
-            quarantined: true,
+          issues,
+          _SourceCheckIssue(
+            stage: _stageFor(mode, 'detail'),
+            message:
+                mode == _SourceCheckMode.search ? '詳情頁返回空資料' : '發現詳情頁返回空資料',
+            health: _detailHealthFor(mode),
           ),
-          message: '詳情頁返回空資料',
         );
+        return;
       }
+    } on TimeoutException catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: _stageFor(mode, 'detail'),
+          error: error,
+          fallbackMessage: '${mode.label}詳情檢查超時',
+          mode: mode,
+        ),
+      );
+      return;
+    } catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: _stageFor(mode, 'detail'),
+          error: error,
+          fallbackMessage: error.toString(),
+          mode: mode,
+        ),
+      );
+      return;
+    }
 
-      stage = 'toc';
-      _postLog('  ◇ 測試目錄: ${book.name}');
+    if (!config.checkCategory) {
+      return;
+    }
+
+    List<BookChapter> readableChapters;
+    try {
+      _setSourceProgress(
+        source,
+        '${mode.label}目錄: ${book.name}',
+        isFinal: false,
+        hasIssue: false,
+      );
+      _appendLog('  ◇ 測試${mode.label}目錄: ${book.name}');
       final chapters = await _service
           .getChapterList(source, book)
-          .timeout(const Duration(seconds: 10));
-      final readableChapters =
+          .timeout(config.timeoutDuration);
+      readableChapters =
           chapters.where((chapter) => !chapter.isVolume).toList();
-      if (readableChapters.isEmpty) {
-        final health =
-            looksLikeDownloadOnlySource(book, readableChapters)
-                ? const SourceRuntimeHealth(
-                  category: SourceHealthCategory.downloadOnly,
-                  label: downloadOnlySourceGroupTag,
-                  description: '來源只提供下載，不提供線上正文閱讀',
-                  allowsSearch: false,
-                  allowsReading: false,
-                  cleanupCandidate: true,
-                  quarantined: false,
-                )
-                : const SourceRuntimeHealth(
-                  category: SourceHealthCategory.tocBroken,
-                  label: tocBrokenSourceGroupTag,
-                  description: '目錄抓取失敗或沒有可閱讀章節',
-                  allowsSearch: false,
-                  allowsReading: false,
-                  cleanupCandidate: false,
-                  quarantined: true,
-                );
-        final message =
-            health.category == SourceHealthCategory.downloadOnly
-                ? '來源為下載站，不提供線上目錄'
-                : '目錄抓取失敗或沒有可閱讀章節';
-        return await _markAndPersist(
-          source,
-          stage: stage,
-          health: health,
-          message: message,
-        );
-      }
+    } on TimeoutException catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: _stageFor(mode, 'toc'),
+          error: error,
+          fallbackMessage: '${mode.label}目錄檢查超時',
+          mode: mode,
+        ),
+      );
+      return;
+    } catch (error) {
+      _recordIssue(
+        source,
+        issues,
+        _issueFromException(
+          stage: _stageFor(mode, 'toc'),
+          error: error,
+          fallbackMessage: error.toString(),
+          mode: mode,
+        ),
+      );
+      return;
+    }
 
-      if (looksLikeDownloadOnlySource(book, readableChapters)) {
-        return await _markAndPersist(
-          source,
-          stage: stage,
+    if (readableChapters.isEmpty) {
+      final health =
+          looksLikeDownloadOnlySource(book, readableChapters)
+              ? const SourceRuntimeHealth(
+                category: SourceHealthCategory.downloadOnly,
+                label: downloadOnlySourceGroupTag,
+                description: '來源只提供下載，不提供線上正文閱讀',
+                allowsSearch: false,
+                allowsReading: false,
+                cleanupCandidate: true,
+                quarantined: false,
+              )
+              : _tocHealthFor(mode);
+      final message =
+          health.category == SourceHealthCategory.downloadOnly
+              ? '來源為下載站，不提供線上目錄'
+              : mode == _SourceCheckMode.search
+              ? '目錄抓取失敗或沒有可閱讀章節'
+              : '發現書籍目錄抓取失敗或沒有可閱讀章節';
+      _recordIssue(
+        source,
+        issues,
+        _SourceCheckIssue(
+          stage: _stageFor(mode, 'toc'),
+          message: message,
+          health: health,
+        ),
+      );
+      return;
+    }
+
+    if (looksLikeDownloadOnlySource(book, readableChapters)) {
+      _recordIssue(
+        source,
+        issues,
+        _SourceCheckIssue(
+          stage: _stageFor(mode, 'toc'),
+          message: '來源為下載站，不提供線上正文',
           health: const SourceRuntimeHealth(
             category: SourceHealthCategory.downloadOnly,
             label: downloadOnlySourceGroupTag,
@@ -265,18 +807,29 @@ class CheckSourceService extends ChangeNotifier {
             cleanupCandidate: true,
             quarantined: false,
           ),
-          message: '來源為下載站，不提供線上正文',
-        );
-      }
-
-      final firstChapter = readableChapters.first;
-      final nextChapterUrl = _nextReadableChapterUrl(
-        readableChapters,
-        firstChapter,
+        ),
       );
+      return;
+    }
 
-      stage = 'content';
-      _postLog('  ◇ 測試正文: ${firstChapter.title}');
+    if (!config.checkContent) {
+      return;
+    }
+
+    final firstChapter = readableChapters.first;
+    final nextChapterUrl = _nextReadableChapterUrl(
+      readableChapters,
+      firstChapter,
+    );
+
+    try {
+      _setSourceProgress(
+        source,
+        '${mode.label}正文: ${firstChapter.title}',
+        isFinal: false,
+        hasIssue: false,
+      );
+      _appendLog('  ◇ 測試${mode.label}正文: ${firstChapter.title}');
       final content = await _service
           .getContent(
             source,
@@ -284,85 +837,76 @@ class CheckSourceService extends ChangeNotifier {
             firstChapter,
             nextChapterUrl: nextChapterUrl,
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(config.timeoutDuration);
 
       if (looksLikeLoginRequiredContent(content)) {
-        return await _markAndPersist(
+        _recordIssue(
           source,
-          stage: stage,
-          health: const SourceRuntimeHealth(
-            category: SourceHealthCategory.loginRequired,
-            label: loginRequiredSourceGroupTag,
-            description: '來源需要登入後才能閱讀',
-            allowsSearch: false,
-            allowsReading: false,
-            cleanupCandidate: true,
-            quarantined: false,
+          issues,
+          const _SourceCheckIssue(
+            stage: 'content',
+            message: '正文需要登入後閱讀',
+            health: SourceRuntimeHealth(
+              category: SourceHealthCategory.loginRequired,
+              label: loginRequiredSourceGroupTag,
+              description: '來源需要登入後才能閱讀',
+              allowsSearch: false,
+              allowsReading: false,
+              cleanupCandidate: true,
+              quarantined: false,
+            ),
           ),
-          message: '正文需要登入後閱讀',
         );
+        return;
       }
 
       if (!looksReadable(content)) {
-        return await _markAndPersist(
+        _recordIssue(
           source,
-          stage: stage,
-          health: const SourceRuntimeHealth(
-            category: SourceHealthCategory.contentBroken,
-            label: contentBrokenSourceGroupTag,
-            description: '正文內容過短或為空',
-            allowsSearch: false,
-            allowsReading: false,
-            cleanupCandidate: false,
-            quarantined: true,
+          issues,
+          _SourceCheckIssue(
+            stage: _stageFor(mode, 'content'),
+            message:
+                mode == _SourceCheckMode.search ? '正文內容過短或為空' : '發現書籍正文內容過短或為空',
+            health: _contentHealthFor(mode),
           ),
-          message: '正文內容過短或為空',
         );
       }
-
-      await _persistStatus(source, SourceRuntimeHealth.healthy, '');
-      _postLog('  ✓ [${source.bookSourceName}] 校驗成功');
-      return SourceCheckEntry(
-        sourceUrl: source.bookSourceUrl,
-        sourceName: source.bookSourceName,
-        stage: 'done',
-        message: '校驗成功',
-        health: SourceRuntimeHealth.healthy,
-      );
-    } on LoginCheckException catch (error) {
-      return _markFromException(
-        source,
-        stage: stage,
-        error: error,
-        fallbackMessage: error.message,
-      );
     } on TimeoutException catch (error) {
-      return _markFromException(
+      _recordIssue(
         source,
-        stage: stage,
-        error: error,
-        fallbackMessage: '校驗超時',
+        issues,
+        _issueFromException(
+          stage: _stageFor(mode, 'content'),
+          error: error,
+          fallbackMessage: '${mode.label}正文檢查超時',
+          mode: mode,
+        ),
       );
     } catch (error) {
-      return _markFromException(
+      _recordIssue(
         source,
-        stage: stage,
-        error: error,
-        fallbackMessage: error.toString(),
+        issues,
+        _issueFromException(
+          stage: _stageFor(mode, 'content'),
+          error: error,
+          fallbackMessage: error.toString(),
+          mode: mode,
+        ),
       );
     }
   }
 
-  Future<SourceCheckEntry> _markFromException(
-    BookSource source, {
+  _SourceCheckIssue _issueFromException({
     required String stage,
     required Object error,
     required String fallbackMessage,
-  }) async {
+    required _SourceCheckMode mode,
+  }) {
     final normalized = error.toString().toLowerCase();
     final message = _compactMessage(fallbackMessage);
     AppLog.e(
-      'CheckSource Error [${source.bookSourceName}] stage=$stage: $error',
+      'CheckSource Error stage=$stage mode=${mode.name}: $error',
       error: error,
     );
 
@@ -371,10 +915,10 @@ class CheckSourceService extends ChangeNotifier {
         normalized.contains('需要登录后阅读') ||
         normalized.contains('loginrequired') ||
         normalized.contains('permissionlimit')) {
-      return _markAndPersist(
-        source,
-        stage: stage,
-        health: const SourceRuntimeHealth(
+      return const _SourceCheckIssue(
+        stage: 'content',
+        message: '正文需要登入後閱讀',
+        health: SourceRuntimeHealth(
           category: SourceHealthCategory.loginRequired,
           label: loginRequiredSourceGroupTag,
           description: '來源需要登入後才能閱讀',
@@ -383,15 +927,14 @@ class CheckSourceService extends ChangeNotifier {
           cleanupCandidate: true,
           quarantined: false,
         ),
-        message: message,
       );
     }
 
     if (_looksLikeTimeout(normalized)) {
-      return _markAndPersist(
-        source,
-        stage: stage,
-        health: const SourceRuntimeHealth(
+      return const _SourceCheckIssue(
+        stage: 'timeout',
+        message: '校驗超時或來源響應過慢',
+        health: SourceRuntimeHealth(
           category: SourceHealthCategory.upstreamUnstable,
           label: quarantineSourceGroupTag,
           description: '上游暫時不可用，來源先隔離但不視為永久失效',
@@ -400,14 +943,13 @@ class CheckSourceService extends ChangeNotifier {
           cleanupCandidate: false,
           quarantined: true,
         ),
-        message: '校驗超時或來源響應過慢',
       );
     }
 
     if (_looksLikeBlockedUpstream(normalized)) {
-      return _markAndPersist(
-        source,
-        stage: stage,
+      return _SourceCheckIssue(
+        stage: 'upstream',
+        message: message,
         health: const SourceRuntimeHealth(
           category: SourceHealthCategory.upstreamUnstable,
           label: quarantineSourceGroupTag,
@@ -417,14 +959,77 @@ class CheckSourceService extends ChangeNotifier {
           cleanupCandidate: false,
           quarantined: true,
         ),
+      );
+    }
+
+    if (mode == _SourceCheckMode.discovery) {
+      if (stage.endsWith('detail')) {
+        return _SourceCheckIssue(
+          stage: stage,
+          message: message,
+          health: const SourceRuntimeHealth(
+            category: SourceHealthCategory.discoveryDetailBroken,
+            label: discoveryDetailBrokenSourceGroupTag,
+            description: '發現書籍詳情失效',
+            allowsSearch: true,
+            allowsReading: true,
+            cleanupCandidate: false,
+            quarantined: false,
+          ),
+        );
+      }
+
+      if (stage.endsWith('toc')) {
+        return _SourceCheckIssue(
+          stage: stage,
+          message: message,
+          health: const SourceRuntimeHealth(
+            category: SourceHealthCategory.discoveryTocBroken,
+            label: discoveryTocBrokenSourceGroupTag,
+            description: '發現書籍目錄失效',
+            allowsSearch: true,
+            allowsReading: true,
+            cleanupCandidate: false,
+            quarantined: false,
+          ),
+        );
+      }
+
+      if (stage.endsWith('content')) {
+        return _SourceCheckIssue(
+          stage: stage,
+          message: message,
+          health: const SourceRuntimeHealth(
+            category: SourceHealthCategory.discoveryContentBroken,
+            label: discoveryContentBrokenSourceGroupTag,
+            description: '發現書籍正文失效',
+            allowsSearch: true,
+            allowsReading: true,
+            cleanupCandidate: false,
+            quarantined: false,
+          ),
+        );
+      }
+
+      return _SourceCheckIssue(
+        stage: stage,
         message: message,
+        health: const SourceRuntimeHealth(
+          category: SourceHealthCategory.discoveryBroken,
+          label: discoveryBrokenSourceGroupTag,
+          description: '發現規則已失效',
+          allowsSearch: true,
+          allowsReading: true,
+          cleanupCandidate: false,
+          quarantined: false,
+        ),
       );
     }
 
     if (stage == 'search') {
-      return _markAndPersist(
-        source,
+      return _SourceCheckIssue(
         stage: stage,
+        message: message,
         health: const SourceRuntimeHealth(
           category: SourceHealthCategory.searchBroken,
           label: searchBrokenSourceGroupTag,
@@ -434,14 +1039,13 @@ class CheckSourceService extends ChangeNotifier {
           cleanupCandidate: false,
           quarantined: false,
         ),
-        message: message,
       );
     }
 
-    if (stage == 'detail') {
-      return _markAndPersist(
-        source,
+    if (stage.endsWith('detail')) {
+      return _SourceCheckIssue(
         stage: stage,
+        message: message,
         health: const SourceRuntimeHealth(
           category: SourceHealthCategory.detailBroken,
           label: detailBrokenSourceGroupTag,
@@ -451,14 +1055,13 @@ class CheckSourceService extends ChangeNotifier {
           cleanupCandidate: false,
           quarantined: true,
         ),
-        message: message,
       );
     }
 
-    if (stage == 'toc') {
-      return _markAndPersist(
-        source,
+    if (stage.endsWith('toc')) {
+      return _SourceCheckIssue(
         stage: stage,
+        message: message,
         health: const SourceRuntimeHealth(
           category: SourceHealthCategory.tocBroken,
           label: tocBrokenSourceGroupTag,
@@ -468,13 +1071,12 @@ class CheckSourceService extends ChangeNotifier {
           cleanupCandidate: false,
           quarantined: true,
         ),
-        message: message,
       );
     }
 
-    return _markAndPersist(
-      source,
+    return _SourceCheckIssue(
       stage: stage,
+      message: message,
       health: const SourceRuntimeHealth(
         category: SourceHealthCategory.contentBroken,
         label: contentBrokenSourceGroupTag,
@@ -484,37 +1086,35 @@ class CheckSourceService extends ChangeNotifier {
         cleanupCandidate: false,
         quarantined: true,
       ),
-      message: message,
-    );
-  }
-
-  Future<SourceCheckEntry> _markAndPersist(
-    BookSource source, {
-    required String stage,
-    required SourceRuntimeHealth health,
-    required String message,
-  }) async {
-    await _persistStatus(source, health, message);
-    _postLog('  ✕ [${source.bookSourceName}] ${health.label}: $message');
-    return SourceCheckEntry(
-      sourceUrl: source.bookSourceUrl,
-      sourceName: source.bookSourceName,
-      stage: stage,
-      message: message,
-      health: source.runtimeHealth,
     );
   }
 
   Future<void> _persistStatus(
     BookSource source,
     SourceRuntimeHealth health,
-    String message,
-  ) async {
+    String message, {
+    Iterable<SourceRuntimeHealth> extraHealths = const <SourceRuntimeHealth>[],
+  }) async {
     source.removeInvalidGroups();
     source.removeErrorComment();
     source.respondTime = 0;
     source.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
 
+    final seenCategories = <SourceHealthCategory>{};
+    for (final nextHealth in <SourceRuntimeHealth>[health, ...extraHealths]) {
+      if (!seenCategories.add(nextHealth.category)) {
+        continue;
+      }
+      _applyHealthGroup(source, nextHealth);
+    }
+
+    if (message.trim().isNotEmpty) {
+      source.addErrorComment(message.trim());
+    }
+    await _sourceDao.upsert(source);
+  }
+
+  void _applyHealthGroup(BookSource source, SourceRuntimeHealth health) {
     switch (health.category) {
       case SourceHealthCategory.healthy:
         break;
@@ -529,6 +1129,18 @@ class CheckSourceService extends ChangeNotifier {
         break;
       case SourceHealthCategory.searchBroken:
         source.addGroup(searchBrokenSourceGroupTag);
+        break;
+      case SourceHealthCategory.discoveryBroken:
+        source.addGroup(discoveryBrokenSourceGroupTag);
+        break;
+      case SourceHealthCategory.discoveryDetailBroken:
+        source.addGroup(discoveryDetailBrokenSourceGroupTag);
+        break;
+      case SourceHealthCategory.discoveryTocBroken:
+        source.addGroup(discoveryTocBrokenSourceGroupTag);
+        break;
+      case SourceHealthCategory.discoveryContentBroken:
+        source.addGroup(discoveryContentBrokenSourceGroupTag);
         break;
       case SourceHealthCategory.detailBroken:
         source.addGroup(
@@ -549,11 +1161,46 @@ class CheckSourceService extends ChangeNotifier {
         );
         break;
     }
+  }
 
-    if (message.trim().isNotEmpty) {
-      source.addErrorComment(message.trim());
+  void _recordIssue(
+    BookSource source,
+    List<_SourceCheckIssue> issues,
+    _SourceCheckIssue issue,
+  ) {
+    issues.add(issue);
+    _setSourceProgress(
+      source,
+      '${_stageLabel(issue.stage)}: ${issue.message}',
+      isFinal: false,
+      hasIssue: true,
+    );
+    _appendLog(
+      '  ! [${source.bookSourceName}] ${_stageLabel(issue.stage)}: ${issue.message}',
+    );
+  }
+
+  _SourceCheckIssue _pickPrimaryIssue(List<_SourceCheckIssue> issues) {
+    _SourceCheckIssue primary = issues.first;
+    for (final issue in issues.skip(1)) {
+      if (_issuePriority(issue.health.category) >
+          _issuePriority(primary.health.category)) {
+        primary = issue;
+      }
     }
-    await _sourceDao.upsert(source);
+    return primary;
+  }
+
+  String _composeIssueMessage(List<_SourceCheckIssue> issues) {
+    final seen = <String>{};
+    final parts = <String>[];
+    for (final issue in issues) {
+      final part = '${_stageLabel(issue.stage)}: ${issue.message}';
+      if (seen.add(part)) {
+        parts.add(part);
+      }
+    }
+    return _compactMessage(parts.join('；'));
   }
 
   SourceCheckEntry? _resolvePreflightStatus(BookSource source) {
@@ -597,8 +1244,41 @@ class CheckSourceService extends ChangeNotifier {
   }
 
   void cancel() {
+    if (!_isChecking) return;
     _isChecking = false;
+    _appendLog('收到取消指令，等待目前批次結束');
     notifyListeners();
+  }
+
+  Future<SharedPreferences?> _safeGetPreferences() async {
+    try {
+      return await SharedPreferences.getInstance();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _appendLog(String msg) {
+    _logs.add(SourceCheckLogEntry(time: DateTime.now(), message: msg));
+    if (_logs.length > 400) {
+      _logs.removeAt(0);
+    }
+    _eventBus.fire(AppEvent(AppEventBus.checkSource, data: msg));
+    notifyListeners();
+  }
+
+  void _setSourceProgress(
+    BookSource source,
+    String message, {
+    required bool isFinal,
+    required bool hasIssue,
+  }) {
+    _sourceProgress[source.bookSourceUrl] = SourceCheckProgress(
+      sourceName: source.bookSourceName,
+      message: message,
+      isFinal: isFinal,
+      hasIssue: hasIssue,
+    );
   }
 
   String? _nextReadableChapterUrl(
@@ -618,13 +1298,151 @@ class CheckSourceService extends ChangeNotifier {
   }
 }
 
+String _stageFor(_SourceCheckMode mode, String detailStage) {
+  if (mode == _SourceCheckMode.search) {
+    return detailStage;
+  }
+  return 'discovery:$detailStage';
+}
+
+SourceRuntimeHealth _detailHealthFor(_SourceCheckMode mode) {
+  if (mode == _SourceCheckMode.search) {
+    return const SourceRuntimeHealth(
+      category: SourceHealthCategory.detailBroken,
+      label: detailBrokenSourceGroupTag,
+      description: '詳情頁無法正常解析',
+      allowsSearch: false,
+      allowsReading: false,
+      cleanupCandidate: false,
+      quarantined: true,
+    );
+  }
+  return const SourceRuntimeHealth(
+    category: SourceHealthCategory.discoveryDetailBroken,
+    label: discoveryDetailBrokenSourceGroupTag,
+    description: '發現書籍詳情失效',
+    allowsSearch: true,
+    allowsReading: true,
+    cleanupCandidate: false,
+    quarantined: false,
+  );
+}
+
+SourceRuntimeHealth _tocHealthFor(_SourceCheckMode mode) {
+  if (mode == _SourceCheckMode.search) {
+    return const SourceRuntimeHealth(
+      category: SourceHealthCategory.tocBroken,
+      label: tocBrokenSourceGroupTag,
+      description: '目錄抓取失敗或沒有可閱讀章節',
+      allowsSearch: false,
+      allowsReading: false,
+      cleanupCandidate: false,
+      quarantined: true,
+    );
+  }
+  return const SourceRuntimeHealth(
+    category: SourceHealthCategory.discoveryTocBroken,
+    label: discoveryTocBrokenSourceGroupTag,
+    description: '發現書籍目錄失效',
+    allowsSearch: true,
+    allowsReading: true,
+    cleanupCandidate: false,
+    quarantined: false,
+  );
+}
+
+SourceRuntimeHealth _contentHealthFor(_SourceCheckMode mode) {
+  if (mode == _SourceCheckMode.search) {
+    return const SourceRuntimeHealth(
+      category: SourceHealthCategory.contentBroken,
+      label: contentBrokenSourceGroupTag,
+      description: '正文內容過短或為空',
+      allowsSearch: false,
+      allowsReading: false,
+      cleanupCandidate: false,
+      quarantined: true,
+    );
+  }
+  return const SourceRuntimeHealth(
+    category: SourceHealthCategory.discoveryContentBroken,
+    label: discoveryContentBrokenSourceGroupTag,
+    description: '發現書籍正文失效',
+    allowsSearch: true,
+    allowsReading: true,
+    cleanupCandidate: false,
+    quarantined: false,
+  );
+}
+
+int _issuePriority(SourceHealthCategory category) {
+  switch (category) {
+    case SourceHealthCategory.nonNovel:
+      return 100;
+    case SourceHealthCategory.loginRequired:
+      return 95;
+    case SourceHealthCategory.downloadOnly:
+      return 90;
+    case SourceHealthCategory.contentBroken:
+      return 80;
+    case SourceHealthCategory.tocBroken:
+      return 70;
+    case SourceHealthCategory.detailBroken:
+      return 60;
+    case SourceHealthCategory.searchBroken:
+      return 50;
+    case SourceHealthCategory.upstreamUnstable:
+      return 40;
+    case SourceHealthCategory.discoveryDetailBroken:
+      return 29;
+    case SourceHealthCategory.discoveryTocBroken:
+      return 28;
+    case SourceHealthCategory.discoveryContentBroken:
+      return 27;
+    case SourceHealthCategory.discoveryBroken:
+      return 26;
+    case SourceHealthCategory.healthy:
+      return 0;
+  }
+}
+
+String _stageLabel(String stage) {
+  switch (stage) {
+    case 'search':
+      return '搜尋';
+    case 'discovery':
+      return '發現';
+    case 'detail':
+      return '詳情';
+    case 'toc':
+      return '目錄';
+    case 'content':
+      return '正文';
+    case 'discovery:detail':
+      return '發現詳情';
+    case 'discovery:toc':
+      return '發現目錄';
+    case 'discovery:content':
+      return '發現正文';
+    case 'filter':
+      return '預檢';
+    case 'timeout':
+      return '超時';
+    case 'upstream':
+      return '上游';
+    default:
+      return stage;
+  }
+}
+
 String _compactMessage(String input) {
   final trimmed = input.trim();
   if (trimmed.isEmpty) {
     return '未知錯誤';
   }
   final firstLine = trimmed.split('\n').first.trim();
-  return firstLine.length > 160 ? firstLine.substring(0, 160) : firstLine;
+  return firstLine.length > 220
+      ? '${firstLine.substring(0, 220)}...'
+      : firstLine;
 }
 
 bool _looksLikeTimeout(String normalized) {
@@ -694,3 +1512,7 @@ bool looksLikeDownloadOnlySource(
     (url) => downloadUrlMarkers.any((marker) => url.contains(marker)),
   );
 }
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+String _threeDigits(int value) => value.toString().padLeft(3, '0');

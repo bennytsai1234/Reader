@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/models/book_source_part.dart';
 import 'package:inkpage_reader/core/models/source/book_source_logic.dart';
+import 'package:inkpage_reader/core/services/check_source_service.dart';
 
 import '../source_manager_provider.dart';
 
@@ -34,8 +35,11 @@ class SourceItemTile extends StatelessWidget {
     final showHostHeader =
         index != null && provider.shouldShowHostHeaderAt(index!);
     final host = provider.getSourceHost(source.bookSourceUrl);
-    final errorLine = _errorLine;
     final hasStatusDot = source.hasExploreUrl;
+    final checkProgress = provider.checkService.progressOf(
+      source.bookSourceUrl,
+    );
+    final errorLine = checkProgress == null ? _errorLine : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,6 +148,10 @@ class SourceItemTile extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           _buildTags(),
+                          if (checkProgress != null) ...[
+                            const SizedBox(height: 6),
+                            _buildCheckProgress(context, checkProgress),
+                          ],
                           if (errorLine != null) ...[
                             const SizedBox(height: 4),
                             Text(
@@ -252,6 +260,53 @@ class SourceItemTile extends StatelessWidget {
                 ),
               )
               .toList(),
+    );
+  }
+
+  Widget _buildCheckProgress(
+    BuildContext context,
+    SourceCheckProgress progress,
+  ) {
+    final color =
+        progress.isFinal
+            ? (progress.hasIssue
+                ? Colors.orange.shade800
+                : Colors.green.shade700)
+            : Theme.of(context).colorScheme.primary;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2, right: 6),
+          child:
+              progress.isFinal
+                  ? Icon(
+                    progress.hasIssue ? Icons.info_outline : Icons.check_circle,
+                    size: 14,
+                    color: color,
+                  )
+                  : SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: color,
+                    ),
+                  ),
+        ),
+        Expanded(
+          child: Text(
+            progress.message,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: progress.isFinal ? FontWeight.w600 : FontWeight.w500,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 

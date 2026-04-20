@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
@@ -21,6 +22,7 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
 
 void main() {
   setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     GetIt.instance.registerLazySingleton<BookSourceDao>(() => _FakeSourceDao());
   });
 

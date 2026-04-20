@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/widgets/book_cover_widget.dart';
+import '../search_provider.dart';
 import '../../book_detail/book_detail_page.dart';
 
 class SearchResultItem extends StatefulWidget {
@@ -186,6 +188,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
         ],
       ),
       onTap: () {
+        context.read<SearchProvider>().stopSearch();
         Navigator.push(
           context,
           MaterialPageRoute(

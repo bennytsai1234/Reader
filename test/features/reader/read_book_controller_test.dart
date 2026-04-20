@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _FakeBookDao implements BookDao {
   static final List<({int chapterIndex, String chapterTitle, int pos})>
   updates = [];
+  static final List<Book> upserts = [];
 
   @override
   Future<void> updateProgress(
@@ -39,13 +40,25 @@ class _FakeBookDao implements BookDao {
   }
 
   @override
+  Future<void> upsert(Book book) async {
+    upserts.add(book.copyWith());
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
 class _FakeChapterDao implements ChapterDao {
+  static final List<List<BookChapter>> insertedBatches = [];
+
   @override
   Future<List<BookChapter>> getChapters(String bookUrl) async =>
       _fakeChaptersFromDao;
+
+  @override
+  Future<void> insertChapters(List<BookChapter> chapterList) async {
+    insertedBatches.add(List<BookChapter>.from(chapterList));
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -159,6 +172,8 @@ void main() {
   setUp(() {
     _fakeChaptersFromDao = [];
     _FakeBookDao.updates.clear();
+    _FakeBookDao.upserts.clear();
+    _FakeChapterDao.insertedBatches.clear();
     // Mock flutter_tts / audio_service platform channels
     // so TTS calls don't crash in tests
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -207,6 +222,14 @@ void main() {
     test('初始狀態：isReady 為 false', () {
       final controller = ReadBookController(book: _makeBook());
       expect(controller.isReady, isFalse);
+      controller.dispose();
+    });
+
+    test('未設定打點區時預設為九宮格全部喚起選單', () async {
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(controller.clickActions, List<int>.filled(9, 0));
       controller.dispose();
     });
 
@@ -475,6 +498,52 @@ void main() {
       expect(_FakeBookDao.updates.last.chapterIndex, 0);
       expect(_FakeBookDao.updates.last.pos, 8);
       expect(controller.durableLocation.charOffset, 8);
+      controller.dispose();
+    });
+
+    test('未加入書架且已有閱讀進度時，退出會建議加入書架', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.slide;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 12], title: 'c0');
+      controller.slidePages = [...controller.chapterPagesCache[0]!];
+      controller.currentPageIndex = 1;
+
+      expect(controller.shouldPromptAddToBookshelfOnExit(), isTrue);
+      controller.dispose();
+    });
+
+    test('退出時加入書架會保存目前進度並寫入章節', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.slide;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 18], title: 'c0');
+      controller.slidePages = [...controller.chapterPagesCache[0]!];
+      controller.currentPageIndex = 1;
+
+      await controller.addCurrentBookToBookshelf();
+
+      expect(controller.book.isInBookshelf, isTrue);
+      expect(controller.book.durChapterIndex, 0);
+      expect(controller.book.durChapterPos, 18);
+      expect(controller.book.durChapterTitle, 'c0');
+      expect(_FakeBookDao.upserts, hasLength(1));
+      expect(_FakeChapterDao.insertedBatches, hasLength(1));
+      expect(_FakeChapterDao.insertedBatches.single, hasLength(1));
       controller.dispose();
     });
   });

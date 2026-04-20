@@ -63,16 +63,13 @@ class TtsSettingsPage extends StatelessWidget {
                 subtitle: const Text('設定網路自定義語音引擎'),
                 leading: const Icon(Icons.cloud_queue),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HttpTtsManagerPage()),
-                ),
-              ),
-              ListTile(
-                title: const Text('系統 TTS 設定'),
-                subtitle: const Text('前往系統內建的文字轉語音設定頁面'),
-                leading: const Icon(Icons.settings_voice),
-                onTap: () => _showComingSoon(context),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const HttpTtsManagerPage(),
+                      ),
+                    ),
               ),
             ],
           );
@@ -93,12 +90,6 @@ class TtsSettingsPage extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('此功能需調用系統設定')));
   }
 }
 

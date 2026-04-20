@@ -48,16 +48,14 @@ class ScrollRuntimeExecutor {
     required double localOffset,
   }) {
     if (!itemScrollController.isAttached) return;
-    itemScrollController.jumpTo(
-      index: chapterIndex,
-      alignment: 0,
-    );
+    itemScrollController.jumpTo(index: chapterIndex, alignment: 0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!isMounted()) return;
       scrollToChapterLocalOffset(
         chapterIndex: chapterIndex,
         localOffset: localOffset,
         animate: false,
+        topPadding: provider.contentTopInset,
       );
     });
   }
@@ -77,10 +75,7 @@ class ScrollRuntimeExecutor {
       isMounted: isMounted,
       isScrollControllerAttached: () => itemScrollController.isAttached,
       ensureChapterVisible: () {
-        itemScrollController.jumpTo(
-          index: chapterIndex,
-          alignment: 0,
-        );
+        itemScrollController.jumpTo(index: chapterIndex, alignment: 0);
       },
       completeRestore: () => completeScrollRestore(token),
       scrollToChapterLocalOffset: ({
@@ -92,6 +87,7 @@ class ScrollRuntimeExecutor {
           chapterIndex: chapterIndex,
           localOffset: localOffset,
           animate: animate,
+          topPadding: provider.contentTopInset,
         );
       },
       ensureChapterCached: (targetChapterIndex) {
@@ -105,12 +101,13 @@ class ScrollRuntimeExecutor {
       hasTargetPageContext: (targetChapterIndex) {
         final runtimeChapter = provider.chapterAt(targetChapterIndex);
         final pages = provider.pagesForChapter(targetChapterIndex);
-        final pageIndex = runtimeChapter != null
-            ? runtimeChapter.pageIndexAtLocalOffset(localOffset)
-            : ChapterPositionResolver.pageIndexAtLocalOffset(
-                pages,
-                localOffset,
-              );
+        final pageIndex =
+            runtimeChapter != null
+                ? runtimeChapter.pageIndexAtLocalOffset(localOffset)
+                : ChapterPositionResolver.pageIndexAtLocalOffset(
+                  pages,
+                  localOffset,
+                );
         return pageKeys['$targetChapterIndex:$pageIndex']?.currentContext !=
             null;
       },

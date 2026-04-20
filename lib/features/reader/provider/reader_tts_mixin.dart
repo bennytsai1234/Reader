@@ -39,6 +39,7 @@ mixin ReaderTtsMixin
   int get ttsWordEnd => readAloudController.ttsWordEnd;
   int get ttsChapterIndex => readAloudController.ttsChapterIndex;
   bool get isTtsActive => readAloudController.isActive;
+  bool get isTtsPlaying => readAloudController.isPlaying;
   bool get stopAfterChapter => readAloudController.stopAfterChapter;
   TTSService get tts => TTSService();
 

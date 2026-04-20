@@ -85,6 +85,7 @@ class SourceManagerMenus {
     required VoidCallback onScanQr,
     required VoidCallback onManageGroups,
     required VoidCallback onNewSource,
+    required VoidCallback onCheckAllSources,
     required Function(SourceManagerProvider) onClearInvalid,
     required Function(SourceManagerProvider) onDeleteNonNovel,
     required Function(SourceManagerProvider) onShowLastCheckResults,
@@ -113,7 +114,7 @@ class SourceManagerMenus {
             onManageGroups();
             break;
           case 'check_all':
-            provider.checkAllSources();
+            onCheckAllSources();
             break;
           case 'group_domain':
             provider.toggleGroupByDomain();

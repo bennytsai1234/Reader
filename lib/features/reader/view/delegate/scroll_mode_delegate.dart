@@ -86,35 +86,39 @@ class ScrollModeDelegate extends PageModeDelegate {
         }
         return Container(
           color: provider.currentTheme.backgroundColor,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final page in pages)
-                SizedBox(
-                  key: pageKeys.putIfAbsent(
-                    '$chapterIndex:${page.index}',
-                    GlobalKey.new,
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: provider.contentTopInset,
+              bottom: provider.contentBottomInset,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final page in pages)
+                  SizedBox(
+                    key: pageKeys.putIfAbsent(
+                      '$chapterIndex:${page.index}',
+                      GlobalKey.new,
+                    ),
+                    height: runtimeChapter?.pageHeightAt(page.index) ?? 0,
+                    child: PageViewWidget(
+                      page: page,
+                      contentStyle: contentStyle,
+                      titleStyle: titleStyle,
+                      isScrollMode: true,
+                      paddingTop: 0,
+                      paddingBottom: 0,
+                      ttsStart: provider.ttsStart,
+                      ttsEnd: provider.ttsEnd,
+                      ttsWordStart: provider.ttsWordStart,
+                      ttsWordEnd: provider.ttsWordEnd,
+                      ttsChapterIndex: provider.ttsChapterIndex,
+                      pageBackgroundColor:
+                          provider.currentTheme.backgroundColor,
+                    ),
                   ),
-                  height:
-                      (runtimeChapter?.pageHeightAt(page.index) ?? 0) +
-                      provider.contentTopInset +
-                      provider.contentBottomInset,
-                  child: PageViewWidget(
-                    page: page,
-                    contentStyle: contentStyle,
-                    titleStyle: titleStyle,
-                    isScrollMode: true,
-                    paddingTop: provider.contentTopInset,
-                    paddingBottom: provider.contentBottomInset,
-                    ttsStart: provider.ttsStart,
-                    ttsEnd: provider.ttsEnd,
-                    ttsWordStart: provider.ttsWordStart,
-                    ttsWordEnd: provider.ttsWordEnd,
-                    ttsChapterIndex: provider.ttsChapterIndex,
-                    pageBackgroundColor: provider.currentTheme.backgroundColor,
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -130,7 +134,10 @@ class ScrollModeDelegate extends PageModeDelegate {
         heights.add(ChapterPositionResolver.chapterHeight(neighborPages));
       }
     }
-    if (heights.isEmpty) return provider.viewSize?.height ?? 600.0;
-    return heights.reduce((double a, double b) => a + b) / heights.length;
+    final insetPadding = provider.contentTopInset + provider.contentBottomInset;
+    if (heights.isEmpty)
+      return (provider.viewSize?.height ?? 600.0) + insetPadding;
+    return heights.reduce((double a, double b) => a + b) / heights.length +
+        insetPadding;
   }
 }

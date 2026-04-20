@@ -34,6 +34,7 @@ class SourceManagerProvider with ChangeNotifier {
   bool groupByDomain = false;
   SourceCheckReport get lastCheckReport => checkService.lastReport;
   bool get hasLastCheckReport => checkService.hasLastReport;
+  SourceCheckConfig get checkConfig => checkService.config;
 
   List<BookSourcePart> get sources {
     var list = List<BookSourcePart>.from(_sources);
@@ -101,7 +102,20 @@ class SourceManagerProvider with ChangeNotifier {
   List<String> get allGroups => _allGroups;
 
   SourceManagerProvider() {
+    checkService.addListener(_handleCheckServiceChanged);
     loadSources();
+    checkService.loadConfig();
+  }
+
+  void _handleCheckServiceChanged() {
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    checkService.removeListener(_handleCheckServiceChanged);
+    checkService.dispose();
+    super.dispose();
   }
 
   Future<void> loadSources() async {
@@ -403,8 +417,11 @@ class SourceManagerProvider with ChangeNotifier {
     await loadSources();
   }
 
-  Future<void> checkSelectedSources() async {
+  Future<void> checkSelectedSources({SourceCheckConfig? config}) async {
     if (_selectedUrls.isEmpty) return;
+    if (config != null) {
+      await checkService.updateConfig(config);
+    }
     await checkService.check(_selectedUrls.toList());
     await loadSources();
   }
@@ -475,8 +492,11 @@ class SourceManagerProvider with ChangeNotifier {
     return urlsToDelete.length;
   }
 
-  Future<void> checkAllSources() async {
+  Future<void> checkAllSources({SourceCheckConfig? config}) async {
     final urls = sources.map((s) => s.bookSourceUrl).toList();
+    if (config != null) {
+      await checkService.updateConfig(config);
+    }
     await checkService.check(urls);
     await loadSources();
   }

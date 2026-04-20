@@ -3,11 +3,13 @@ import '../../reader_provider.dart';
 
 class ReaderTopMenu extends StatelessWidget {
   final ReaderProvider provider;
+  final VoidCallback onBack;
   final VoidCallback onMore;
 
   const ReaderTopMenu({
     super.key,
     required this.provider,
+    required this.onBack,
     required this.onMore,
   });
 
@@ -38,7 +40,7 @@ class ReaderTopMenu extends StatelessWidget {
       children: [
         IconButton(
           icon: Icon(Icons.arrow_back, color: iconColor),
-          onPressed: () => Navigator.pop(context),
+          onPressed: onBack,
         ),
         Expanded(
           child: Text(

@@ -1,15 +1,23 @@
+import 'dart:async';
+
+import 'package:inkpage_reader/core/engine/app_event_bus.dart';
+
 import 'provider/bookshelf_provider_base.dart';
 import 'provider/bookshelf_logic_mixin.dart';
 import 'provider/bookshelf_update_mixin.dart';
 import 'provider/bookshelf_import_mixin.dart';
 
-class BookshelfProvider extends BookshelfProviderBase 
+class BookshelfProvider extends BookshelfProviderBase
     with BookshelfLogicMixin, BookshelfUpdateMixin, BookshelfImportMixin {
-  
+  StreamSubscription<AppEvent>? _bookshelfSub;
+
   BookshelfProvider() {
     loadUiPreferences();
     loadBooks();
     loadGroups();
+    _bookshelfSub = AppEventBus()
+        .onName(AppEventBus.upBookshelf)
+        .listen((_) => unawaited(loadBooks()));
   }
 
   @override
@@ -48,5 +56,10 @@ class BookshelfProvider extends BookshelfProviderBase
     currentGroupId = groupId;
     loadBooks();
   }
-}
 
+  @override
+  void dispose() {
+    _bookshelfSub?.cancel();
+    super.dispose();
+  }
+}

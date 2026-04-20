@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:inkpage_reader/core/constant/source_type.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
@@ -43,6 +44,7 @@ void main() {
   late _FakeSourceDao fakeDao;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     fakeDao = _FakeSourceDao();
     GetIt.instance.registerLazySingleton<BookSourceDao>(() => fakeDao);
   });
