@@ -33,6 +33,46 @@ url+'page='+page;
     });
 
     test(
+      'wrap preserves semicolon-less object assignments before final url expression',
+      () {
+        const source = r'''
+json={"sign":"abc","keyword":key}
+option={
+  "method": "POST",
+  "body": JSON.stringify(json)
+}
+url='http://api.example.com/book/search,'+JSON.stringify(option)
+''';
+
+        final wrapped = JsRuleAsyncWrapper.wrap(source, 3);
+
+        expect(
+          wrapped,
+          contains(
+            "return url='http://api.example.com/book/search,'+JSON.stringify(option);",
+          ),
+        );
+      },
+    );
+
+    test('wrap preserves multiline method chains after bare result line', () {
+      const source = r'''
+result
+.replace("••","")
+.replace(/^(\d+).第/,'第')
+''';
+
+      final wrapped = JsRuleAsyncWrapper.wrap(source, 4);
+
+      expect(
+        wrapped,
+        contains(
+          "return result\n      .replace(\"••\",\"\")\n      .replace(/^(\\d+).第/,'第');",
+        ),
+      );
+    });
+
+    test(
       'wrap preserves realistic content scripts with regex literal and java.post',
       () {
         const source = r'''

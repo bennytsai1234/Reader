@@ -26,8 +26,10 @@ class WebBook {
 
   /// 目錄翻頁上限，防止無限迴圈
   static const int _maxTocPages = 100;
+
   /// 正文翻頁上限
   static const int _maxContentPages = 20;
+
   /// 多頁並發抓取的預設執行緒數 (對標 Android AppConfig.threadCount)
   static const int _pageConcurrency = 4;
 
@@ -45,7 +47,6 @@ class WebBook {
       throw SourceException('搜尋 URL 不能為空', sourceUrl: source.bookSourceUrl);
     }
 
-
     final analyzeUrl = await AnalyzeUrl.create(
       searchUrl,
       source: source,
@@ -56,6 +57,7 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res);
     _checkRedirect(source, res);
+    _checkLoginRequired(res, stage: 'search');
 
     final results = await BookListParser.parse(
       source: source,
@@ -75,11 +77,11 @@ class WebBook {
     String url, {
     int? page = 1,
   }) async {
-
     final analyzeUrl = await AnalyzeUrl.create(url, source: source, page: page);
     var res = await analyzeUrl.getStrResponse();
     res = _runLoginCheckJs(source, res);
     _checkRedirect(source, res);
+    _checkLoginRequired(res, stage: 'explore');
 
     return BookListParser.parse(
       source: source,
@@ -95,7 +97,6 @@ class WebBook {
     Book book, {
     bool canReName = true,
   }) async {
-
     if (book.infoHtml != null && book.infoHtml!.isNotEmpty) {
       final parsed = await BookInfoParser.parse(
         source: source,
@@ -110,10 +111,15 @@ class WebBook {
       return parsed;
     }
 
-    final analyzeUrl = await AnalyzeUrl.create(book.bookUrl, source: source, ruleData: book);
+    final analyzeUrl = await AnalyzeUrl.create(
+      book.bookUrl,
+      source: source,
+      ruleData: book,
+    );
     var res = await analyzeUrl.getStrResponse();
     res = _runLoginCheckJs(source, res, ruleData: book);
     _checkRedirect(source, res);
+    _checkLoginRequired(res, stage: 'detail');
 
     final parsed = await BookInfoParser.parse(
       source: source,
@@ -132,12 +138,9 @@ class WebBook {
   /// 支援 nextTocUrl 多頁目錄自動翻頁、isReverse、去重、formatJs、並發抓取
   static Future<List<BookChapter>> getChapterListAwait(
     BookSource source,
-    Book book,
-    {
+    Book book, {
     int? chapterLimit,
-  }
-  ) async {
-
+  }) async {
     final rule = AnalyzeRule(source: source, ruleData: book);
     await rule.preUpdateToc();
 
@@ -167,12 +170,18 @@ class WebBook {
 
     if (chapterLimit == null || allChapters.length < chapterLimit) {
       if (firstResult.nextUrls.length > 1) {
-      // 多 nextUrl → 並發抓取剩餘頁 (對標 Android mapAsync)
-        final pending = firstResult.nextUrls
-          .where((u) => visitedUrls.add(u))
-          .take(_maxTocPages - 1)
-          .toList();
-        final responses = await _fetchParallel(pending, source, book);
+        // 多 nextUrl → 並發抓取剩餘頁 (對標 Android mapAsync)
+        final pending =
+            firstResult.nextUrls
+                .where((u) => visitedUrls.add(u))
+                .take(_maxTocPages - 1)
+                .toList();
+        final responses = await _fetchParallel(
+          pending,
+          source,
+          book,
+          stage: 'toc',
+        );
         for (var i = 0; i < responses.length; i++) {
           if (chapterLimit != null && allChapters.length >= chapterLimit) {
             break;
@@ -185,20 +194,20 @@ class WebBook {
             body: res.body,
             baseUrl: res.url,
             maxChapters:
-                chapterLimit == null
-                    ? null
-                    : (chapterLimit! - allChapters.length),
+                chapterLimit == null ? null : chapterLimit - allChapters.length,
           );
           allChapters.addAll(pageResult.chapters);
           // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
         }
       } else {
-      // 單 nextUrl → daisy chain 循序抓取
+        // 單 nextUrl → daisy chain 循序抓取
         String? currentUrl =
-          firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
-        for (var pageNum = 1;
-            pageNum < _maxTocPages && currentUrl != null;
-            pageNum++) {
+            firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
+        for (
+          var pageNum = 1;
+          pageNum < _maxTocPages && currentUrl != null;
+          pageNum++
+        ) {
           if (chapterLimit != null && allChapters.length >= chapterLimit) {
             break;
           }
@@ -212,6 +221,7 @@ class WebBook {
           var res = await analyzeUrl.getStrResponse();
           res = _runLoginCheckJs(source, res, ruleData: book);
           _checkRedirect(source, res);
+          _checkLoginRequired(res, stage: 'toc');
 
           final result = await ChapterListParser.parse(
             source: source,
@@ -219,10 +229,13 @@ class WebBook {
             body: res.body,
             baseUrl: res.url,
             maxChapters:
-                chapterLimit == null ? null : (chapterLimit - allChapters.length),
+                chapterLimit == null
+                    ? null
+                    : (chapterLimit - allChapters.length),
           );
           allChapters.addAll(result.chapters);
-          currentUrl = result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
+          currentUrl =
+              result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
         }
       }
     }
@@ -286,17 +299,21 @@ class WebBook {
     BookChapter chapter, {
     String? nextChapterUrl,
   }) async {
-
     final contentParts = <String>[];
     final visitedUrls = <String>{};
     String? lastBaseUrl;
 
     // 1. 抓取首頁正文
     visitedUrls.add(chapter.url);
-    final firstAnalyzeUrl = await AnalyzeUrl.create(chapter.url, source: source, ruleData: book);
+    final firstAnalyzeUrl = await AnalyzeUrl.create(
+      chapter.url,
+      source: source,
+      ruleData: book,
+    );
     var firstRes = await firstAnalyzeUrl.getStrResponse();
     firstRes = _runLoginCheckJs(source, firstRes, ruleData: book);
     _checkRedirect(source, firstRes);
+    _checkLoginRequired(firstRes, stage: 'content');
 
     final firstResult = await ContentParser.parse(
       source: source,
@@ -313,11 +330,17 @@ class WebBook {
 
     if (firstResult.nextUrls.length > 1) {
       // 多 nextUrl → 並發抓取 (對標 Android BookContent mapAsync)
-      final pending = firstResult.nextUrls
-          .where((u) => visitedUrls.add(u))
-          .take(_maxContentPages - 1)
-          .toList();
-      final responses = await _fetchParallel(pending, source, book);
+      final pending =
+          firstResult.nextUrls
+              .where((u) => visitedUrls.add(u))
+              .take(_maxContentPages - 1)
+              .toList();
+      final responses = await _fetchParallel(
+        pending,
+        source,
+        book,
+        stage: 'content',
+      );
       for (var i = 0; i < responses.length; i++) {
         final res = responses[i];
         if (res == null) continue;
@@ -338,13 +361,22 @@ class WebBook {
       // 單 nextUrl → daisy chain 循序抓取
       String? currentUrl =
           firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
-      for (var pageNum = 1; pageNum < _maxContentPages && currentUrl != null; pageNum++) {
+      for (
+        var pageNum = 1;
+        pageNum < _maxContentPages && currentUrl != null;
+        pageNum++
+      ) {
         if (!visitedUrls.add(currentUrl)) break;
 
-        final analyzeUrl = await AnalyzeUrl.create(currentUrl, source: source, ruleData: book);
+        final analyzeUrl = await AnalyzeUrl.create(
+          currentUrl,
+          source: source,
+          ruleData: book,
+        );
         var res = await analyzeUrl.getStrResponse();
         res = _runLoginCheckJs(source, res, ruleData: book);
         _checkRedirect(source, res);
+        _checkLoginRequired(res, stage: 'content');
 
         final result = await ContentParser.parse(
           source: source,
@@ -373,9 +405,12 @@ class WebBook {
     );
   }
 
-
   /// 執行登入檢查 JS Hook (統一抽取)
-  static StrResponse _runLoginCheckJs(BookSource source, StrResponse res, {dynamic ruleData}) {
+  static StrResponse _runLoginCheckJs(
+    BookSource source,
+    StrResponse res, {
+    dynamic ruleData,
+  }) {
     final checkJs = source.loginCheckJs;
     if (checkJs != null && checkJs.isNotEmpty) {
       final rule = AnalyzeRule(source: source, ruleData: ruleData);
@@ -394,31 +429,69 @@ class WebBook {
     }
   }
 
+  static void _checkLoginRequired(StrResponse res, {required String stage}) {
+    final normalized = '${res.url}\n${res.body}'.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    if (!_looksLikeLoginRequired(normalized)) return;
+    throw LoginCheckException(_loginRequiredMessage(stage), sourceUrl: res.url);
+  }
+
+  static bool _looksLikeLoginRequired(String normalized) {
+    return normalized.contains('permissionlimit') ||
+        normalized.contains('loginrequired') ||
+        normalized.contains('需要你登录后阅读') ||
+        normalized.contains('需要你登入後閱讀') ||
+        normalized.contains('登录后阅读') ||
+        normalized.contains('登入後閱讀') ||
+        normalized.contains('請先登錄') ||
+        normalized.contains('请先登录');
+  }
+
+  static String _loginRequiredMessage(String stage) {
+    switch (stage) {
+      case 'content':
+        return '正文需要登入後閱讀';
+      case 'toc':
+        return '目錄需要登入後閱讀';
+      case 'detail':
+        return '詳情需要登入後閱讀';
+      default:
+        return '書源需要登入後使用';
+    }
+  }
+
   /// 以有上限的並發抓取多個 URL 並依輸入順序回傳 StrResponse
   /// (對標 Android flow.mapAsync(threadCount))
   static Future<List<StrResponse?>> _fetchParallel(
     List<String> urls,
     BookSource source,
     Book book, {
+    required String stage,
     int concurrency = _pageConcurrency,
   }) async {
     if (urls.isEmpty) return const [];
     final sem = _Semaphore(concurrency);
-    final futures = urls.map((url) async {
-      await sem.acquire();
-      try {
-        final analyzeUrl = await AnalyzeUrl.create(url, source: source, ruleData: book);
-        var res = await analyzeUrl.getStrResponse();
-        res = _runLoginCheckJs(source, res, ruleData: book);
-        _checkRedirect(source, res);
-        return res;
-      } catch (e) {
-        AppLog.e('WebBook: 並發抓取失敗 $url: $e');
-        return null;
-      } finally {
-        sem.release();
-      }
-    }).toList();
+    final futures =
+        urls.map((url) async {
+          await sem.acquire();
+          try {
+            final analyzeUrl = await AnalyzeUrl.create(
+              url,
+              source: source,
+              ruleData: book,
+            );
+            var res = await analyzeUrl.getStrResponse();
+            res = _runLoginCheckJs(source, res, ruleData: book);
+            _checkRedirect(source, res);
+            _checkLoginRequired(res, stage: stage);
+            return res;
+          } catch (e) {
+            AppLog.e('WebBook: 並發抓取失敗 $url: $e');
+            return null;
+          } finally {
+            sem.release();
+          }
+        }).toList();
     return Future.wait(futures);
   }
 
@@ -455,6 +528,7 @@ class WebBook {
     var res = await analyzeUrl.getStrResponse();
     res = _runLoginCheckJs(source, res, ruleData: book);
     _checkRedirect(source, res);
+    _checkLoginRequired(res, stage: 'toc');
     return res;
   }
 

@@ -78,17 +78,24 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                 onDeleteNonNovel:
                     (p) =>
                         SourceManagerDialogs.confirmDeleteNonNovel(context, p),
+                onShowLastCheckResults:
+                    (p) => SourceManagerDialogs.showCheckResults(context, p),
               ),
             ],
           ),
           body: Column(
             children: [
-              if (provider.checkService.isChecking)
+              if (provider.checkService.isChecking ||
+                  provider.hasLastCheckReport)
                 SourceCheckStatusBar(
                   provider: provider,
-                  onTap:
-                      () =>
-                          SourceManagerDialogs.showCheckLog(context, provider),
+                  onTap: () {
+                    if (provider.checkService.isChecking) {
+                      SourceManagerDialogs.showCheckLog(context, provider);
+                      return;
+                    }
+                    SourceManagerDialogs.showCheckResults(context, provider);
+                  },
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -255,8 +262,9 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
           onTap: () async {
             Navigator.pop(context);
             final full = await p.getFullSource(s.bookSourceUrl);
-            if (full != null && context.mounted)
+            if (full != null && context.mounted) {
               SourceManagerDialogs.showDebugInput(context, full);
+            }
           },
         ),
         ListTile(

@@ -46,6 +46,17 @@ class ReaderChapterContentLoader {
 
   Future<FetchResult> load(int chapterIndex, BookChapter chapter) async {
     final rawContent = await _loadRawContent(chapterIndex, chapter);
+    if (_looksLikeFailureMessage(rawContent)) {
+      final failureTitle = _textConverter.convert(
+        chapter.getDisplayTitle(chineseConvertType: currentChineseConvert()),
+        convertType: currentChineseConvert(),
+      );
+      return FetchResult(
+        content: rawContent,
+        displayTitle: failureTitle,
+        failureMessage: rawContent,
+      );
+    }
     final rulesJson = await _loadRulesJson();
     final chineseConvertType = currentChineseConvert();
 
@@ -196,5 +207,10 @@ class ReaderChapterContentLoader {
       _convertedTitleCache.remove(_convertedTitleCache.keys.first);
     }
     return converted;
+  }
+
+  bool _looksLikeFailureMessage(String rawContent) {
+    final trimmed = rawContent.trim();
+    return trimmed.startsWith('加載章節失敗') || trimmed.startsWith('章節內容為空');
   }
 }

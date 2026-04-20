@@ -46,6 +46,7 @@ class BookChapter implements RuleDataInterface {
   });
 
   // 變量地圖 (原 Android variableMap)
+  @override
   Map<String, String> get variableMap {
     if (variable == null || variable!.isEmpty) return {};
     try {

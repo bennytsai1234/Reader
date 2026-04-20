@@ -31,7 +31,8 @@ class PaginationConfig {
 class FetchResult {
   final String content;
   final String? displayTitle;
-  FetchResult({required this.content, this.displayTitle});
+  final String? failureMessage;
+  FetchResult({required this.content, this.displayTitle, this.failureMessage});
 }
 
 /// 章節內容取得函數的型別定義
@@ -225,7 +226,7 @@ class ChapterContentManager {
   /// 更新分頁設定並清除分頁快取（保留內容快取）
   void updateConfig(PaginationConfig config) {
     _config = config;
-    _configVersion++;       // invalidate in-flight paginations
+    _configVersion++; // invalidate in-flight paginations
     _paginatedCache.clear();
   }
 
@@ -492,7 +493,9 @@ class ChapterContentManager {
 
       // 空內容攔截：記錄並早期返回，避免無限重試
       if (result.content.trim().isEmpty) {
-        AppLog.w('ChapterContentManager: Chapter $index returned empty content, marking as empty');
+        AppLog.w(
+          'ChapterContentManager: Chapter $index returned empty content, marking as empty',
+        );
         _emptyContentChapters.add(index);
         return;
       }
@@ -502,14 +505,20 @@ class ChapterContentManager {
         _displayTitleCache[index] = result.displayTitle!;
       }
       if (_progressivePaginationEnabled) {
-        await _doPaginateProgressive(index, result.content, capturedConfigVersion);
+        await _doPaginateProgressive(
+          index,
+          result.content,
+          capturedConfigVersion,
+        );
       } else {
         final pages = await _doPaginate(index, result.content);
         if (_disposed) return;
 
         // 版本驗證：若分頁設定在抓取期間被更新，丟棄此次結果
         if (_configVersion != capturedConfigVersion) {
-          AppLog.d('ChapterContentManager: Chapter $index pagination discarded (config changed)');
+          AppLog.d(
+            'ChapterContentManager: Chapter $index pagination discarded (config changed)',
+          );
           return;
         }
         if (pages.isNotEmpty) {
@@ -744,7 +753,9 @@ class ChapterContentManager {
 
       // 空內容攔截
       if (result.content.trim().isEmpty) {
-        AppLog.w('ChapterContentManager: Silent preload chapter $index empty content');
+        AppLog.w(
+          'ChapterContentManager: Silent preload chapter $index empty content',
+        );
         _emptyContentChapters.add(index);
         return;
       }
@@ -754,7 +765,11 @@ class ChapterContentManager {
         _displayTitleCache[index] = result.displayTitle!;
       }
       if (_progressivePaginationEnabled) {
-        await _doPaginateProgressive(index, result.content, capturedConfigVersion);
+        await _doPaginateProgressive(
+          index,
+          result.content,
+          capturedConfigVersion,
+        );
       } else {
         final pages = await _doPaginate(index, result.content);
         if (_disposed) return;
@@ -791,7 +806,11 @@ class ChapterContentManager {
     }
   }
 
-  Future<void> _doPaginateProgressive(int index, String content, [int? capturedVersion]) async {
+  Future<void> _doPaginateProgressive(
+    int index,
+    String content, [
+    int? capturedVersion,
+  ]) async {
     final config = _config;
     if (config == null ||
         config.viewSize.width <= 0 ||
@@ -842,7 +861,9 @@ class ChapterContentManager {
     );
 
     if (capturedVersion != null && _configVersion != capturedVersion) {
-      AppLog.d('ChapterContentManager: Chapter $index progressive pagination discarded (config changed)');
+      AppLog.d(
+        'ChapterContentManager: Chapter $index progressive pagination discarded (config changed)',
+      );
       _paginatedCache.remove(index);
       return;
     }

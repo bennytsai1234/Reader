@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:inkpage_reader/core/engine/analyze_rule/analyze_rule_support.dart';
+import 'package:inkpage_reader/core/engine/parsers/css/analyze_by_css_support.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/rule_data_interface.dart';
@@ -55,18 +56,18 @@ class JsExtensions extends JsExtensionsBase {
       if (payload is List && payload.length >= 2) {
         final key = payload[0].toString();
         final value = payload[1];
+        final stringValue = value == null ? '' : value.toString();
         if (ruleContext != null) {
           try {
-            ruleContext.put(key, value?.toString());
+            ruleContext.put(key, stringValue);
           } catch (_) {
-            JsExtensionsBase.sharedScope[key] = value;
+            JsExtensionsBase.sharedScope[key] = stringValue;
           }
         } else {
-          JsExtensionsBase.sharedScope[key] = value;
+          JsExtensionsBase.sharedScope[key] = stringValue;
         }
         if (source != null) {
           final scopedKey = 'v_${source!.getKey()}_$key';
-          final stringValue = value?.toString() ?? '';
           cacheManager.putMemory(scopedKey, stringValue);
           unawaited(cacheManager.put(scopedKey, stringValue));
         }
@@ -79,7 +80,7 @@ class JsExtensions extends JsExtensionsBase {
         try {
           final value = ruleContext.get(key);
           if (value != null && value.toString().isNotEmpty) {
-            return value;
+            return value.toString();
           }
         } catch (_) {}
       }
@@ -87,10 +88,11 @@ class JsExtensions extends JsExtensionsBase {
         final scopedKey = 'v_${source!.getKey()}_$key';
         final cached = cacheManager.getFromMemory(scopedKey);
         if (cached != null && cached.toString().isNotEmpty) {
-          return cached;
+          return cached.toString();
         }
       }
-      return JsExtensionsBase.sharedScope[key];
+      final value = JsExtensionsBase.sharedScope[key];
+      return value == null ? '' : value.toString();
     });
     runtime.onMessage('ruleGetString', (args) {
       final rule = _decodeSyncArgs(args).toString();
@@ -100,6 +102,15 @@ class JsExtensions extends JsExtensionsBase {
         } catch (_) {}
       }
       return '';
+    });
+    runtime.onMessage('ruleGetStringList', (args) {
+      final rule = _decodeSyncArgs(args).toString();
+      if (ruleContext != null) {
+        try {
+          return ruleContext.getStringList(rule);
+        } catch (_) {}
+      }
+      return const <String>[];
     });
     runtime.onMessage('ruleGetElement', (args) {
       final rule = _decodeSyncArgs(args).toString();
@@ -119,6 +130,17 @@ class JsExtensions extends JsExtensionsBase {
         } catch (_) {}
       }
       return const <dynamic>[];
+    });
+    runtime.onMessage('ruleSetContent', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.isNotEmpty && ruleContext != null) {
+        try {
+          final nextBaseUrl =
+              payload.length > 1 ? payload[1]?.toString() : null;
+          ruleContext.setContent(payload[0], baseUrl: nextBaseUrl);
+        } catch (_) {}
+      }
+      return null;
     });
     runtime.onMessage('log', (args) {
       debugPrint('JS_LOG: $args');
@@ -160,6 +182,36 @@ class JsExtensions extends JsExtensionsBase {
       }
       return '';
     });
+    runtime.onMessage('htmlSelectAttributes', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        return _selectHtmlAttributes(
+          payload[0].toString(),
+          payload[1].toString(),
+        );
+      }
+      return const <String>[];
+    });
+    runtime.onMessage('htmlSelectCount', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        return _selectHtmlElements(
+          payload[0].toString(),
+          payload[1].toString(),
+        ).length;
+      }
+      return 0;
+    });
+    runtime.onMessage('htmlSelectTextList', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        return _selectHtmlElements(
+          payload[0].toString(),
+          payload[1].toString(),
+        ).map((element) => element.text.trim()).toList();
+      }
+      return const <String>[];
+    });
     runtime.onMessage('htmlRemove', (args) {
       final payload = _decodeSyncArgs(args);
       if (payload is List && payload.length >= 2) {
@@ -184,6 +236,16 @@ class JsExtensions extends JsExtensionsBase {
           payload[0].toString(),
           payload[1].toString(),
           payload.length > 2 ? payload[2] : null,
+        );
+      }
+      return null;
+    });
+    runtime.onMessage('scopedObjectGetField', (args) {
+      final payload = _decodeSyncArgs(args);
+      if (payload is List && payload.length >= 2) {
+        return _getScopedObjectField(
+          payload[0].toString(),
+          payload[1].toString(),
         );
       }
       return null;
@@ -444,6 +506,19 @@ class JsExtensions extends JsExtensionsBase {
     }
   }
 
+  dynamic _getScopedObjectField(String scopeName, String fieldName) {
+    final target = _resolveScopedObject(scopeName);
+    if (target is Book) {
+      switch (fieldName) {
+        case 'reverseToc':
+          return target.readConfig?.reverseToc ?? false;
+        case 'useReplaceRule':
+          return target.readConfig?.useReplaceRule ?? false;
+      }
+    }
+    return null;
+  }
+
   void _setScopedObjectField(
     String scopeName,
     String fieldName,
@@ -509,6 +584,18 @@ class JsExtensions extends JsExtensionsBase {
         return;
       case 'isInBookshelf':
         book.isInBookshelf = _asBool(value, fallback: book.isInBookshelf);
+        return;
+      case 'reverseToc':
+        (book.readConfig ??= ReadConfig()).reverseToc = _asBool(
+          value,
+          fallback: book.readConfig?.reverseToc ?? false,
+        );
+        return;
+      case 'useReplaceRule':
+        (book.readConfig ??= ReadConfig()).useReplaceRule = _asBool(
+          value,
+          fallback: book.readConfig?.useReplaceRule ?? false,
+        );
         return;
       default:
         return;
@@ -627,8 +714,7 @@ class JsExtensions extends JsExtensionsBase {
 
   String _asString(dynamic value) => value?.toString() ?? '';
 
-  String? _asNullableString(dynamic value) =>
-      value == null ? null : value.toString();
+  String? _asNullableString(dynamic value) => value?.toString();
 
   int _asInt(dynamic value, {int fallback = 0}) {
     if (value is num) return value.toInt();
@@ -658,21 +744,47 @@ class JsExtensions extends JsExtensionsBase {
     dom.Document document,
     String selector,
   ) {
+    final normalizedSelector = _normalizeJsoupSelectorCompat(selector);
     try {
-      return _selectHtmlElementsFromDocumentInternal(document, selector);
+      return _selectHtmlElementsFromDocumentInternal(
+        document,
+        normalizedSelector,
+      );
     } catch (_) {
+      final compatFallback = _selectHtmlElementsWithCompatFallback(
+        document,
+        normalizedSelector,
+      );
+      if (compatFallback.isNotEmpty) {
+        return compatFallback;
+      }
       final pseudoFallback = _selectHtmlElementsWithPseudoFallback(
         document,
-        selector,
+        normalizedSelector,
       );
       if (pseudoFallback.isNotEmpty) {
         return pseudoFallback;
       }
-      final simplified = _simplifyUnsupportedSelector(selector);
-      if (simplified.isEmpty || simplified == selector) {
+      final simplified = _simplifyUnsupportedSelector(normalizedSelector);
+      if (simplified.isEmpty || simplified == normalizedSelector) {
         return const <dom.Element>[];
       }
       return _selectHtmlElementsFromDocumentInternal(document, simplified);
+    }
+  }
+
+  List<dom.Element> _selectHtmlElementsWithCompatFallback(
+    dom.Document document,
+    String selector,
+  ) {
+    final root = document.documentElement;
+    if (root == null) {
+      return const <dom.Element>[];
+    }
+    try {
+      return querySelectorAllCompat(root, selector);
+    } catch (_) {
+      return const <dom.Element>[];
     }
   }
 
@@ -790,6 +902,142 @@ class JsExtensions extends JsExtensionsBase {
         .trim();
   }
 
+  String _normalizeJsoupSelectorCompat(String selector) {
+    var normalized = selector.trim();
+    if (normalized.isEmpty) {
+      return normalized;
+    }
+    normalized = normalized.replaceAllMapped(
+      RegExp(r'\[([^\]=~\^\$\*\|\s]+)~=(.+?)\]'),
+      (match) {
+        final attr = match.group(1)!.trim();
+        final rawPattern = match.group(2)!.trim();
+        final converted = _convertRegexAttributeSelector(rawPattern);
+        return '[$attr$converted]';
+      },
+    );
+    normalized = normalized.replaceAllMapped(
+      RegExp(r':matchesOwn\(([^()]*)\)'),
+      (match) => _convertMatchesPseudo(
+        rawPattern: match.group(1)!.trim(),
+        pseudoName: ':containsOwn',
+      ),
+    );
+    normalized = normalized.replaceAllMapped(
+      RegExp(r':matches\(([^()]*)\)'),
+      (match) => _convertMatchesPseudo(
+        rawPattern: match.group(1)!.trim(),
+        pseudoName: ':contains',
+      ),
+    );
+    normalized = normalized.replaceAllMapped(
+      RegExp(r':has\(\s*>\s*'),
+      (_) => ':has(',
+    );
+    return normalized;
+  }
+
+  String _convertRegexAttributeSelector(String rawPattern) {
+    final trimmed = _stripSelectorQuotes(rawPattern).trim();
+    if (trimmed.isEmpty ||
+        trimmed == r'\S' ||
+        trimmed == r'\\S' ||
+        trimmed == '.+' ||
+        trimmed == '.*') {
+      return '';
+    }
+
+    final normalized = trimmed.replaceAll(r'\\', r'\');
+    final literal = _tryExtractAnchoredLiteral(normalized);
+    if (literal != null) {
+      return '="$literal"';
+    }
+
+    final startsWithLiteral = _tryExtractPrefixLiteral(normalized);
+    if (startsWithLiteral != null) {
+      return '^="$startsWithLiteral"';
+    }
+
+    final endsWithLiteral = _tryExtractSuffixLiteral(normalized);
+    if (endsWithLiteral != null) {
+      return '\$="$endsWithLiteral"';
+    }
+
+    final plainLiteral = _tryExtractPlainLiteral(normalized);
+    if (plainLiteral != null) {
+      return '*="$plainLiteral"';
+    }
+
+    return '';
+  }
+
+  String _convertMatchesPseudo({
+    required String rawPattern,
+    required String pseudoName,
+  }) {
+    final normalized = _stripSelectorQuotes(rawPattern).replaceAll(r'\\', r'\');
+    if (normalized.isEmpty ||
+        normalized == r'\S' ||
+        normalized == r'\\S' ||
+        normalized == '^\\S' ||
+        normalized == r'^\S' ||
+        normalized == '.+' ||
+        normalized == '.*') {
+      return '';
+    }
+
+    final literal =
+        _tryExtractAnchoredLiteral(normalized) ??
+        _tryExtractPlainLiteral(normalized);
+    if (literal == null || literal.isEmpty) {
+      return '';
+    }
+    final escaped = literal.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+    return '$pseudoName("$escaped")';
+  }
+
+  String _stripSelectorQuotes(String value) {
+    final trimmed = value.trim();
+    if (trimmed.length >= 2 &&
+        ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+            (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
+      return trimmed.substring(1, trimmed.length - 1);
+    }
+    return trimmed;
+  }
+
+  String? _tryExtractAnchoredLiteral(String pattern) {
+    final match = RegExp(
+      r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$',
+    ).firstMatch(pattern);
+    return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
+  }
+
+  String? _tryExtractPrefixLiteral(String pattern) {
+    final match = RegExp(
+      r'^\^((?:\\.|[^\\^$.*+?()[\]{}|])+)$',
+    ).firstMatch(pattern);
+    return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
+  }
+
+  String? _tryExtractSuffixLiteral(String pattern) {
+    final match = RegExp(
+      r'^((?:\\.|[^\\^$.*+?()[\]{}|])+)\$$',
+    ).firstMatch(pattern);
+    return match == null ? null : _unescapeSelectorLiteral(match.group(1)!);
+  }
+
+  String? _tryExtractPlainLiteral(String pattern) {
+    if (RegExp(r'[\\^$.*+?()[\]{}|]').hasMatch(pattern)) {
+      return null;
+    }
+    return pattern;
+  }
+
+  String _unescapeSelectorLiteral(String value) {
+    return value.replaceAllMapped(RegExp(r'\\(.)'), (match) => match.group(1)!);
+  }
+
   String _selectHtmlText(String html, String selector) {
     final elements = _selectHtmlElements(html, selector);
     return elements
@@ -833,6 +1081,16 @@ class JsExtensions extends JsExtensionsBase {
     }
     final elements = _selectHtmlElements(html, selector);
     return elements.map((element) => element.innerHtml).join();
+  }
+
+  List<String> _selectHtmlAttributes(String html, String selector) {
+    final elements = _selectHtmlElements(html, selector);
+    if (elements.isEmpty) {
+      return const <String>[];
+    }
+    return elements.first.attributes.entries
+        .map((entry) => '${entry.key}="${entry.value}"')
+        .toList();
   }
 
   String _removeHtml(String html, String selector) {
@@ -883,8 +1141,10 @@ class JsExtensions extends JsExtensionsBase {
   }
 
   String _wrapImportedScript(String content) {
-    final indented =
-        content.split('\n').map((line) => line.isEmpty ? '' : '  $line').join('\n');
+    final indented = content
+        .split('\n')
+        .map((line) => line.isEmpty ? '' : '  $line')
+        .join('\n');
     return '''
 (function(__lrGlobal) {
   var exports = undefined;

@@ -29,7 +29,11 @@ class JsRuleAsyncWrapper {
     var __lrRuleRes = await (async function() {
 ${_indent(body, '      ')}
     })();
-    sendMessage('__ruleDone', JSON.stringify([$callId, __lrRuleRes === undefined ? null : __lrRuleRes, null]));
+    var __lrNormalizedRuleRes =
+      typeof __lrNormalizeRuleResult === 'function'
+        ? __lrNormalizeRuleResult(__lrRuleRes)
+        : __lrRuleRes;
+    sendMessage('__ruleDone', JSON.stringify([$callId, __lrNormalizedRuleRes === undefined ? null : __lrNormalizedRuleRes, null]));
   } catch (__lrErr) {
     var __lrMsg = (__lrErr && __lrErr.message) ? String(__lrErr.message) : String(__lrErr);
     sendMessage('__ruleDone', JSON.stringify([$callId, null, __lrMsg]));
@@ -356,6 +360,7 @@ ${_indent(body, '      ')}
     }
     var depthParen = 0;
     var depthBracket = 0;
+    var depthBrace = 0;
     var i = start;
     while (i < source.length) {
       final c = source.codeUnitAt(i);
@@ -388,12 +393,52 @@ ${_indent(body, '      ')}
         depthBracket++;
       } else if (c == _rbracket) {
         depthBracket--;
-      } else if (c == _semi && depthParen == 0 && depthBracket == 0) {
+      } else if (c == _lbrace) {
+        depthBrace++;
+      } else if (c == _rbrace) {
+        depthBrace--;
+      } else if (c == _semi &&
+          depthParen == 0 &&
+          depthBracket == 0 &&
+          depthBrace == 0) {
+        return i + 1;
+      } else if ((c == 0x0A || c == 0x0D) &&
+          depthParen == 0 &&
+          depthBracket == 0 &&
+          depthBrace == 0 &&
+          _isImplicitStatementBoundary(source, start, i)) {
         return i + 1;
       }
       i++;
     }
     return source.length;
+  }
+
+  static bool _isImplicitStatementBoundary(
+    String source,
+    int start,
+    int newlineIdx,
+  ) {
+    var prev = newlineIdx - 1;
+    while (prev >= start && _isWhitespace(source.codeUnitAt(prev))) {
+      prev--;
+    }
+    if (prev < start) return false;
+    final prevChar = source.codeUnitAt(prev);
+    if (_continuationTrailingChars.contains(prevChar)) {
+      return false;
+    }
+
+    var next = newlineIdx + 1;
+    while (next < source.length && _isWhitespace(source.codeUnitAt(next))) {
+      next++;
+    }
+    if (next >= source.length) return true;
+    final nextChar = source.codeUnitAt(next);
+    if (_continuationLeadingChars.contains(nextChar)) {
+      return false;
+    }
+    return true;
   }
 
   static int _findIfEnd(String source, int start) {
@@ -678,4 +723,45 @@ ${_indent(body, '      ')}
   static const int _tilde = 0x7E;
   static const int _lt = 0x3C;
   static const int _gt = 0x3E;
+  static const int _dot = 0x2E;
+
+  static const Set<int> _continuationTrailingChars = {
+    _dot,
+    _equal,
+    _plus,
+    _minus,
+    _star,
+    _slash,
+    _percent,
+    _ampersand,
+    _pipe,
+    _caret,
+    _bang,
+    _question,
+    _colon,
+    _comma,
+    _lparen,
+    _lbracket,
+    _lbrace,
+  };
+
+  static const Set<int> _continuationLeadingChars = {
+    _dot,
+    _equal,
+    _plus,
+    _minus,
+    _star,
+    _slash,
+    _percent,
+    _ampersand,
+    _pipe,
+    _caret,
+    _bang,
+    _question,
+    _colon,
+    _comma,
+    _rparen,
+    _rbracket,
+    _rbrace,
+  };
 }

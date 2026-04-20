@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:inkpage_reader/core/network/interceptors/lenient_cookie_manager.dart';
 import 'package:inkpage_reader/core/services/network_service.dart';
 
 /// HttpClient - 全域 HTTP 客戶端 (專業升級版)
@@ -10,11 +10,16 @@ class HttpClient {
   HttpClient._internal();
 
   Dio get client => NetworkService().dio;
-  
+
   /// 手動保存 Cookie (用於 WebView 同步等場景)
   Future<void> saveCookies(String url, String cookieStr) async {
     final uri = Uri.parse(url);
-    await NetworkService().cookieJar.saveFromResponse(uri, [Cookie.fromSetCookieValue(cookieStr)]);
+    final cookie = parseSetCookieValueLenient(
+      cookieStr,
+      ignoreInvalidCookies: true,
+    );
+    if (cookie == null) return;
+    await NetworkService().cookieJar.saveFromResponse(uri, [cookie]);
   }
 
   /// 獲取特定網站的 Cookie
@@ -24,4 +29,3 @@ class HttpClient {
     return cookies.map((c) => '${c.name}=${c.value}').join('; ');
   }
 }
-

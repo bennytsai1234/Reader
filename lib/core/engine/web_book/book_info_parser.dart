@@ -1,6 +1,8 @@
+import 'package:html/parser.dart' as html_parser;
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/engine/analyze_rule.dart';
+import 'package:inkpage_reader/core/utils/network_utils.dart';
 
 class BookInfoParser {
   static Future<Book> parse({
@@ -46,18 +48,65 @@ class BookInfoParser {
     final latestChapterTitle = await rule.getStringAsync(
       infoRule.lastChapter ?? '',
     );
+    final normalizedTocUrl = _resolveFallbackTocUrl(
+      tocUrl: tocUrl,
+      body: body,
+      baseUrl: baseUrl,
+      bookUrl: book.bookUrl,
+    );
 
     return book.copyWith(
       name: name.isEmpty ? book.name : name,
       author: author.isEmpty ? book.author : author,
-      kind: kind,
-      coverUrl: coverUrl,
-      intro: intro,
-      latestChapterTitle: latestChapterTitle,
+      kind: kind.isEmpty ? book.kind : kind,
+      coverUrl: coverUrl.isEmpty ? book.coverUrl : coverUrl,
+      intro: intro.isEmpty ? book.intro : intro,
+      latestChapterTitle:
+          latestChapterTitle.isEmpty
+              ? book.latestChapterTitle
+              : latestChapterTitle,
       // tocUrl: 若規則解析結果為空，以 bookUrl 作為預設目錄頁 (對標 Android 邏輯)
-      tocUrl: tocUrl.isNotEmpty ? tocUrl : book.bookUrl,
+      tocUrl: normalizedTocUrl,
     );
   }
 
   static String _format(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  static String _resolveFallbackTocUrl({
+    required String tocUrl,
+    required String body,
+    required String baseUrl,
+    required String bookUrl,
+  }) {
+    if (tocUrl.isNotEmpty && tocUrl != bookUrl) {
+      return tocUrl;
+    }
+
+    final document = html_parser.parse(body);
+    for (final anchor in document.querySelectorAll('a[href]')) {
+      final text = anchor.text.trim();
+      if (!_looksLikeTocLinkText(text)) {
+        continue;
+      }
+      final href = anchor.attributes['href']?.trim() ?? '';
+      if (href.isEmpty) {
+        continue;
+      }
+      final resolved = NetworkUtils.getAbsoluteURL(baseUrl, href);
+      if (resolved.isNotEmpty) {
+        return resolved;
+      }
+    }
+    return bookUrl;
+  }
+
+  static bool _looksLikeTocLinkText(String text) {
+    if (text.isEmpty) {
+      return false;
+    }
+    return text.contains('章节目录') ||
+        text.contains('章節目錄') ||
+        text == '目录' ||
+        text == '目錄';
+  }
 }

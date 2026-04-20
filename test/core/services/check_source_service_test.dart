@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
+import 'package:inkpage_reader/core/exception/app_exception.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
@@ -25,6 +26,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
   Book? hydratedBook;
   List<BookChapter> chapters = [];
   String content = '';
+  Exception? contentError;
 
   Book? infoRequestBook;
   Book? chapterRequestBook;
@@ -37,6 +39,8 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     BookSource source,
     String key, {
     int page = 1,
+    bool Function(String name, String author)? filter,
+    bool Function(int size)? shouldBreak,
     dynamic cancelToken,
   }) async => searchResults;
 
@@ -47,7 +51,11 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
   }
 
   @override
-  Future<List<BookChapter>> getChapterList(BookSource source, Book book) async {
+  Future<List<BookChapter>> getChapterList(
+    BookSource source,
+    Book book, {
+    int? chapterLimit,
+  }) async {
     chapterRequestBook = book;
     return chapters;
   }
@@ -59,6 +67,9 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     BookChapter chapter, {
     String? nextChapterUrl,
   }) async {
+    if (contentError != null) {
+      throw contentError!;
+    }
     contentRequestBook = book;
     contentRequestChapter = chapter;
     capturedNextChapterUrl = nextChapterUrl;
@@ -152,4 +163,55 @@ void main() {
       expect(saved.respondTime, greaterThanOrEqualTo(0));
     },
   );
+
+  test('check marks login-required sources as invalid', () async {
+    final source = BookSource(
+      bookSourceUrl: 'source://login',
+      bookSourceName: '登入牆來源',
+    );
+
+    final fakeDao = _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+    final fakeService =
+        _FakeBookSourceService()
+          ..searchResults = [
+            SearchBook(
+              bookUrl: 'https://example.com/book/login',
+              name: '測試書',
+              author: '作者甲',
+              origin: source.bookSourceUrl,
+              originName: source.bookSourceName,
+            ),
+          ]
+          ..hydratedBook = Book(
+            bookUrl: 'https://example.com/book/login',
+            tocUrl: 'https://example.com/book/login/catalog',
+            origin: source.bookSourceUrl,
+            originName: source.bookSourceName,
+            name: '測試書',
+            author: '作者甲',
+          )
+          ..chapters = [
+            BookChapter(
+              title: '第1章 開始',
+              url: 'https://example.com/book/login/1.html',
+              bookUrl: 'https://example.com/book/login',
+            ),
+          ]
+          ..contentError = LoginCheckException('正文需要登入後閱讀');
+
+    final service = CheckSourceService(
+      service: fakeService,
+      sourceDao: fakeDao,
+      eventBus: AppEventBus(),
+    );
+
+    await service.check([source.bookSourceUrl]);
+
+    final saved = fakeDao.store[source.bookSourceUrl]!;
+    expect(
+      saved.bookSourceGroup?.contains(loginRequiredSourceGroupTag) ?? false,
+      isTrue,
+    );
+    expect(saved.bookSourceComment, contains('正文需要登入後閱讀'));
+  });
 }

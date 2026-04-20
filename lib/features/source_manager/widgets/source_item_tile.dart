@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:inkpage_reader/core/models/source/book_source_logic.dart';
 import '../source_manager_provider.dart';
 import 'package:inkpage_reader/core/models/book_source_part.dart';
 
@@ -32,7 +33,10 @@ class SourceItemTile extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        color: isSelected ? Theme.of(context).primaryColor.withValues(alpha: 0.08) : null,
+        color:
+            isSelected
+                ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
+                : null,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Row(
           children: [
@@ -54,7 +58,10 @@ class SourceItemTile extends StatelessWidget {
                 child: Icon(
                   isSelected ? Icons.check_box : Icons.check_box_outline_blank,
                   size: 22,
-                  color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                  color:
+                      isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey,
                 ),
               ),
             ),
@@ -69,13 +76,17 @@ class SourceItemTile extends StatelessWidget {
                       Expanded(
                         child: Text(
                           _displayNameGroup(),
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (source.respondTime > 0)
-                        _buildResponseTimeTag(source.respondTime),
+                      if (source.runtimeHealth.category !=
+                          SourceHealthCategory.healthy)
+                        _buildStatusTag(source.runtimeHealth),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -118,14 +129,13 @@ class SourceItemTile extends StatelessWidget {
     return source.bookSourceName;
   }
 
-  Widget _buildResponseTimeTag(int ms) {
-    Color color = Colors.green;
-    if (ms > 2000) {
-      color = Colors.red;
-    } else if (ms > 800) {
-      color = Colors.orange;
-    }
-
+  Widget _buildStatusTag(SourceRuntimeHealth health) {
+    final color =
+        health.cleanupCandidate
+            ? Colors.red
+            : health.quarantined
+            ? Colors.orange
+            : Colors.blueGrey;
     return Container(
       margin: const EdgeInsets.only(left: 8),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -134,7 +144,14 @@ class SourceItemTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
       ),
-      child: Text('${ms}ms', style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold)),
+      child: Text(
+        health.label,
+        style: TextStyle(
+          fontSize: 9,
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
@@ -149,14 +166,25 @@ class SourceItemTile extends StatelessWidget {
 
     return Wrap(
       spacing: 4,
-      children: tags.map((t) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        decoration: BoxDecoration(
-          color: Colors.blueGrey.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(2),
-        ),
-        child: Text(t, style: const TextStyle(fontSize: 9, color: Colors.blueGrey)),
-      )).toList(),
+      children:
+          tags
+              .map(
+                (t) => Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Text(
+                    t,
+                    style: const TextStyle(fontSize: 9, color: Colors.blueGrey),
+                  ),
+                ),
+              )
+              .toList(),
     );
   }
 }

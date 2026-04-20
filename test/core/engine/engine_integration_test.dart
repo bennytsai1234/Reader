@@ -572,6 +572,42 @@ void main() {
       expect(result.name, 'Keep This');
       expect(result.author, 'Keep Author');
     });
+
+    test(
+      'Falls back to chapter directory link when tocUrl rule is absent',
+      () async {
+        final source = BookSource(
+          bookSourceUrl: 'https://example.com',
+          ruleBookInfo: BookInfoRule(name: '.book-name@text'),
+        );
+
+        final book = Book(
+          bookUrl: 'https://example.com/showread/HikP.html',
+          origin: 'https://example.com',
+        );
+
+        const html = '''
+      <html><body>
+        <h1 class="book-name">Test Novel</h1>
+        <div class="actions">
+          <a href="/downtxt/HikP/">TXT下载</a>
+          <a href="/showread/HikP/ml.html">章节目录</a>
+          <a href="/showread/HikP/1.html">立即阅读</a>
+        </div>
+      </body></html>
+      ''';
+
+        final result = await BookInfoParser.parse(
+          source: source,
+          book: book,
+          body: html,
+          baseUrl: book.bookUrl,
+        );
+
+        expect(result.name, 'Test Novel');
+        expect(result.tocUrl, 'https://example.com/showread/HikP/ml.html');
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────

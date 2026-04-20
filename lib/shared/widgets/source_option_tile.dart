@@ -32,10 +32,6 @@ class SourceOptionTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (searchBook.respondTime > 0) ...[
-            const SizedBox(width: 8),
-            _ResponseTimeTag(ms: searchBook.respondTime),
-          ],
         ],
       ),
       subtitle: Padding(
@@ -92,39 +88,6 @@ class SourceOptionTile extends StatelessWidget {
               ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
               : null,
       onTap: onTap,
-    );
-  }
-}
-
-class _ResponseTimeTag extends StatelessWidget {
-  final int ms;
-
-  const _ResponseTimeTag({required this.ms});
-
-  @override
-  Widget build(BuildContext context) {
-    final color =
-        ms > 2000
-            ? Colors.red
-            : ms > 800
-            ? Colors.orange
-            : Colors.green;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        '${ms}ms',
-        style: TextStyle(
-          fontSize: 10,
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
     );
   }
 }

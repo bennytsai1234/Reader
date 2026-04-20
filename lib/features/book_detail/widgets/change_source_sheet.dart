@@ -37,12 +37,13 @@ class _ChangeSourceContent extends StatelessWidget {
         children: [
           _buildHeader(context, searchProvider),
           const Divider(height: 1),
-          if (searchProvider.isSearching) 
+          if (searchProvider.isSearching)
             const LinearProgressIndicator(minHeight: 2),
           Expanded(
-            child: searchProvider.results.isEmpty && !searchProvider.isSearching
-                ? const Center(child: Text('未找到其他來源'))
-                : _buildSourceList(context, searchProvider, detailProvider),
+            child:
+                searchProvider.results.isEmpty && !searchProvider.isSearching
+                    ? const Center(child: Text('未找到其他來源'))
+                    : _buildSourceList(context, searchProvider, detailProvider),
           ),
         ],
       ),
@@ -55,18 +56,33 @@ class _ChangeSourceContent extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('更換來源 (${p.results.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(
+            '更換來源 (${p.results.length})',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
           if (p.isSearching)
-            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
           else
-            IconButton(icon: const Icon(Icons.refresh, size: 20), onPressed: () => p.search('${originalBook.name} ${originalBook.author}')),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed:
+                  () => p.search('${originalBook.name} ${originalBook.author}'),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildSourceList(BuildContext context, SearchProvider sp, BookDetailProvider dp) {
-    // 展開聚合結果，並按響應時間與匹配度排序 (對標 Android 換源排序)
+  Widget _buildSourceList(
+    BuildContext context,
+    SearchProvider sp,
+    BookDetailProvider dp,
+  ) {
+    // 展開聚合結果，保留來源順序與匹配結果。
     final allSources = <SearchBook>[];
     for (var sb in sp.results) {
       if (sb.name == originalBook.name) {
@@ -80,61 +96,64 @@ class _ChangeSourceContent extends StatelessWidget {
       itemBuilder: (ctx, i) {
         final sb = allSources[i];
         final isCurrent = sb.origin == originalBook.origin;
-        final responseTime = sb.respondTime;
 
         return ListTile(
           selected: isCurrent,
           title: Row(
             children: [
-              Expanded(child: Text(sb.originName ?? '未知來源', style: const TextStyle(fontWeight: FontWeight.bold))),
-              _buildResponseTimeTag(responseTime),
+              Expanded(
+                child: Text(
+                  sb.originName ?? '未知來源',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('最新: ${sb.latestChapter}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+              Text(
+                '最新: ${sb.latestChapter}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
               Row(
                 children: [
                   if (sb.wordCount != null)
-                    Text('${sb.wordCount!} ', style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+                    Text(
+                      '${sb.wordCount!} ',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
                   if (sb.kind != null)
-                    Expanded(child: Text(sb.kind!, style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    Expanded(
+                      child: Text(
+                        sb.kind!,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                 ],
               ),
             ],
           ),
-          trailing: isCurrent ? const Icon(Icons.check_circle, color: Colors.blue) : null,
+          trailing:
+              isCurrent
+                  ? const Icon(Icons.check_circle, color: Colors.blue)
+                  : null,
           onTap: () async {
             await dp.changeSource(sb);
             if (context.mounted) Navigator.pop(context);
           },
         );
       },
-    );
-  }
-
-  Widget _buildResponseTimeTag(int ms) {
-    if (ms <= 0) return const SizedBox.shrink();
-    
-    Color color = Colors.green;
-    if (ms > 2000) {
-      color = Colors.red;
-    } else if (ms > 800) {
-      color = Colors.orange;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.5),
-      ),
-      child: Text(
-        '${ms}ms',
-        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold),
-      ),
     );
   }
 }

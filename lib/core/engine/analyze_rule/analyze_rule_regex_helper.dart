@@ -99,4 +99,43 @@ mixin AnalyzeRuleRegexHelper on AnalyzeRuleBase {
       });
     }
   }
+
+  String replaceRegexListItemLogic(String result, SourceRule rule) {
+    if (!_isPureRegexCaptureReplacement(rule)) {
+      return replaceRegexLogic(result, rule);
+    }
+
+    final regex = _buildCachedRegex(rule.replaceRegex);
+    if (regex == null) {
+      return result;
+    }
+    final match = regex.firstMatch(result);
+    if (match == null) {
+      return '';
+    }
+    var replacement = rule.replacement;
+    for (var i = 0; i <= match.groupCount; i++) {
+      replacement = replacement.replaceAll('\$$i', match.group(i) ?? '');
+    }
+    return replacement;
+  }
+
+  RegExp? _buildCachedRegex(String pattern) {
+    if (AnalyzeRuleBase.regexCache.containsKey(pattern)) {
+      return AnalyzeRuleBase.regexCache[pattern];
+    }
+    try {
+      final regex = RegExp(pattern);
+      AnalyzeRuleBase.regexCache[pattern] = regex;
+      return regex;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isPureRegexCaptureReplacement(SourceRule rule) {
+    return rule.replaceFirst &&
+        rule.replacement.isNotEmpty &&
+        RegExp(r'^(?:\$\d{1,2})+$').hasMatch(rule.replacement);
+  }
 }

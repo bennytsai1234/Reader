@@ -57,6 +57,9 @@ class SourceRule {
       final normalizedRule = rule.toUpperCase();
       if (normalizedRule.startsWith('@CSS:')) {
         mode = Mode.defaultMode;
+      } else if (_looksLikeLegacyRegexRule(rule)) {
+        mode = Mode.regex;
+        rule = rule.trimLeft().substring(1);
       } else if (rule.startsWith('@@')) {
         mode = Mode.defaultMode;
         rule = rule.substring(2);
@@ -107,6 +110,11 @@ class SourceRule {
       start = match.end;
     }
     if (rule.length > start) _splitRegex(rule.substring(start));
+  }
+
+  bool _looksLikeLegacyRegexRule(String rawRule) {
+    final trimmed = rawRule.trimLeft();
+    return trimmed.startsWith(':(?');
   }
 
   void _splitRegex(String ruleStr) {
@@ -163,11 +171,10 @@ class SourceRule {
         final val = getAnalyzeByJSonPath(analyzer, result).getString(param);
         buffer.write(val);
       } else {
-        // 反向引用 $1..$N —— 對應 _splitRegex 取出的 `$N` 標記
-        // 僅在前一階段結果是 List (regex group) 時有效；對 String 結果
-        // 直接寫入空字串，避免把字面 "$1" 寫回造成解析錯亂。
-        if (result is List && type > 0 && type <= result.length) {
-          buffer.write(result[type - 1]?.toString() ?? '');
+        // 反向引用 $1..$N —— AnalyzeByRegex 會把 group(0) 放在 index 0，
+        // 這裡需對齊 legado 語義，令 `$1` 對應第一個捕獲組而不是整段匹配。
+        if (result is List && type > 0 && type < result.length) {
+          buffer.write(result[type]?.toString() ?? '');
         }
       }
     }
@@ -198,8 +205,8 @@ class SourceRule {
         final val = getAnalyzeByJSonPath(analyzer, result).getString(param);
         buffer.write(val);
       } else {
-        if (result is List && type > 0 && type <= result.length) {
-          buffer.write(result[type - 1]?.toString() ?? '');
+        if (result is List && type > 0 && type < result.length) {
+          buffer.write(result[type]?.toString() ?? '');
         }
       }
     }
@@ -270,6 +277,10 @@ String stringifyRuleResult(dynamic value) {
   if (value == null) {
     return '';
   }
+  final htmlLike = extractHtmlLikeRuleInput(value);
+  if (htmlLike != null) {
+    return htmlLike;
+  }
   if (value is Element) {
     return value.outerHtml;
   }
@@ -280,6 +291,9 @@ String stringifyRuleResult(dynamic value) {
 }
 
 bool isJsonLikeRuleInput(dynamic value) {
+  if (extractHtmlLikeRuleInput(value) != null) {
+    return false;
+  }
   if (value is Map || value is List) {
     return true;
   }
@@ -288,6 +302,28 @@ bool isJsonLikeRuleInput(dynamic value) {
     return trimmed.startsWith('{') || trimmed.startsWith('[');
   }
   return false;
+}
+
+String? extractHtmlLikeRuleInput(dynamic value) {
+  if (value is Map) {
+    for (final key in const <String>['__html', 'outerHtml', 'html']) {
+      final candidate = value[key];
+      if (candidate is String && candidate.trim().isNotEmpty) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+dynamic coerceNullInterimResult(dynamic result, SourceRule sourceRule) {
+  if (result != null) {
+    return result;
+  }
+  if (sourceRule.mode == Mode.js || sourceRule.isDynamic) {
+    return '';
+  }
+  return null;
 }
 
 String? buildJsonFallbackRule(String rule) {

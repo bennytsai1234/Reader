@@ -33,8 +33,9 @@ class BookInfoHeader extends StatelessWidget {
         children: [
           GestureDetector(
             onLongPress: () {
-              if (coverUrl != null && coverUrl.isNotEmpty)
+              if (coverUrl != null && coverUrl.isNotEmpty) {
                 showPhotoView(context, coverUrl);
+              }
             },
             child: Hero(
               tag: 'book_cover',

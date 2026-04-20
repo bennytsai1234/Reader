@@ -7,7 +7,10 @@ void main() {
 
     test('getElements - chain extraction', () {
       // First extract segments, then extract names
-      final matches = AnalyzeByRegex.getElements(text, [r'Name: [^;]+', r'Name: ([^,]+)']);
+      final matches = AnalyzeByRegex.getElements(text, [
+        r'Name: [^;]+',
+        r'Name: ([^,]+)',
+      ]);
       expect(matches.length, 2);
       expect(matches[0][1], 'John Doe');
       expect(matches[1][1], 'Jane Smith');
@@ -24,13 +27,28 @@ void main() {
     });
 
     test(r'replace - with groups $1, $2', () {
-      final result = AnalyzeByRegex.replace('John Doe', r'##(\w+) (\w+)##$2, $1');
+      final result = AnalyzeByRegex.replace(
+        'John Doe',
+        r'##(\w+) (\w+)##$2, $1',
+      );
       expect(result, 'Doe, John');
     });
 
     test('getString - automatically routes to replace when ## present', () {
       final result = AnalyzeByRegex.getString('abc 123 def', r'##\d+##XYZ');
       expect(result, 'abc XYZ def');
+    });
+
+    test('getElements supports legado inline regex flags', () {
+      const multilineText = 'id=123\nclass="name">第一章';
+      final matches = AnalyzeByRegex.getElements(multilineText, [
+        r'(?s)(\d+)\s*class="([^"]+)">([^<]+)',
+      ]);
+
+      expect(matches, hasLength(1));
+      expect(matches.first[1], '123');
+      expect(matches.first[2], 'name');
+      expect(matches.first[3], '第一章');
     });
   });
 }

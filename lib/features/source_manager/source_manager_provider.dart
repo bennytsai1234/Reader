@@ -32,6 +32,8 @@ class SourceManagerProvider with ChangeNotifier {
   int sortMode = 0;
   bool sortDesc = false;
   bool groupByDomain = false;
+  SourceCheckReport get lastCheckReport => checkService.lastReport;
+  bool get hasLastCheckReport => checkService.hasLastReport;
 
   List<BookSourcePart> get sources {
     var list = List<BookSourcePart>.from(_sources);
@@ -93,11 +95,6 @@ class SourceManagerProvider with ChangeNotifier {
       case 4:
         list.sort(
           (a, b) => a.lastUpdateTime.compareTo(b.lastUpdateTime) * multiplier,
-        );
-        break;
-      case 5:
-        list.sort(
-          (a, b) => a.respondTime.compareTo(b.respondTime) * multiplier,
         );
         break;
     }
@@ -354,7 +351,8 @@ class SourceManagerProvider with ChangeNotifier {
 
   Future<void> checkSelectedSources() async {
     if (_selectedUrls.isEmpty) return;
-    checkService.check(_selectedUrls.toList()).then((_) => loadSources());
+    await checkService.check(_selectedUrls.toList());
+    await loadSources();
   }
 
   List<String> get groups => _allGroups;
@@ -395,14 +393,11 @@ class SourceManagerProvider with ChangeNotifier {
     await loadSources();
   }
 
-  static const _invalidTags = ['搜尋失效', '目錄失效', '正文失效', '校驗超時', '網站失效'];
-
   Future<void> clearInvalidSources() async {
     final all = await _dao.getAll();
     final urlsToDelete = <String>[];
     for (final s in all) {
-      final group = s.bookSourceGroup ?? '';
-      if (_invalidTags.any((tag) => group.contains(tag))) {
+      if (s.isCleanupCandidate) {
         urlsToDelete.add(s.bookSourceUrl);
       }
     }
@@ -432,6 +427,14 @@ class SourceManagerProvider with ChangeNotifier {
     await loadSources();
   }
 
+  Future<void> deleteSourcesByUrls(Iterable<String> urls) async {
+    final normalized = urls.toSet().toList();
+    if (normalized.isEmpty) return;
+    await _dao.deleteByUrls(normalized);
+    _selectedUrls.removeAll(normalized);
+    await loadSources();
+  }
+
   /// 解析 JSON 字串為書源列表 (不匯入)
   List<BookSource> parseSources(String jsonStr) {
     return parseSourcesDetailed(jsonStr).importableSources;
@@ -445,8 +448,9 @@ class SourceManagerProvider with ChangeNotifier {
     for (final e in list) {
       if (e is! Map<String, dynamic>) continue;
       final source = BookSource.fromJson(e);
-      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty)
+      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
         continue;
+      }
       if (!source.isNovelTextSource) {
         source.enabled = false;
         source.enabledExplore = false;

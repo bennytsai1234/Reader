@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/constant/source_type.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
-import 'package:inkpage_reader/core/models/source/book_source_rules.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
 
 import '../../tool/source_validation_support.dart';
@@ -177,6 +178,38 @@ void main() {
       expect(result.category, 'upstream-timeout');
     });
 
+    test('classification marks validation timeouts as slow sources', () {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        bookSourceName: '慢源',
+      );
+
+      final result = classifyValidationFailure(
+        TimeoutException('Future not completed'),
+        source: source,
+        stage: 'content:first',
+      );
+
+      expect(result.outcome, SourceValidationOutcome.skip);
+      expect(result.category, 'slow-source');
+    });
+
+    test('classification skips 401 blocked responses', () {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        bookSourceName: '封鎖站',
+      );
+
+      final result = classifyValidationFailure(
+        Exception('DioException [bad response]: status code of 401'),
+        source: source,
+        stage: 'detail',
+      );
+
+      expect(result.outcome, SourceValidationOutcome.skip);
+      expect(result.category, 'upstream-blocked');
+    });
+
     test('classification skips missing webview platform in test env', () {
       final source = BookSource(
         bookSourceUrl: 'https://example.com',
@@ -231,6 +264,70 @@ void main() {
       expect(result.category, 'source-search-mismatch');
     });
 
+    test('classification skips empty detail shell books', () {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        bookSourceName: '空殼詳情源',
+      );
+
+      final result = classifyValidationFailure(
+        StateError('命中的書籍詳情為空殼頁'),
+        source: source,
+        stage: 'toc',
+      );
+
+      expect(result.outcome, SourceValidationOutcome.skip);
+      expect(result.category, 'source-book-empty');
+    });
+
+    test('classification skips download-only sources', () {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        bookSourceName: '下載站',
+      );
+
+      final result = classifyValidationFailure(
+        StateError('來源為下載站，非線上正文書源'),
+        source: source,
+        stage: 'content:first',
+      );
+
+      expect(result.outcome, SourceValidationOutcome.skip);
+      expect(result.category, 'download-only-source');
+    });
+
+    test('classification skips login-required sources', () {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        bookSourceName: '登入限制源',
+      );
+
+      final result = classifyValidationFailure(
+        StateError('正文需要登入後閱讀'),
+        source: source,
+        stage: 'content:first',
+      );
+
+      expect(result.outcome, SourceValidationOutcome.skip);
+      expect(result.category, 'login-required-source');
+    });
+
+    test('classification skips generic login-required source errors', () {
+      final source = BookSource(
+        bookSourceUrl: 'https://example.com',
+        bookSourceName: '登入限制源',
+      );
+
+      final result = classifyValidationFailure(
+        StateError('書源需要登入後使用'),
+        source: source,
+        stage: 'search',
+      );
+
+      expect(result.outcome, SourceValidationOutcome.skip);
+      expect(result.category, 'login-required-source');
+    });
+
     test(
       'validation flow skips non-novel sources before network work',
       () async {
@@ -268,6 +365,112 @@ void main() {
         resolveValidationKeyword(sourceWithoutCheckKeyword),
         legadoValidationDefaultKeyword,
       );
+    });
+
+    test(
+      'broken book shell heuristic detects empty qodown-style detail page',
+      () {
+        final book =
+            SearchBook(
+                name: '空殼書',
+                bookUrl: 'https://example.com/book/1',
+                origin: 'https://example.com',
+                latestChapterTitle: '･1970-01-01',
+                wordCount: '',
+              ).toBook()
+              ..tocHtml = '''
+<div class="section-box">
+  <ul class="section-list fix">
+  </ul>
+</div>
+<div class="listpage">
+  <select name="pageselect"></select>
+</div>
+''';
+
+        expect(looksLikeBrokenBookShell(book), isTrue);
+      },
+    );
+
+    test('broken book shell heuristic ignores normal detail pages', () {
+      final book =
+          SearchBook(
+              name: '正常書',
+              bookUrl: 'https://example.com/book/2',
+              origin: 'https://example.com',
+              latestChapterTitle: '第12章',
+              wordCount: '12 万',
+            ).toBook()
+            ..tocHtml = '''
+<div class="section-box">
+  <ul class="section-list fix">
+    <li><a href="/book/2/1.html">第1章</a></li>
+  </ul>
+</div>
+<div class="listpage">
+  <select name="pageselect"><option value="/book/2/1.html">1/1</option></select>
+</div>
+''';
+
+      expect(looksLikeBrokenBookShell(book), isFalse);
+    });
+
+    test('download-only heuristic detects download prompt chapters', () {
+      final book =
+          SearchBook(
+              name: '下載書',
+              bookUrl: 'https://example.com/downbook.php?id=1',
+              origin: 'https://example.com',
+            ).toBook()
+            ..tocUrl = 'https://example.com/file/1.zip';
+      final chapters = <BookChapter>[
+        BookChapter(title: '点击地址栏下载📥', url: 'https://example.com/file/1.zip'),
+      ];
+
+      expect(looksLikeDownloadOnlySource(book, chapters), isTrue);
+    });
+
+    test('download-only heuristic detects pan/download chapter entries', () {
+      final book =
+          SearchBook(
+              name: '網盤書',
+              bookUrl: 'https://example.com/book/1',
+              origin: 'https://example.com',
+            ).toBook()
+            ..tocUrl = 'https://example.com/download/1';
+      final chapters = <BookChapter>[
+        BookChapter(title: '网盘1', url: 'https://example.com/downAjax/id/1'),
+      ];
+
+      expect(looksLikeDownloadOnlySource(book, chapters), isTrue);
+    });
+
+    test('download-only heuristic ignores normal online chapters', () {
+      final book =
+          SearchBook(
+              name: '正常書',
+              bookUrl: 'https://example.com/book/1',
+              origin: 'https://example.com',
+            ).toBook()
+            ..tocUrl = 'https://example.com/book/1/index.html';
+      final chapters = <BookChapter>[
+        BookChapter(title: '第1章', url: 'https://example.com/book/1/1.html'),
+      ];
+
+      expect(looksLikeDownloadOnlySource(book, chapters), isFalse);
+    });
+
+    test('login-required heuristic detects permission limit pages', () {
+      expect(
+        looksLikeLoginRequiredContent(
+          'PermissionLimit LoginRequired 该章节需要你登录后阅读。',
+        ),
+        isTrue,
+      );
+    });
+
+    test('login-required heuristic ignores normal正文', () {
+      expect(looksLikeLoginRequiredContent('　　这是正常正文内容，至少有几十个字。'), isFalse);
     });
 
     test(

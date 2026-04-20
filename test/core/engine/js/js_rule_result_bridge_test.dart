@@ -161,6 +161,41 @@ if (true) {
     );
 
     test(
+      'getStringAsync preserves semicolon-less object assignment branches',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+
+        final rule = AnalyzeRule(
+          source: BookSource(bookSourceUrl: 'https://example.com'),
+        ).setContent('', baseUrl: 'https://example.com');
+
+        final result = await rule.getStringAsync(r'''
+<js>
+if(!result){
+json={"sign":"abc","keyword":"我的"}
+option={
+  "method":"POST",
+  "body":JSON.stringify(json)
+}
+url='http://api.example.com/book/search,'+JSON.stringify(option)
+}else{
+result=result
+}
+</js>
+''');
+
+        expect(
+          result,
+          'http://api.example.com/book/search,{"method":"POST","body":"{\\"sign\\":\\"abc\\",\\"keyword\\":\\"我的\\"}"}',
+        );
+        rule.dispose();
+      },
+    );
+
+    test(
       'XPath element results can be reparsed through Jsoup in JS rules',
       () async {
         if (runtime == null) {
@@ -214,6 +249,143 @@ var result = "";
     );
 
     test(
+      'getStringAsync preserves normalized template literal strings on async path',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+
+        final rule = AnalyzeRule(
+          source: BookSource(bookSourceUrl: 'https://example.com'),
+        ).setContent('{}', baseUrl: 'https://example.com');
+
+        final result = await rule.getStringAsync(r'''
+<js>
+var _noop = cache.get("missing-key");
+var callback='918eac';
+var url_src_match=`${callback}\((.*)\)`;
+url_src_match;
+</js>
+''');
+
+        expect(result, r'918eac((.*))');
+        rule.dispose();
+      },
+    );
+
+    test(
+      'getStringAsync supports string-pattern match on async path',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+
+        final rule = AnalyzeRule(
+          source: BookSource(bookSourceUrl: 'https://example.com'),
+        ).setContent('{}', baseUrl: 'https://example.com');
+
+        final result = await rule.getStringAsync(r'''
+<js>
+var _noop = cache.get("missing-key");
+var callback='918eac';
+var url_src='d918eac({\"id\":\"164\",\"content\":\"<ul class=\\\"list3\\\"><li><a href=\\\"/n/wodenushen/37.html\\\">第37章 飞的太高</a></li></ul>\"})';
+var url_src_match=`${callback}\((.*)\)`;
+var matched = url_src.match(url_src_match);
+matched ? matched[1] : '';
+</js>
+''');
+
+        expect(result, startsWith('({"id":"164"'));
+        expect(result, contains(r'<ul class=\"list3\">'));
+        expect(result, endsWith('})'));
+        rule.dispose();
+      },
+    );
+
+    test(
+      'getStringAsync preserves final expression for async rules with template and regex literals',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+
+        final rule = AnalyzeRule(
+          source: BookSource(bookSourceUrl: 'https://example.com'),
+        ).setContent('{}', baseUrl: 'https://example.com');
+
+        final result = await rule.getStringAsync(r'''
+<js>
+var _noop = cache.get("missing-key");
+var callback='918eac';
+var url_src='d918eac({\"id\":\"164\",\"content\":\"<ul class=\\\"list3\\\"><li><a href=\\\"/n/wodenushen/37.html\\\">第37章 飞的太高</a></li></ul>\"})';
+var url_src_match=`${callback}\((.*)\)`;
+var url_src_json=url_src.match(url_src_match)[1];
+var url_src_json1=url_src_json.match(/\((.*)\)/)[1];
+var url_src_json_data = JSON.parse(url_src_json1);
+var r=url_src_json_data.content;
+r;
+</js>
+''');
+
+        expect(result, contains('class="list3"'));
+        expect(result, contains('/n/wodenushen/37.html'));
+        rule.dispose();
+      },
+    );
+
+    test(
+      'getStringAsync resolves chapterUrl fallback scripts with semicolon-less object assignments',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+
+        final rule = AnalyzeRule(
+          source: BookSource(bookSourceUrl: 'http://api.lestory.cn'),
+        ).setContent({
+          'book_id': 10099204,
+          'chapter_id': 100707325,
+        }, baseUrl: 'http://api.lestory.cn/chapter/catalog');
+
+        final result = await rule.getStringAsync(r'''
+$.href
+<js>
+Token="demo-token";
+var time = 1776644131;
+var token=java.get('token')!=''?java.get('token'):java.put('token',Token);
+if(!result){
+list=[
+"book_id={{$.book_id}}",
+"chapter_id={{$.chapter_id}}",
+"time="+time,
+"token="+token
+]
+function sign(list){
+return "SIGN";
+}
+s=sign(list);
+json={"sign":String(s),"time":time,"token":String(token),"book_id":"{{$.book_id}}","chapter_id":"{{$.chapter_id}}"}
+option={
+"method": "POST",
+"body": JSON.stringify(json)
+}
+url='http://api.lestory.cn/chapter/text,'+JSON.stringify(option)
+}else{result=result}
+</js>
+''', isUrl: true);
+
+        expect(result, startsWith('http://api.lestory.cn/chapter/text,'));
+        expect(result, contains('"method":"POST"'));
+        expect(result, contains(r'\"chapter_id\":\"100707325\"'));
+        rule.dispose();
+      },
+    );
+
+    test(
       'book and chapter scoped objects expose fields, variables, and setters',
       () async {
         if (runtime == null) {
@@ -242,19 +414,54 @@ var result = "";
 <js>
 book.putVariable("custom", "42");
 chapter.putVariable("flag", "ready");
+book.setReverseToc(true);
+book.setUseReplaceRule(true);
 book.type = 8;
 chapter.title = "新章节";
 chapter.url = "/chapter/2";
-book.name + "|" + book.getVariable("custom") + "|" + chapter.getVariable("flag") + "|" + book.type + "|" + chapter.title + "|" + chapter.url;
+book.name + "|" + book.getVariable("custom") + "|" + chapter.getVariable("flag") + "|" + book.type + "|" + chapter.title + "|" + chapter.url + "|" + book.getReverseToc() + "|" + book.getUseReplaceRule();
 </js>
 ''');
 
-        expect(result, '示例书|42|ready|8|新章节|/chapter/2');
+        expect(result, '示例书|42|ready|8|新章节|/chapter/2|true|true');
         expect(book.getVariable('custom'), '42');
         expect(chapter.getVariable('flag'), 'ready');
         expect(book.type, 8);
         expect(chapter.title, '新章节');
         expect(chapter.url, '/chapter/2');
+        expect(book.readConfig?.reverseToc, isTrue);
+        expect(book.readConfig?.useReplaceRule, isTrue);
+        rule.dispose();
+      },
+    );
+
+    test(
+      'java.getStringList and java.setContent keep rule context in sync',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+
+        final rule = AnalyzeRule(
+          source: BookSource(bookSourceUrl: 'https://example.com'),
+        ).setContent('''
+        <div class="items">
+          <a>甲</a>
+          <a>乙</a>
+        </div>
+      ''', baseUrl: 'https://example.com');
+
+        final result = await rule.getStringAsync(r'''
+<js>
+var names = java.getStringList('a@text');
+var count = names.size();
+java.setContent('<div class="next">新內容</div>', 'https://next.example.com');
+java.getString('.next@text') + "|" + count + "|" + names.get(1);
+</js>
+''');
+
+        expect(result, '新內容|2|乙');
         rule.dispose();
       },
     );

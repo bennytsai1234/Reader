@@ -7,6 +7,9 @@ import 'package:inkpage_reader/core/engine/analyze_rule.dart';
 import 'package:inkpage_reader/core/engine/analyze_url.dart';
 import 'package:inkpage_reader/core/engine/explore_url_parser.dart';
 import 'package:inkpage_reader/core/engine/web_book/book_list_parser.dart';
+import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/engine/web_book/content_parser.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
 
 import 'source_validation_support.dart';
@@ -18,6 +21,8 @@ void main() {
   final probeCount =
       int.tryParse(Platform.environment['PROBE_COUNT'] ?? '') ?? 5;
   final keywordOverride = Platform.environment['KEYWORD']?.trim();
+  final bookUrlOverride = Platform.environment['BOOK_URL']?.trim();
+  final bookNameOverride = Platform.environment['BOOK_NAME']?.trim();
   final searchOnly = Platform.environment['SEARCH_ONLY'] == '1';
   final exploreOnly = Platform.environment['EXPLORE_ONLY'] == '1';
   final debugSearchParse = Platform.environment['DEBUG_SEARCH_PARSE'] == '1';
@@ -26,6 +31,12 @@ void main() {
   final debugJsIntermediate =
       Platform.environment['DEBUG_JS_INTERMEDIATE'] == '1';
   final debugTocParse = Platform.environment['DEBUG_TOC_PARSE'] == '1';
+  final debugTocJsResult = Platform.environment['DEBUG_TOC_JS_RESULT'] == '1';
+  final debugBookInfoParse =
+      Platform.environment['DEBUG_BOOK_INFO_PARSE'] == '1';
+  final debugContentParse = Platform.environment['DEBUG_CONTENT_PARSE'] == '1';
+  final debugChapterIndex =
+      int.tryParse(Platform.environment['DEBUG_CHAPTER_INDEX'] ?? '') ?? 1;
   final debugTimings = Platform.environment['DEBUG_TIMINGS'] == '1';
   final stopAfterDebugSearchParse =
       Platform.environment['STOP_AFTER_DEBUG_SEARCH_PARSE'] == '1';
@@ -69,12 +80,18 @@ void main() {
       return;
     }
 
-    final keyword =
-        keywordOverride != null && keywordOverride.isNotEmpty
-            ? keywordOverride
-            : await pickKeyword(service, source);
-    // ignore: avoid_print
-    print('[debug] keyword=$keyword');
+    String? keyword;
+    if (bookUrlOverride != null && bookUrlOverride.isNotEmpty) {
+      // ignore: avoid_print
+      print('[debug] direct book url=$bookUrlOverride');
+    } else {
+      keyword =
+          keywordOverride != null && keywordOverride.isNotEmpty
+              ? keywordOverride
+              : await pickKeyword(service, source);
+      // ignore: avoid_print
+      print('[debug] keyword=$keyword');
+    }
 
     if (debugSearchParse) {
       final analyzeStopwatch = Stopwatch()..start();
@@ -93,13 +110,17 @@ void main() {
       );
       if (debugTimings) {
         // ignore: avoid_print
-        print('[timing] analyzeUrl.create=${analyzeStopwatch.elapsedMilliseconds}ms');
+        print(
+          '[timing] analyzeUrl.create=${analyzeStopwatch.elapsedMilliseconds}ms',
+        );
       }
       final responseStopwatch = Stopwatch()..start();
       final response = await analyzeUrl.getStrResponse();
       if (debugTimings) {
         // ignore: avoid_print
-        print('[timing] analyzeUrl.getStrResponse=${responseStopwatch.elapsedMilliseconds}ms');
+        print(
+          '[timing] analyzeUrl.getStrResponse=${responseStopwatch.elapsedMilliseconds}ms',
+        );
       }
       final parserStopwatch = Stopwatch()..start();
       final searchRule = source.ruleSearch;
@@ -108,14 +129,18 @@ void main() {
       ).setContent(response.body, baseUrl: response.url);
       if (debugTimings) {
         // ignore: avoid_print
-        print('[timing] AnalyzeRule.setContent=${parserStopwatch.elapsedMilliseconds}ms');
+        print(
+          '[timing] AnalyzeRule.setContent=${parserStopwatch.elapsedMilliseconds}ms',
+        );
       }
       final elementStopwatch = Stopwatch()..start();
       final listRule = searchRule?.bookList ?? '';
       final elements = parser.getElements(listRule);
       if (debugTimings) {
         // ignore: avoid_print
-        print('[timing] parser.getElements=${elementStopwatch.elapsedMilliseconds}ms');
+        print(
+          '[timing] parser.getElements=${elementStopwatch.elapsedMilliseconds}ms',
+        );
       }
       // ignore: avoid_print
       print(
@@ -181,36 +206,126 @@ void main() {
       }
     }
 
-    final searchBooksStopwatch = Stopwatch()..start();
-    final searchBooks = await service.searchBooks(source, keyword);
-    if (debugTimings) {
+    late final Book selected;
+    if (bookUrlOverride != null && bookUrlOverride.isNotEmpty) {
+      selected = Book(
+        name: bookNameOverride?.isNotEmpty == true ? bookNameOverride! : '',
+        bookUrl: bookUrlOverride,
+        origin: source.bookSourceUrl,
+      );
+    } else {
+      final searchBooksStopwatch = Stopwatch()..start();
+      final searchBooks = await service.searchBooks(source, keyword!);
+      if (debugTimings) {
+        // ignore: avoid_print
+        print(
+          '[timing] service.searchBooks=${searchBooksStopwatch.elapsedMilliseconds}ms',
+        );
+      }
       // ignore: avoid_print
-      print('[timing] service.searchBooks=${searchBooksStopwatch.elapsedMilliseconds}ms');
+      print('[debug] search results=${searchBooks.length}');
+      for (final book in searchBooks.take(5)) {
+        // ignore: avoid_print
+        print(
+          '[debug] result=${book.name} | author=${book.author ?? ''} | '
+          'url=${book.bookUrl}',
+        );
+      }
+      if (searchOnly) {
+        expect(searchBooks, isNotEmpty);
+        return;
+      }
+      final matchedSearchBook = selectMatchingSearchBook(searchBooks, keyword);
+      if (matchedSearchBook == null) {
+        throw StateError('搜尋結果未命中關鍵詞 "$keyword"');
+      }
+      selected = matchedSearchBook.toBook();
+      // ignore: avoid_print
+      print('[debug] search hit=${selected.name} | url=${selected.bookUrl}');
     }
-    // ignore: avoid_print
-    print('[debug] search results=${searchBooks.length}');
-    for (final book in searchBooks.take(5)) {
+
+    if (debugBookInfoParse && source.ruleBookInfo != null) {
+      final detailAnalyzeUrl = await AnalyzeUrl.create(
+        selected.bookUrl,
+        source: source,
+        ruleData: selected,
+      );
+      final detailResponse = await detailAnalyzeUrl.getStrResponse();
+      final infoRule = source.ruleBookInfo!;
       // ignore: avoid_print
       print(
-        '[debug] result=${book.name} | author=${book.author ?? ''} | '
-        'url=${book.bookUrl}',
+        '[debug] info rules '
+        'name=${infoRule.name ?? ''} | '
+        'author=${infoRule.author ?? ''} | '
+        'tocUrl=${infoRule.tocUrl ?? ''} | '
+        'intro=${infoRule.intro ?? ''} | '
+        'cover=${infoRule.coverUrl ?? ''} | '
+        'kind=${infoRule.kind ?? ''} | '
+        'last=${infoRule.lastChapter ?? ''}',
       );
+      final parser = AnalyzeRule(
+        source: source,
+        ruleData: selected,
+      ).setContent(detailResponse.body, baseUrl: detailResponse.url);
+
+      Future<void> printField(
+        String label,
+        String ruleValue, {
+        bool isUrl = false,
+      }) async {
+        if (ruleValue.trim().isEmpty) return;
+        try {
+          final value = await parser.getStringAsync(ruleValue, isUrl: isUrl);
+          // ignore: avoid_print
+          print('[debug] info $label=$value');
+        } catch (error) {
+          // ignore: avoid_print
+          print('[debug] info $label ERROR=$error');
+        }
+      }
+
+      await printField('name', infoRule.name ?? '');
+      await printField('author', infoRule.author ?? '');
+      await printField('tocUrl', infoRule.tocUrl ?? '', isUrl: true);
+      await printField('intro', infoRule.intro ?? '');
+      await printField('coverUrl', infoRule.coverUrl ?? '', isUrl: true);
+      await printField('kind', infoRule.kind ?? '');
+      await printField('lastChapter', infoRule.lastChapter ?? '');
     }
-    if (searchOnly) {
-      expect(searchBooks, isNotEmpty);
-      return;
-    }
-    final matchedSearchBook = selectMatchingSearchBook(searchBooks, keyword);
-    if (matchedSearchBook == null) {
-      throw StateError('搜尋結果未命中關鍵詞 "$keyword"');
-    }
-    final selected = matchedSearchBook.toBook();
-    // ignore: avoid_print
-    print('[debug] search hit=${selected.name} | url=${selected.bookUrl}');
 
     final book = await service.getBookInfo(source, selected);
     // ignore: avoid_print
     print('[debug] detail name=${book.name} | tocUrl=${book.tocUrl}');
+    // ignore: avoid_print
+    print(
+      '[debug] detail latest=${book.latestChapterTitle ?? ''} | '
+      'wordCount=${book.wordCount ?? ''} | '
+      'infoHtml=${book.infoHtml?.length ?? 0} | '
+      'tocHtml=${book.tocHtml?.length ?? 0} | '
+      'brokenShell=${looksLikeBrokenBookShell(book)}',
+    );
+    final debugKeys = <String>[
+      '单',
+      '录',
+      '目',
+      '基',
+      '查',
+      '除',
+      '嗅',
+      '页',
+      '动',
+      '静',
+      'ck',
+      'ba',
+    ];
+    final debugVars = debugKeys
+        .map((key) => '$key=${book.getVariable(key)}')
+        .where((entry) => !entry.endsWith('='))
+        .join(' | ');
+    if (debugVars.isNotEmpty) {
+      // ignore: avoid_print
+      print('[debug] book vars $debugVars');
+    }
 
     if (debugTocParse && source.ruleToc != null) {
       final tocAnalyzeUrl = await AnalyzeUrl.create(
@@ -220,10 +335,53 @@ void main() {
       );
       final tocResponse = await tocAnalyzeUrl.getStrResponse();
       final tocRule = source.ruleToc!;
+      // ignore: avoid_print
+      print(
+        '[debug] toc rules '
+        'list=${tocRule.chapterList ?? ''} | '
+        'name=${tocRule.chapterName ?? ''} | '
+        'url=${tocRule.chapterUrl ?? ''}',
+      );
       final parser = AnalyzeRule(
         source: source,
         ruleData: book,
       ).setContent(tocResponse.body, baseUrl: tocResponse.url);
+      final directJsRule = _extractLeadingJsBody(tocRule.chapterList ?? '');
+      if (directJsRule != null) {
+        final directJsResult = await parser.evalJSAsync(
+          directJsRule,
+          tocResponse.body,
+        );
+        // ignore: avoid_print
+        print(
+          '[debug] toc direct js type=${directJsResult.runtimeType} '
+          'preview=${_previewBody(directJsResult.toString())}',
+        );
+        if (directJsResult is List) {
+          // ignore: avoid_print
+          print('[debug] toc direct js len=${directJsResult.length}');
+        } else if (directJsResult is Map) {
+          // ignore: avoid_print
+          print('[debug] toc direct js keys=${directJsResult.keys.join(",")}');
+        }
+        final tocVars = debugKeys
+            .map((key) => '$key=${book.getVariable(key)}')
+            .where((entry) => !entry.endsWith('='))
+            .join(' | ');
+        if (tocVars.isNotEmpty) {
+          // ignore: avoid_print
+          print('[debug] toc vars $tocVars');
+        }
+      }
+      if (debugTocJsResult) {
+        await _printTocJsIntermediate(
+          source,
+          book,
+          tocResponse.body,
+          tocResponse.url,
+          tocRule.chapterList ?? '',
+        );
+      }
       final tocElements = await parser.getElementsAsync(
         tocRule.chapterList ?? '',
       );
@@ -239,11 +397,37 @@ void main() {
           source: source,
           ruleData: book,
         ).setContent(element, baseUrl: tocResponse.url);
+        itemRule.setChapter(
+          BookChapter(baseUrl: tocResponse.url, bookUrl: book.bookUrl),
+        );
+        final rawHref = await itemRule.getStringAsync('href');
+        final resolvedHref = await itemRule.getStringAsync('href', isUrl: true);
+        // ignore: avoid_print
+        print('[debug] toc href raw=$rawHref | resolved=$resolvedHref');
+        await _debugCompositeRule(itemRule, tocRule.chapterUrl ?? '');
+        final expandedChapterUrlJs = await _expandRuleJsTemplate(
+          itemRule,
+          tocRule.chapterUrl ?? '',
+        );
+        final chapterUrlJsResult =
+            expandedChapterUrlJs == null
+                ? null
+                : await itemRule.evalJSAsync(expandedChapterUrlJs, '');
+        final rawChapterUrl = await itemRule.getStringAsync(
+          tocRule.chapterUrl ?? '',
+        );
+        final resolvedChapterUrl = await itemRule.getStringAsync(
+          tocRule.chapterUrl ?? '',
+          isUrl: true,
+        );
         // ignore: avoid_print
         print(
           '[debug] toc item '
+          'type=${element.runtimeType} | '
           'title=${await itemRule.getStringAsync(tocRule.chapterName ?? '')} | '
-          'url=${await itemRule.getStringAsync(tocRule.chapterUrl ?? '', isUrl: true)}',
+          'jsUrl=${chapterUrlJsResult ?? "<none>"} | '
+          'rawUrl=$rawChapterUrl | '
+          'url=$resolvedChapterUrl',
         );
       }
     }
@@ -253,10 +437,56 @@ void main() {
     // ignore: avoid_print
     print('[debug] chapters=${chapters.length} readable=${readable.length}');
 
+    if (debugContentParse &&
+        source.ruleContent != null &&
+        readable.isNotEmpty &&
+        debugChapterIndex >= 1 &&
+        debugChapterIndex <= readable.length) {
+      final chapter = readable[debugChapterIndex - 1];
+      final nextChapterUrl =
+          readable.length > debugChapterIndex
+              ? readable[debugChapterIndex].url
+              : null;
+      final contentAnalyzeUrl = await AnalyzeUrl.create(
+        chapter.url,
+        source: source,
+        ruleData: book,
+      );
+      final contentResponse = await contentAnalyzeUrl.getStrResponse();
+      // ignore: avoid_print
+      print(
+        '[debug] content rules '
+        'content=${source.ruleContent?.content ?? ''} | '
+        'next=${source.ruleContent?.nextContentUrl ?? ''} | '
+        'title=${source.ruleContent?.title ?? ''}',
+      );
+      final parsedContent = await ContentParser.parse(
+        source: source,
+        book: book,
+        chapter: chapter,
+        body: contentResponse.body,
+        baseUrl: contentResponse.url,
+        nextChapterUrl: nextChapterUrl,
+      );
+      // ignore: avoid_print
+      print(
+        '[debug] content parse chapter#$debugChapterIndex '
+        'title=${chapter.title} | '
+        'bodyUrl=${contentResponse.url} | '
+        'nextUrls=${parsedContent.nextUrls.join(" | ")} | '
+        'contentLen=${parsedContent.content.trim().runes.length}',
+      );
+    }
+
     for (var i = 0; i < readable.length && i < probeCount; i++) {
       final chapter = readable[i];
       final nextChapterUrl =
           readable.length > i + 1 ? readable[i + 1].url : null;
+      // ignore: avoid_print
+      print(
+        '[debug] chapter#${i + 1} url=${chapter.url} | '
+        'next=${nextChapterUrl ?? ''}',
+      );
       if (debugJsIntermediate && i == 0 && source.ruleContent != null) {
         await _printJsIntermediate(source, book, chapter);
       }
@@ -298,6 +528,127 @@ String _previewBody(String content) {
     return normalized;
   }
   return '${String.fromCharCodes(normalized.runes.take(maxLength))}...';
+}
+
+Future<void> _printTocJsIntermediate(
+  dynamic source,
+  dynamic book,
+  String body,
+  String baseUrl,
+  String chapterListRule,
+) async {
+  final jsRule = _extractLeadingJsRule(chapterListRule);
+  if (jsRule == null) {
+    // ignore: avoid_print
+    print('[debug] toc js rule=<none>');
+    return;
+  }
+  final trailingRule = chapterListRule.substring(jsRule.length).trim();
+  final rule = AnalyzeRule(
+    source: source,
+    ruleData: book,
+  ).setContent(body, baseUrl: baseUrl);
+  final jsResult = await rule.getStringAsync(jsRule);
+  // ignore: avoid_print
+  print(
+    '[debug] toc js len=${jsResult.length} '
+    'trailing=${trailingRule.isEmpty ? "<none>" : trailingRule}',
+  );
+  // ignore: avoid_print
+  print('[debug] toc js result=${_previewBody(jsResult)}');
+  if (trailingRule.isEmpty || jsResult.isEmpty) {
+    return;
+  }
+  final jsParser = AnalyzeRule(
+    source: source,
+    ruleData: book,
+  ).setContent(jsResult, baseUrl: baseUrl);
+  final jsElements = await jsParser.getElementsAsync(trailingRule);
+  // ignore: avoid_print
+  print('[debug] toc js trailing elements=${jsElements.length}');
+}
+
+String? _extractLeadingJsRule(String rule) {
+  final match = RegExp(
+    r'^\s*(<js>[\s\S]*?</js>)',
+    caseSensitive: false,
+  ).firstMatch(rule);
+  return match?.group(1)?.trim();
+}
+
+String? _extractLeadingJsBody(String rule) {
+  final trimmed = rule.trimLeft();
+  if (trimmed.toLowerCase().startsWith('@js:')) {
+    return trimmed.substring(4).trim();
+  }
+  final match = RegExp(
+    r'^\s*<js>([\s\S]*?)</js>',
+    caseSensitive: false,
+  ).firstMatch(rule);
+  return match?.group(1)?.trim();
+}
+
+Future<String?> _expandRuleJsTemplate(AnalyzeRule analyzer, String rule) async {
+  final match = RegExp(
+    r'<js>([\s\S]*?)</js>',
+    caseSensitive: false,
+  ).firstMatch(rule);
+  final js = match?.group(1)?.trim();
+  if (js == null || js.isEmpty) {
+    return null;
+  }
+  final pattern = RegExp(r'\{\{([\s\S]*?)\}\}');
+  final buffer = StringBuffer();
+  var lastEnd = 0;
+  for (final token in pattern.allMatches(js)) {
+    buffer.write(js.substring(lastEnd, token.start));
+    buffer.write(await analyzer.getStringAsync(token.group(1)!.trim()));
+    lastEnd = token.end;
+  }
+  buffer.write(js.substring(lastEnd));
+  return buffer.toString();
+}
+
+Future<void> _debugCompositeRule(AnalyzeRule analyzer, String ruleStr) async {
+  final parts = analyzer.splitSourceRuleCacheString(ruleStr);
+  dynamic current = analyzer.content;
+  for (var i = 0; i < parts.length; i++) {
+    final dynamic part = parts[i];
+    final built = await part.makeUpRuleAsync(current, analyzer);
+    // ignore: avoid_print
+    print(
+      '[debug] composite[$i] mode=${part.mode} '
+      'dynamic=${part.isDynamic} paramSize=${part.paramSize} '
+      'inputType=${current.runtimeType} built=${_previewBody(built.toString())}',
+    );
+    dynamic tempResult;
+    final mode = part.mode.toString();
+    if (current is Map && (part.paramSize as int) > 1) {
+      tempResult = built;
+    } else if (mode.endsWith('js')) {
+      tempResult = await analyzer.evalJSAsync(built, current);
+    } else if (mode.endsWith('json')) {
+      tempResult = part
+          .getAnalyzeByJSonPath(analyzer, current)
+          .getString(built);
+    } else {
+      tempResult = '<skip>';
+    }
+    // ignore: avoid_print
+    print(
+      '[debug] composite[$i] temp=${tempResult == null ? "<null>" : _previewBody(tempResult.toString())}',
+    );
+    if ((part.isDynamic as bool) &&
+        (tempResult == null || tempResult.toString().isEmpty)) {
+      current = built;
+    } else {
+      current = tempResult;
+    }
+    // ignore: avoid_print
+    print(
+      '[debug] composite[$i] next=${current == null ? "<null>" : _previewBody(current.toString())}',
+    );
+  }
 }
 
 Future<void> _printJsIntermediate(

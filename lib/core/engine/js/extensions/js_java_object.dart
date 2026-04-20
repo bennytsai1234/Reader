@@ -22,6 +22,57 @@ import '../js_extensions_base.dart';
 extension JsJavaObject on JsExtensionsBase {
   void injectJavaObjectJs() {
     runtime.evaluate(r'''
+      function __lrJavaList(items) {
+        var list = Array.isArray(items) ? items.slice() : [];
+        list.size = function() { return this.length; };
+        list.get = function(index) { return this[index]; };
+        list.first = function() { return this.length ? this[0] : null; };
+        list.last = function() {
+          return this.length ? this[this.length - 1] : null;
+        };
+        return list;
+      }
+
+      function __lrNormalizeRuleResult(value) {
+        if (value == null) return value;
+        if (Array.isArray(value)) {
+          return value.map(__lrNormalizeRuleResult);
+        }
+        var type = typeof value;
+        if (type !== 'object') {
+          return value;
+        }
+        if (typeof value.size === 'function' && typeof value.get === 'function') {
+          var normalizedItems = [];
+          var size = Number(value.size()) || 0;
+          for (var i = 0; i < size; i++) {
+            normalizedItems.push(__lrNormalizeRuleResult(value.get(i)));
+          }
+          return normalizedItems;
+        }
+        if (typeof value.__lrElementId === 'number') {
+          return {
+            __lrElementId: value.__lrElementId,
+            outerHtml: typeof value.outerHtml === 'function'
+              ? String(value.outerHtml() || '')
+              : ''
+          };
+        }
+        if (typeof value.outerHtml === 'function') {
+          return { __html: String(value.outerHtml() || '') };
+        }
+        if (typeof value.html === 'function' && typeof value.select === 'function') {
+          return { __html: String(value.html() || '') };
+        }
+        if (typeof value.toString === 'function') {
+          var text = String(value.toString());
+          if (/<[a-z][\s\S]*>/i.test(text)) {
+            return { __html: text };
+          }
+        }
+        return value;
+      }
+
       function buildHttpResponse(res) {
         function normalizeResponseUrl(value) {
           var normalized = String(value == null ? '' : value);
@@ -227,12 +278,37 @@ extension JsJavaObject on JsExtensionsBase {
         },
         hexEncodeToString: function(str) { return sendMessage('_hexEncode', JSON.stringify(str)); },
         hexDecodeToString: function(hex) { return sendMessage('_hexDecode', JSON.stringify(hex)); },
-        randomUUID: function() { return sendMessage('_randomUUID', ''); },
+        randomUUID: function() {
+          if (
+            typeof globalThis.crypto === 'object' &&
+            globalThis.crypto !== null &&
+            typeof globalThis.crypto.randomUUID === 'function'
+          ) {
+            return globalThis.crypto.randomUUID();
+          }
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(ch) {
+            var rand = Math.random() * 16 | 0;
+            var value = ch === 'x' ? rand : ((rand & 0x3) | 0x8);
+            return value.toString(16);
+          });
+        },
         timeFormat: function(time) { return sendMessage('_timeFormat', JSON.stringify(time)); },
         timeFormatUTC: function(time, format, sh) { return sendMessage('timeFormatUTC', JSON.stringify([time, format, sh])); },
         toNumChapter: function(text) { return sendMessage('_toNumChapter', JSON.stringify(text)); },
         t2s: function(text) { return sendMessage('t2s', JSON.stringify(text)); },
         s2t: function(text) { return sendMessage('s2t', JSON.stringify(text)); },
+        encodeURI: function(value) {
+          return encodeURIComponent(String(value == null ? '' : value));
+        },
+        decodeURI: function(value) {
+          return decodeURIComponent(String(value == null ? '' : value));
+        },
+        encodeURIComponent: function(value) {
+          return encodeURIComponent(String(value == null ? '' : value));
+        },
+        decodeURIComponent: function(value) {
+          return decodeURIComponent(String(value == null ? '' : value));
+        },
         strToBytes: function(str, charset) {
           return normalizeByteArray(
             sendMessage('strToBytes', JSON.stringify([str, charset]))
@@ -247,6 +323,19 @@ extension JsJavaObject on JsExtensionsBase {
         aesBase64DecodeToString: function(data, key, transformation, iv) {
           return sendMessage('symmetricCrypto', JSON.stringify(['decrypt', transformation, key, iv, data, 'string']));
         },
+        HMacHex: function(data, algorithm, key) {
+          return new JavaString(
+            sendMessage('_hmacHex', JSON.stringify([data, algorithm, key]))
+          );
+        },
+        desEncodeToBase64String: function(data, key, transformation, iv) {
+          return new JavaString(
+            sendMessage(
+              '_desEncodeToBase64String',
+              JSON.stringify([data, key, transformation, iv])
+            )
+          );
+        },
         gzipToString: function(bytes, charset) {
           var decoded = normalizeByteArray(
             sendMessage('_gunzipBytes', JSON.stringify(bytes))
@@ -259,10 +348,23 @@ extension JsJavaObject on JsExtensionsBase {
         // branch completion value 來傳回正文或中間結果。
         log: function(msg) { return sendMessage('log', JSON.stringify(msg)); },
         toast: function(msg) { sendMessage('toast', JSON.stringify(msg)); },
-        put: function(key, value) { sendMessage('scopePut', JSON.stringify([key, value])); return value; },
+        put: function(key, value) {
+          var normalized = value == null ? '' : String(value);
+          sendMessage('scopePut', JSON.stringify([key, normalized]));
+          return normalized;
+        },
         getString: function(rule) { return sendMessage('ruleGetString', JSON.stringify(rule)); },
+        getStringList: function(rule) {
+          return __lrJavaList(
+            sendMessage('ruleGetStringList', JSON.stringify(rule))
+          );
+        },
         getElement: function(rule) { return sendMessage('ruleGetElement', JSON.stringify(rule)); },
         getElements: function(rule) { return sendMessage('ruleGetElements', JSON.stringify(rule)); },
+        setContent: function(content, baseUrl) {
+          sendMessage('ruleSetContent', JSON.stringify([content, baseUrl || null]));
+          return null;
+        },
 
         // ─── sync: TTF query/replace (sync helpers) ──────────────
         queryTTF: function(data, useCache) {
@@ -423,6 +525,9 @@ extension JsJavaObject on JsExtensionsBase {
         return this._value.replace(pattern, replacement);
       };
       JavaString.prototype.match = function(pattern) {
+        if (typeof globalThis.__lrJavaMatch === 'function') {
+          return globalThis.__lrJavaMatch(this._value, pattern);
+        }
         return this._value.match(pattern);
       };
       JavaString.prototype.contains = function(value) {
@@ -573,6 +678,38 @@ extension JsJavaObject on JsExtensionsBase {
               attr: function(name) {
                 return sendMessage('htmlSelectAttr', JSON.stringify([docRef.__html, selector, name]));
               },
+              attributes: function() {
+                return __lrJavaList(
+                  sendMessage(
+                    'htmlSelectAttributes',
+                    JSON.stringify([docRef.__html, selector])
+                  )
+                );
+              },
+              size: function() {
+                return Number(
+                  sendMessage('htmlSelectCount', JSON.stringify([docRef.__html, selector]))
+                ) || 0;
+              },
+              eachText: function() {
+                return __lrJavaList(
+                  sendMessage('htmlSelectTextList', JSON.stringify([docRef.__html, selector]))
+                );
+              },
+              select: function(childSelector) {
+                return createSelection(
+                  docRef,
+                  selector + ' ' + String(childSelector || '')
+                );
+              },
+              selectFirst: function(childSelector) {
+                return Jsoup.parse(
+                  sendMessage(
+                    'htmlSelectHtml',
+                    JSON.stringify([docRef.__html, selector + ' ' + childSelector + ':eq(0)'])
+                  )
+                );
+              },
               remove: function() {
                 docRef.__html = sendMessage('htmlRemove', JSON.stringify([docRef.__html, selector]));
                 return docRef;
@@ -587,6 +724,14 @@ extension JsJavaObject on JsExtensionsBase {
                   sendMessage('htmlSelectHtml', JSON.stringify([docRef.__html, selector + ':eq(' + index + ')']))
                 );
               },
+              toArray: function() {
+                var items = [];
+                var count = this.size();
+                for (var i = 0; i < count; i++) {
+                  items.push(this.get(i));
+                }
+                return items;
+              },
               toString: function() {
                 return this.html();
               }
@@ -596,6 +741,11 @@ extension JsJavaObject on JsExtensionsBase {
             __html: String(html || ''),
             select: function(selector) {
               return createSelection(this, selector);
+            },
+            selectFirst: function(selector) {
+              return Jsoup.parse(
+                sendMessage('htmlSelectHtml', JSON.stringify([this.__html, selector + ':eq(0)']))
+              );
             },
             text: function() {
               return sendMessage('htmlSelectText', JSON.stringify([this.__html, 'html']));
@@ -607,6 +757,12 @@ extension JsJavaObject on JsExtensionsBase {
               return sendMessage(
                 'htmlSelectAttr',
                 JSON.stringify([this.__html, 'body > *:eq(0)', name])
+              );
+            },
+            attributes: function() {
+              return sendMessage(
+                'htmlSelectAttributes',
+                JSON.stringify([this.__html, 'body > *:eq(0)'])
               );
             },
             html: function() {

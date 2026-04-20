@@ -228,6 +228,49 @@ Updated: 2026-04-20
   - `#179` 悸花阅读
     - 目前停在 `keyword` 階段的 URL `FormatException`，偏向 `AnalyzeUrl` / URL 組裝輸入正規化問題。
 
+## Recent Window: Sources 253-286
+
+- Latest confirmed status from single-source reruns:
+  - `#253`: `PASS`
+  - `#262`: `PASS`
+  - `#270`: `PASS`
+  - `#271`: `SKIP upstream-blocked`
+  - `#282`: `PASS`
+  - `#286`: `PASS`
+
+- Resolved:
+  - `#253` 全免小说（优++）
+  - `#270` ♨️ 全免小说
+    - 搜尋列表的 `bookUrl @js:` 先前被 `AnalyzeRule.getString*` 在 `Map` 輸入下錯誤短路成字面字串，導致 detail/toc 都帶著整段 JS 原文當 URL。
+    - 已補 `Map` 動態規則的 URL literal 判定，只在真正的 URL/path 字面量時短路，`@js:` 會正常執行。
+  - `#286` ❤️企鹅浏览
+    - 搜尋結果 `bookUrl` 依賴 `book.kind`，但 `BookListParser` 先算 `bookUrl`、後算 `kind`，導致 `resourceId` 永遠是空字串。
+    - 已調整搜尋列表欄位賦值順序，並補 `SearchBook.toBook()` 對 `kind/variable/latestChapter/wordCount/originOrder` 的保留。
+  - `#262` ❤️书盟小说🎃
+    - TOC 頁實際存在 `/read/...` 章節連結，問題在於 CSS regex attribute selector `a[href~=/read/\d+]` 尚未對齊 legado/Jsoup。
+    - 已補 regex attribute selector 相容層，`[attr~=regex]` 可在 compat path 中正常過濾。
+  - `#271` 阅友网络（优）
+    - 先前是 `keyword` 階段的 JS parity fail。
+    - 已補 `java.encodeURI(...)`、sync-only `evaluateAsync()` fast path，以及 JS 端 `java.randomUUID()` 實作。
+    - 單源回驗後已不再是 parser fail，目前為 `SKIP upstream-blocked`：目錄正常、章節請求到正文時命中上游 `404`。
+  - `#282` ❤️百度小说
+    - 單源回驗已可 `PASS`，不再列為 `Jsoup.connect(...).bodyAsBytes()` canary。
+
+- New parity / flow fixes validated in this window:
+  - `AnalyzeRule.getString/getStringAsync`
+    - `Map` 輸入下只對真正的 URL/path literal 做短路，不再把 `@js:` 規則當原字串返回。
+  - `BookListParser`
+    - `kind/author/...` 等欄位會先寫回 `SearchBook`，再解析 `bookUrl`，允許 `{{book.kind}}` 這類依賴前置欄位的規則正常運作。
+  - `SearchBook.toBook()`
+    - 保留 `kind / latestChapterTitle / wordCount / originOrder / variable`，避免搜尋階段解析出的關鍵資料在詳情/目錄鏈路中遺失。
+  - `BookInfoParser`
+    - 詳情規則若解析為空，不再覆蓋搜尋階段已存在的 `kind / cover / intro / latestChapter`。
+  - JS bridge
+    - `java.encodeURI / decodeURI / encodeURIComponent / decodeURIComponent`
+    - `java.randomUUID()` 改為 JS 端生成，避免 bridge 型別轉換噪音。
+  - `JsEngine.evaluateAsync`
+    - sync-only 規則改走同步 fast path，不再把純同步 `searchUrl @js:` 硬塞進 Promise 包裝。
+
 ## Completed Foundations
 
 - 批量連網審計工具已支持 `SOURCE_START` / `SOURCE_LIMIT`。

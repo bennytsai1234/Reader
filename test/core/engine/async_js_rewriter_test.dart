@@ -2,6 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/engine/js/async_js_rewriter.dart';
 
 void main() {
+  group('AsyncJsRewriter.normalizeLegacyTemplateEscapes', () {
+    test('drops invalid template literal escapes in legacy regex strings', () {
+      const input = r'var pattern = `${callback}\((.*)\)`;';
+      const expected = r'var pattern = `${callback}((.*))`;';
+
+      expect(AsyncJsRewriter.normalizeLegacyTemplateEscapes(input), expected);
+    });
+
+    test('preserves valid template literal escapes', () {
+      const input = r'var msg = `line1\n${value}\${escaped}`;';
+
+      expect(AsyncJsRewriter.normalizeLegacyTemplateEscapes(input), input);
+    });
+  });
+
   group('AsyncJsRewriter.rewrite', () {
     test('simple java.ajax call gets wrapped with (await …)', () {
       expect(

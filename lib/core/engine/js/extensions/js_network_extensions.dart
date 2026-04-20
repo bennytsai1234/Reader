@@ -128,11 +128,7 @@ extension JsNetworkExtensions on JsExtensions {
           payload.length > 1 && payload[1] is Map
               ? Map<String, dynamic>.from(payload[1] as Map)
               : <String, dynamic>{};
-      _requestWithoutRedirects(
-            method: 'GET',
-            url: url,
-            headers: headers,
-          )
+      _requestWithoutRedirects(method: 'GET', url: url, headers: headers)
           .then((response) {
             final payload = {
               'body': response.data?.toString() ?? '',
@@ -236,11 +232,7 @@ extension JsNetworkExtensions on JsExtensions {
           payload.length > 1 && payload[1] is Map
               ? Map<String, dynamic>.from(payload[1] as Map)
               : <String, dynamic>{};
-      _requestWithoutRedirects(
-            method: 'HEAD',
-            url: url,
-            headers: headers,
-          )
+      _requestWithoutRedirects(method: 'HEAD', url: url, headers: headers)
           .then((response) {
             resolveJsPending(parsed.callId, {
               'body': response.data?.toString() ?? '',
@@ -527,27 +519,5 @@ extension JsNetworkExtensions on JsExtensions {
       },
     );
     return HttpClient().client.fetch<dynamic>(requestOptions);
-  }
-
-  void _stashLastHttpResponse(Map<String, dynamic> payload) {
-    final context = ruleContext;
-    if (context == null) return;
-    try {
-      if (context.chapter != null) {
-        return;
-      }
-    } catch (_) {}
-    try {
-      context.put('_lastHttpResponseBody', payload['body']?.toString() ?? '');
-      context.put('_lastHttpResponseUrl', payload['url']?.toString() ?? '');
-      context.put(
-        '_lastHttpResponseRequestUrl',
-        payload['requestUrl']?.toString() ?? '',
-      );
-      final redirects = payload['redirects'];
-      if (redirects is List && redirects.isNotEmpty) {
-        context.put('_lastHttpResponseRedirectUrl', redirects.last.toString());
-      }
-    } catch (_) {}
   }
 }

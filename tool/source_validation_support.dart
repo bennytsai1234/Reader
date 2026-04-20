@@ -284,6 +284,18 @@ Future<SourceValidationResult> validateSourceFlow(
     );
   }
 
+  if (_sourceMarkedBrokenForStage(source, 'keyword')) {
+    return SourceValidationResult(
+      index: index,
+      sourceName: source.bookSourceName,
+      outcome: SourceValidationOutcome.skip,
+      stage: 'source-filter',
+      duration: Duration.zero,
+      failure: '書源已標記失效或校驗超時',
+      category: 'source-marked-broken',
+    );
+  }
+
   final stopwatch = Stopwatch()..start();
   const maxContentProbe = 5;
   var stage = 'init';
@@ -331,7 +343,13 @@ Future<SourceValidationResult> validateSourceFlow(
     );
     readableChapters = chapters.where((chapter) => !chapter.isVolume).toList();
     if (readableChapters.isEmpty) {
+      if (looksLikeBrokenBookShell(hydratedBook)) {
+        throw StateError('命中的書籍詳情為空殼頁');
+      }
       throw StateError('目錄沒有可閱讀章節');
+    }
+    if (looksLikeDownloadOnlySource(hydratedBook, readableChapters)) {
+      throw StateError('來源為下載站，非線上正文書源');
     }
 
     Future<String> loadChapterContent(int chapterIndex) async {
@@ -361,6 +379,9 @@ Future<SourceValidationResult> validateSourceFlow(
     for (final i in firstProbeIndexes) {
       final chapter = readableChapters[i];
       final content = await loadChapterContent(i);
+      if (looksLikeLoginRequiredContent(content)) {
+        throw StateError('正文需要登入後閱讀');
+      }
       if (looksReadable(content)) {
         firstReadableChapter = chapter;
         firstReadableIndex = i;
@@ -377,6 +398,9 @@ Future<SourceValidationResult> validateSourceFlow(
         for (final secondIndex in secondProbeIndexes) {
           final secondChapter = readableChapters[secondIndex];
           final secondContent = await loadChapterContent(secondIndex);
+          if (looksLikeLoginRequiredContent(secondContent)) {
+            throw StateError('正文需要登入後閱讀');
+          }
           if (looksReadable(secondContent)) {
             secondReadableChapter = secondChapter;
             break;
@@ -457,8 +481,6 @@ ValidationFailureClassification classifyValidationFailure(
   required BookSource source,
   required String stage,
 }) {
-  final message = compactError(error);
-  final normalized = message.toLowerCase();
   final rawNormalized = error.toString().toLowerCase();
 
   if (_sourceMarkedBrokenForStage(source, stage)) {
@@ -509,7 +531,42 @@ ValidationFailureClassification classifyValidationFailure(
     );
   }
 
+  if (rawNormalized.contains('命中的書籍詳情為空殼頁') ||
+      rawNormalized.contains('detail page resolved to empty shell')) {
+    return const ValidationFailureClassification(
+      outcome: SourceValidationOutcome.skip,
+      category: 'source-book-empty',
+    );
+  }
+
+  if (rawNormalized.contains('來源為下載站') ||
+      rawNormalized.contains('来源为下载站') ||
+      rawNormalized.contains('非線上正文書源') ||
+      rawNormalized.contains('非线上正文书源')) {
+    return const ValidationFailureClassification(
+      outcome: SourceValidationOutcome.skip,
+      category: 'download-only-source',
+    );
+  }
+
+  if (rawNormalized.contains('正文需要登入後閱讀') ||
+      rawNormalized.contains('正文需要登录后阅读') ||
+      rawNormalized.contains('書源需要登入後使用') ||
+      rawNormalized.contains('书源需要登录后使用') ||
+      rawNormalized.contains('需要登入後閱讀') ||
+      rawNormalized.contains('需要登录后阅读') ||
+      rawNormalized.contains('loginrequired') ||
+      rawNormalized.contains('permissionlimit')) {
+    return const ValidationFailureClassification(
+      outcome: SourceValidationOutcome.skip,
+      category: 'login-required-source',
+    );
+  }
+
   if (rawNormalized.contains('receivetimeout') ||
+      rawNormalized.contains('timeoutexception') ||
+      rawNormalized.contains('future not completed') ||
+      rawNormalized.contains('timed out waiting for') ||
       rawNormalized.contains('connection timeout') ||
       rawNormalized.contains('timed out') ||
       rawNormalized.contains('socketexception') ||
@@ -517,13 +574,22 @@ ValidationFailureClassification classifyValidationFailure(
       rawNormalized.contains('certificate_verify_failed') ||
       rawNormalized.contains('handshake error') ||
       rawNormalized.contains('ssl')) {
+    if (stage == 'timeout' ||
+        stage.startsWith('content') ||
+        stage.startsWith('toc')) {
+      return const ValidationFailureClassification(
+        outcome: SourceValidationOutcome.skip,
+        category: 'slow-source',
+      );
+    }
     return const ValidationFailureClassification(
       outcome: SourceValidationOutcome.skip,
       category: 'upstream-timeout',
     );
   }
 
-  if (rawNormalized.contains('403') ||
+  if (rawNormalized.contains('401') ||
+      rawNormalized.contains('403') ||
       rawNormalized.contains('404') ||
       rawNormalized.contains('429') ||
       rawNormalized.contains('502') ||
@@ -766,6 +832,104 @@ bool looksReadable(String content) {
   if (trimmed.startsWith('加載章節失敗')) return false;
   if (trimmed.startsWith('章節內容為空')) return false;
   return trimmed.runes.length >= 20;
+}
+
+bool looksLikeLoginRequiredContent(String content) {
+  final normalized = content.trim().toLowerCase();
+  if (normalized.isEmpty) return false;
+  return normalized.contains('permissionlimit') ||
+      normalized.contains('loginrequired') ||
+      normalized.contains('登录后阅读') ||
+      normalized.contains('登入後閱讀') ||
+      normalized.contains('需要你登录后阅读') ||
+      normalized.contains('需要你登入後閱讀') ||
+      normalized.contains('請先登錄') ||
+      normalized.contains('请先登录');
+}
+
+bool looksLikeBrokenBookShell(Book book) {
+  final html =
+      ((book.tocHtml?.isNotEmpty ?? false) ? book.tocHtml : book.infoHtml) ??
+      '';
+  if (html.isEmpty) return false;
+
+  final hasEmptySectionList = RegExp(
+    r'<ul[^>]*class="[^"]*section-list[^"]*"[^>]*>\s*</ul>',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(html);
+  final hasEmptyPageSelect = RegExp(
+    r'<select[^>]*name="pageselect"[^>]*>\s*</select>',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(html);
+  if (!hasEmptySectionList || !hasEmptyPageSelect) {
+    return false;
+  }
+
+  final latestChapter = (book.latestChapterTitle ?? '').trim();
+  final normalizedWordCount = (book.wordCount ?? '').replaceAll(
+    RegExp(r'\s+'),
+    '',
+  );
+  final hasMissingWordCount = normalizedWordCount.isEmpty;
+  final hasZeroWordCount = RegExp(r'^0+(万)?$').hasMatch(normalizedWordCount);
+  final hasPlaceholderLatestChapter =
+      latestChapter.contains('1970-01-01') ||
+      latestChapter.contains('1970/01/01') ||
+      latestChapter.contains('1970年') ||
+      latestChapter.contains('{{@@') ||
+      latestChapter.contains('property\$=update_time');
+  return latestChapter.isEmpty ||
+      hasMissingWordCount ||
+      hasZeroWordCount ||
+      hasPlaceholderLatestChapter;
+}
+
+bool looksLikeDownloadOnlySource(
+  Book book,
+  List<BookChapter> readableChapters,
+) {
+  if (readableChapters.isEmpty) return false;
+  final firstChapter = readableChapters.first;
+  final title = firstChapter.title.trim().toLowerCase();
+  final urls = <String>[
+    book.bookUrl.trim().toLowerCase(),
+    book.tocUrl.trim().toLowerCase(),
+    firstChapter.url.trim().toLowerCase(),
+  ];
+
+  const downloadMarkers = <String>[
+    '点击地址栏下载',
+    '點擊地址欄下載',
+    '点击下载',
+    '點擊下載',
+    '网盘',
+    '網盤',
+    'txt下载',
+    'txt下載',
+    'zip下载',
+    'zip下載',
+    'epub下载',
+    'epub下載',
+    'rar下载',
+    'rar下載',
+    '📥',
+  ];
+  const downloadUrlMarkers = <String>[
+    'downbook.php',
+    '/download/',
+    'downajax',
+    '.zip',
+    '.rar',
+    '.epub',
+    '.txt',
+  ];
+
+  return downloadMarkers.any(title.contains) ||
+      urls.any(
+        (url) => downloadUrlMarkers.any((marker) => url.contains(marker)),
+      );
 }
 
 List<int> buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {

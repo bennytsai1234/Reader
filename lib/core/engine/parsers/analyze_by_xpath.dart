@@ -17,6 +17,7 @@ class AnalyzeByXPath {
   );
 
   AnalyzeByXPath(dynamic doc) {
+    final htmlLike = _extractHtmlLikeContent(doc);
     if (doc is XPathNode) {
       final node = doc.node;
       if (node is Element) {
@@ -27,6 +28,9 @@ class AnalyzeByXPath {
       }
     } else if (doc is Element) {
       _initFromElement(doc);
+    } else if (htmlLike != null) {
+      final prepared = _prepareHtml(htmlLike);
+      _initFromHtml(prepared);
     } else if (doc is String) {
       final prepared = _prepareHtml(doc);
       _initFromHtml(prepared);
@@ -81,6 +85,17 @@ class AnalyzeByXPath {
       h = '<table>$h</table>';
     }
     return h;
+  }
+
+  String? _extractHtmlLikeContent(dynamic doc) {
+    if (doc is! Map) return null;
+    for (final key in const <String>['__html', 'outerHtml', 'html']) {
+      final candidate = doc[key];
+      if (candidate is String && candidate.trim().isNotEmpty) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   /// 獲取列表

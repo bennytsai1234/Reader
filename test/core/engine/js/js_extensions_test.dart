@@ -68,6 +68,11 @@ void main() {
         runtime!.evaluate('typeof java.timeFormatUTC').stringResult,
         'function',
       );
+      expect(runtime!.evaluate('typeof java.HMacHex').stringResult, 'function');
+      expect(
+        runtime!.evaluate('typeof java.desEncodeToBase64String').stringResult,
+        'function',
+      );
       expect(
         runtime!.evaluate('typeof java.toNumChapter').stringResult,
         'function',
@@ -89,6 +94,10 @@ void main() {
         runtime!.evaluate('typeof java.webViewGetOverrideUrl').stringResult,
         'function',
       );
+      expect(
+        runtime!.evaluate('typeof java.encodeURI').stringResult,
+        'function',
+      );
     });
 
     test('java.log returns the original value like Legado', () {
@@ -106,6 +115,26 @@ void main() {
 
       expect(result.stringResult, 'bridge-value');
     });
+
+    test(
+      'string match with string regex patterns behaves like legacy sources expect',
+      () {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        final ext = JsExtensions(runtime!);
+        ext.inject();
+
+        final result = runtime!.evaluate(r'''
+        var input = 'd918eac({"id":"164"})';
+        var matched = input.match('918eac\\((.*)\\)');
+        matched ? matched[1] : '';
+      ''');
+
+        expect(result.stringResult, '{"id":"164"}');
+      },
+    );
 
     test('cookie and cache bridges are exposed', () {
       if (runtime == null) {
@@ -220,6 +249,114 @@ void main() {
       expect(result.stringResult, '/chapter/1');
     });
 
+    test('Jsoup selection shim supports nested select()', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final result = runtime!.evaluate(r'''
+        importClass(org.jsoup.Jsoup);
+        var form = Jsoup.parse('<div><form action="/search"><input name="_token" value="abc"></form></div>').select('form');
+        form.select('[name=_token]').attr('value');
+      ''');
+
+      expect(result.stringResult, 'abc');
+    });
+
+    test('java HMacHex and desEncodeToBase64String are exposed', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final hmac = runtime!.evaluate(r'''
+        java.HMacHex("hello", "HmacMD5", "key").toString();
+      ''');
+      final des = runtime!.evaluate(r'''
+        java.desEncodeToBase64String("hello", "12345678", "DES/ECB/PKCS5Padding", "");
+      ''');
+
+      expect(hmac.stringResult, isNotEmpty);
+      expect(des.stringResult, isNotEmpty);
+    });
+
+    test('java encodeURI uses component-style escaping', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final result = runtime!.evaluate(r'''
+        java.encodeURI("a+b/c?d=e&f=中");
+      ''');
+
+      expect(result.stringResult, 'a%2Bb%2Fc%3Fd%3De%26f%3D%E4%B8%AD');
+    });
+
+    test('java.randomUUID returns a uuid-like token', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final result = runtime!.evaluate(r'''
+        java.randomUUID().toString();
+      ''');
+
+      expect(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ).hasMatch(result.stringResult),
+        isTrue,
+      );
+    });
+
+    test('Jsoup shim supports selectFirst().attributes()', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final result = runtime!.evaluate(r'''
+        importClass(org.jsoup.Jsoup);
+        var doc = Jsoup.parse('<li data-order="7"><a href="/chapter/1" data-real="第一章">第一章</a></li>');
+        var attrs = Array.from(doc.selectFirst('a').attributes());
+        attrs.join('|');
+      ''');
+
+      expect(result.stringResult, contains('href="/chapter/1"'));
+      expect(result.stringResult, contains('data-real="第一章"'));
+    });
+
+    test('Jsoup shim exposes selection.size() and eachText()', () {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(runtime!);
+      ext.inject();
+
+      final result = runtime!.evaluate(r'''
+        importClass(org.jsoup.Jsoup);
+        var doc = Jsoup.parse('<div><h1>标题</h1><strong>作者</strong><strong>分类</strong></div>');
+        var texts = doc.select('h1,strong').eachText();
+        doc.select('strong').size() + '|' + texts.size() + '|' + texts.get(1);
+      ''');
+
+      expect(result.stringResult, '2|3|作者');
+    });
+
     test('Jsoup shim supports data() and remove() mutations', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
@@ -239,6 +376,33 @@ void main() {
       expect(result.stringResult.contains('>X<'), isFalse);
       expect(result.stringResult.contains('>Y<'), isTrue);
     });
+
+    test(
+      'Jsoup shim normalizes regex selectors used by detail cleanup rules',
+      () {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        final ext = JsExtensions(runtime!);
+        ext.inject();
+
+        final result = runtime!.evaluate(r'''
+        importClass(org.jsoup.Jsoup);
+        var doc = Jsoup.parse('<html><head><meta property="keep" content="1"><script>bad()</script></head><body><footer>F</footer><div class="footbar">X</div><a href="/cat"><span>分类</span></a><input value="1"><article>正文</article></body></html>');
+        doc.select('script,noscript,style,head>:not(meta,title),footer,[class~=^foot],[id~=^foot],a:has(>:last-child:matchesOwn(^分类$)),[value]').remove();
+        doc.html();
+      ''');
+
+        expect(result.stringResult.contains('<meta property="keep"'), isTrue);
+        expect(result.stringResult.contains('<script>'), isFalse);
+        expect(result.stringResult.contains('<footer>'), isFalse);
+        expect(result.stringResult.contains('class="footbar"'), isFalse);
+        expect(result.stringResult.contains('href="/cat"'), isFalse);
+        expect(result.stringResult.contains('<input value="1">'), isFalse);
+        expect(result.stringResult.contains('<article>正文</article>'), isTrue);
+      },
+    );
 
     test('Jsoup shim preserves middle nodes for nth-child removals', () {
       if (runtime == null) {
@@ -663,14 +827,16 @@ java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' 
       );
     });
 
-    test('java.connect normalizes bare-origin raw request urls with slash', () async {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final ext = JsExtensions(runtime!);
-      ext.inject();
-      runtime!.evaluate(r'''
+    test(
+      'java.connect normalizes bare-origin raw request urls with slash',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        final ext = JsExtensions(runtime!);
+        ext.inject();
+        runtime!.evaluate(r'''
         __asyncCall = function(channel, payload) {
           if (channel !== 'connect') {
             return Promise.reject(new Error('unexpected channel: ' + channel));
@@ -687,18 +853,19 @@ java.ajax(baseUrl.replace('read-', '_getcontent.php?id=').replace('.html','&v=' 
         };
       ''');
 
-      final rewritten = AsyncJsRewriter.rewrite(r'''
+        final rewritten = AsyncJsRewriter.rewrite(r'''
         java.connect("http://m.666biquge.com").raw().request().url() + "modules/article/waps.php"
       ''');
-      final (callId, future) = ext.registerRuleCall();
-      final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+        final (callId, future) = ext.registerRuleCall();
+        final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
 
-      final evalResult = runtime!.evaluate(wrapped);
-      expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
-      runtime!.executePendingJob();
+        final evalResult = runtime!.evaluate(wrapped);
+        expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+        runtime!.executePendingJob();
 
-      final resolved = await future;
-      expect(resolved, 'http://m.666biquge.com/modules/article/waps.php');
-    });
+        final resolved = await future;
+        expect(resolved, 'http://m.666biquge.com/modules/article/waps.php');
+      },
+    );
   });
 }

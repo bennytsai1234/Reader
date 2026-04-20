@@ -43,25 +43,51 @@ extension JsCryptoExtensions on JsExtensions {
         final algorithm = payload[1].toString();
         final hexFormat =
             payload.length > 2 ? payload[2].toString() != 'false' : true;
-        return JsEncodeUtils.digest(
-          data,
-          algorithm,
-          hexFormat: hexFormat,
+        return JsEncodeUtils.digest(data, algorithm, hexFormat: hexFormat);
+      }
+      return '';
+    });
+    runtime.onMessage('_hmacHex', (dynamic args) {
+      final payload = _decodeArgs(args);
+      if (payload is List && payload.length >= 3) {
+        return JsEncodeUtils.hmacHex(
+          payload[0].toString(),
+          payload[1].toString(),
+          payload[2].toString(),
         );
       }
       return '';
     });
-    runtime.onMessage(
-      '_base64Encode',
-      (dynamic args) {
-        final payload = _decodeArgs(args);
-        return JsEncodeUtils.base64Encode(payload);
-      },
-    );
+    runtime.onMessage('_desEncodeToBase64String', (dynamic args) {
+      final payload = _decodeArgs(args);
+      if (payload is List && payload.length >= 2) {
+        final data = payload[0];
+        final key = payload[1];
+        final transformation =
+            payload.length > 2 &&
+                    payload[2] != null &&
+                    payload[2].toString().isNotEmpty
+                ? payload[2].toString()
+                : 'DES/ECB/PKCS5Padding';
+        final iv = payload.length > 3 ? payload[3] : null;
+        return JsEncodeUtils.symmetricCrypto(
+          'encrypt',
+          transformation,
+          key,
+          iv,
+          data,
+          outputFormat: 'base64',
+        );
+      }
+      return '';
+    });
+    runtime.onMessage('_base64Encode', (dynamic args) {
+      final payload = _decodeArgs(args);
+      return JsEncodeUtils.base64Encode(payload);
+    });
     runtime.onMessage('_base64Decode', (dynamic args) {
       final payload = _decodeArgs(args);
-      final str =
-          payload is List ? payload[0].toString() : payload.toString();
+      final str = payload is List ? payload[0].toString() : payload.toString();
       final charset =
           payload is List && payload.length > 1
               ? payload[1].toString()

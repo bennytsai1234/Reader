@@ -21,6 +21,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }
@@ -40,7 +41,9 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
           dynamic tempResult;
-          if (result is Map && sourceRule.paramSize > 1) {
+          if (_shouldTreatMapDynamicRuleAsLiteral(result, sourceRule, rule)) {
+            tempResult = rule;
+          } else if (isUrl && _looksLikeAnalyzeUrlLiteral(rule, sourceRule)) {
             tempResult = rule;
           } else if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
             switch (sourceRule.mode) {
@@ -68,9 +71,14 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                 }
                 break;
               default:
-                tempResult = sourceRule
-                    .getAnalyzeByJSoup(this, result)
-                    .getString0(rule, isUrl: isUrl);
+                tempResult =
+                    isUrl
+                        ? sourceRule
+                            .getAnalyzeByJSoup(this, result)
+                            .getString0(rule, isUrl: true)
+                        : sourceRule
+                            .getAnalyzeByJSoup(this, result)
+                            .getString(rule);
                 if ((tempResult == null || tempResult.toString().isEmpty) &&
                     isJsonLikeRuleInput(result)) {
                   final jsonRule = buildJsonFallbackRule(rule);
@@ -144,6 +152,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) break;
 
         try {
@@ -161,7 +170,9 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
           log('  ◇ 模式: ${sourceRule.mode.name}, 規則: $rule');
 
           dynamic tempResult;
-          if (result is Map && sourceRule.paramSize > 1) {
+          if (_shouldTreatMapDynamicRuleAsLiteral(result, sourceRule, rule)) {
+            tempResult = rule;
+          } else if (isUrl && _looksLikeAnalyzeUrlLiteral(rule, sourceRule)) {
             tempResult = rule;
           } else if (rule.isNotEmpty || sourceRule.replaceRegex.isEmpty) {
             switch (sourceRule.mode) {
@@ -189,9 +200,14 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
                 }
                 break;
               default:
-                tempResult = sourceRule
-                    .getAnalyzeByJSoup(this, result)
-                    .getString0(rule, isUrl: isUrl);
+                tempResult =
+                    isUrl
+                        ? sourceRule
+                            .getAnalyzeByJSoup(this, result)
+                            .getString0(rule, isUrl: true)
+                        : sourceRule
+                            .getAnalyzeByJSoup(this, result)
+                            .getString(rule);
                 if ((tempResult == null || tempResult.toString().isEmpty) &&
                     isJsonLikeRuleInput(result)) {
                   final jsonRule = buildJsonFallbackRule(rule);
@@ -250,6 +266,53 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
     return str;
   }
 
+  bool _looksLikeAnalyzeUrlLiteral(String rule, SourceRule sourceRule) {
+    final trimmed = rule.trimLeft();
+    return sourceRule.mode == Mode.xpath &&
+        trimmed.startsWith('/') &&
+        trimmed.contains(',{');
+  }
+
+  bool _shouldTreatMapDynamicRuleAsLiteral(
+    dynamic result,
+    SourceRule sourceRule,
+    String rule,
+  ) {
+    if (result is! Map ||
+        sourceRule.mode == Mode.js ||
+        sourceRule.paramSize <= 1) {
+      return false;
+    }
+
+    final trimmed = rule.trimLeft();
+    if (trimmed.isEmpty || trimmed.startsWith('//')) {
+      return false;
+    }
+
+    if (_looksLikeAnalyzeUrlLiteral(rule, sourceRule)) {
+      return true;
+    }
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return true;
+    }
+
+    if (trimmed.startsWith('./') || trimmed.startsWith('../')) {
+      return true;
+    }
+
+    if (trimmed.startsWith('?')) {
+      return true;
+    }
+
+    if (trimmed.startsWith('/')) {
+      return trimmed.contains('?') ||
+          RegExp(r"^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$").hasMatch(trimmed);
+    }
+
+    return false;
+  }
+
   /// 獲取字串列表
   List<String> getStringList(String ruleStr, {bool isUrl = false}) {
     if (ruleStr.isEmpty) {
@@ -262,6 +325,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }
@@ -320,7 +384,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               result =
                   result
                       .map(
-                        (e) => replaceRegexLogic(
+                        (e) => replaceRegexListItemLogic(
                           stringifyRuleResult(e),
                           sourceRule,
                         ),
@@ -373,6 +437,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) break;
 
         try {
@@ -429,7 +494,7 @@ mixin AnalyzeRuleString on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               result =
                   result
                       .map(
-                        (e) => replaceRegexLogic(
+                        (e) => replaceRegexListItemLogic(
                           stringifyRuleResult(e),
                           sourceRule,
                         ),

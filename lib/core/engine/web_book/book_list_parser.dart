@@ -104,24 +104,11 @@ class BookListParser {
       ).setContent(element, baseUrl: baseUrl);
 
       final name = BookHelp.formatBookName(
-        await _readString(
-          itemRule,
-          nameRule,
-          needsAsync: nameRuleNeedsAsync,
-        ),
+        await _readString(itemRule, nameRule, needsAsync: nameRuleNeedsAsync),
       );
       if (name.isEmpty) continue;
 
       searchBook.name = name;
-      var bookUrl = await _readString(
-        itemRule,
-        bookUrlRule,
-        needsAsync: bookUrlRuleNeedsAsync,
-        isUrl: true,
-      );
-      // 空 bookUrl fallback 為 baseUrl (對標 Android BookList 邏輯)
-      if (bookUrl.isEmpty) bookUrl = baseUrl;
-      searchBook.bookUrl = bookUrl;
       searchBook.author = BookHelp.formatBookAuthor(
         await _safeString(
           () => _readString(
@@ -135,11 +122,8 @@ class BookListParser {
         continue;
       }
       searchBook.kind = (await _safeStringList(
-        () => _readStringList(
-          itemRule,
-          kindRule,
-          needsAsync: kindRuleNeedsAsync,
-        ),
+        () =>
+            _readStringList(itemRule, kindRule, needsAsync: kindRuleNeedsAsync),
       )).join(',');
       searchBook.coverUrl = await _safeString(() {
         return _readString(
@@ -174,6 +158,16 @@ class BookListParser {
           ),
         ),
       );
+
+      var bookUrl = await _readString(
+        itemRule,
+        bookUrlRule,
+        needsAsync: bookUrlRuleNeedsAsync,
+        isUrl: true,
+      );
+      // 空 bookUrl fallback 為 baseUrl (對標 Android BookList 邏輯)
+      if (bookUrl.isEmpty) bookUrl = baseUrl;
+      searchBook.bookUrl = bookUrl;
 
       // 去重：同一個 (name, author, bookUrl) 只保留首次出現
       final dedupKey = '$name|${searchBook.author ?? ''}|$bookUrl';

@@ -3,6 +3,35 @@
 ///
 /// 支援 Legado 的 ##pattern## 格式
 class AnalyzeByRegex {
+  static RegExp _buildRegExp(
+    String pattern, {
+    bool multiLine = true,
+    bool dotAll = true,
+    bool caseSensitive = true,
+  }) {
+    final inlineFlags = RegExp(r'^\(\?([ims]+)\)');
+    final match = inlineFlags.firstMatch(pattern);
+    if (match != null) {
+      final flags = match.group(1) ?? '';
+      if (flags.contains('i')) {
+        caseSensitive = false;
+      }
+      if (flags.contains('m')) {
+        multiLine = true;
+      }
+      if (flags.contains('s')) {
+        dotAll = true;
+      }
+      pattern = pattern.substring(match.end);
+    }
+    return RegExp(
+      pattern,
+      multiLine: multiLine,
+      dotAll: dotAll,
+      caseSensitive: caseSensitive,
+    );
+  }
+
   /// 獲取單個匹配項及其分組
   static List<String>? getElement(
     String res,
@@ -11,7 +40,7 @@ class AnalyzeByRegex {
   }) {
     if (index >= regs.length) return null;
 
-    final regExp = RegExp(regs[index], multiLine: true, dotAll: true);
+    final regExp = _buildRegExp(regs[index]);
     final match = regExp.firstMatch(res);
     if (match == null) return null;
 
@@ -39,7 +68,7 @@ class AnalyzeByRegex {
   }) {
     if (index >= regs.length) return [];
 
-    final regExp = RegExp(regs[index], multiLine: true, dotAll: true);
+    final regExp = _buildRegExp(regs[index]);
     final allMatches = regExp.allMatches(res);
     if (allMatches.isEmpty) return [];
 
@@ -73,7 +102,7 @@ class AnalyzeByRegex {
     final regexStr = parts[1];
     final replacement = parts.length > 2 ? parts[2] : '';
 
-    final regExp = RegExp(regexStr, multiLine: true, dotAll: true);
+    final regExp = _buildRegExp(regexStr);
     return res.replaceAllMapped(regExp, (match) {
       var result = replacement;
       // 替換 $0, $1, $2...
@@ -96,4 +125,3 @@ class AnalyzeByRegex {
     return elements.map((e) => e[0]).join('\n');
   }
 }
-

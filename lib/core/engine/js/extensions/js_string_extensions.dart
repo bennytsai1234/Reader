@@ -8,6 +8,8 @@ extension JsStringExtensions on JsExtensions {
   void injectStringExtensions() {
     runtime.evaluate(r'''
       (function() {
+        var __lrNativeStringMatch = String.prototype.match;
+
         function __lrJavaRegex(pattern, globalMode) {
           if (pattern instanceof RegExp) {
             var flags = pattern.flags || '';
@@ -40,8 +42,25 @@ extension JsStringExtensions on JsExtensions {
           }
         };
 
+        globalThis.__lrJavaMatch = function(value, pattern) {
+          var input = String(value == null ? '' : value);
+          if (pattern instanceof RegExp) {
+            return __lrNativeStringMatch.call(input, pattern);
+          }
+          try {
+            return __lrNativeStringMatch.call(input, new RegExp(String(pattern)));
+          } catch (e) {
+            var text = String(pattern);
+            return input.indexOf(text) !== -1 ? [text] : null;
+          }
+        };
+
         String.prototype.replaceAll = function(pattern, replacement) {
           return globalThis.__lrJavaReplaceAll(this, pattern, replacement);
+        };
+
+        String.prototype.match = function(pattern) {
+          return globalThis.__lrJavaMatch(this, pattern);
         };
 
         if (typeof String.prototype.replaceFirst !== 'function') {

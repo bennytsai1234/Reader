@@ -141,9 +141,14 @@ class SearchBook implements RuleDataInterface {
       originName: originName ?? '',
       name: name,
       author: author ?? '',
+      kind: kind,
       coverUrl: coverUrl,
       intro: intro,
+      latestChapterTitle: latestChapterTitle,
+      wordCount: wordCount,
       type: type,
+      originOrder: originOrder,
+      variable: variable,
     );
   }
 }

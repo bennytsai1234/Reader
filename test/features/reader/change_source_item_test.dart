@@ -13,7 +13,6 @@ SearchBook _makeSearchBook() {
     latestChapterTitle: '第 120 章',
     origin: 'source://main',
     originName: '主書源',
-    respondTime: 520,
   );
 }
 
@@ -35,7 +34,6 @@ void main() {
     expect(find.text('最新: 第 120 章'), findsOneWidget);
     expect(find.text('120萬字'), findsOneWidget);
     expect(find.text('玄幻'), findsOneWidget);
-    expect(find.text('520ms'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
   });
 }

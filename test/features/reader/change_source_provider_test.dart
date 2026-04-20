@@ -204,5 +204,42 @@ void main() {
       expect(provider.filteredResults.length, 1);
       expect(provider.filteredResults.single.originName, '慢源');
     });
+
+    test('已隔離或搜尋失效來源不會進入換源搜尋池', () async {
+      final sourceDao =
+          _FakeBookSourceDao()
+            ..sources = <BookSource>[
+              _makeSource(url: 'source://ok', name: '可用書源'),
+              _makeSource(
+                url: 'source://broken',
+                name: '搜尋失效書源',
+                group: searchBrokenSourceGroupTag,
+              ),
+              _makeSource(
+                url: 'source://quarantine',
+                name: '隔離書源',
+                group: quarantineSourceGroupTag,
+              ),
+            ];
+      final searchBookDao = _FakeSearchBookDao();
+      final service = _FakeBookSourceService();
+      service.handlers['source://ok'] =
+          (_) async => <SearchBook>[
+            _makeSearchBook(origin: 'source://ok', originName: '可用書源'),
+          ];
+
+      final provider = ChangeSourceProvider(
+        _makeBook(),
+        service: service,
+        sourceDao: sourceDao,
+        searchBookDao: searchBookDao,
+        autoStart: false,
+      );
+
+      await provider.startSearch();
+
+      expect(service.requestedSources, <String>['source://ok']);
+      expect(provider.filteredResults.single.origin, 'source://ok');
+    });
   });
 }

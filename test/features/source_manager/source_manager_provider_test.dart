@@ -142,4 +142,31 @@ void main() {
     expect(fakeDao.store.keys, isNot(contains('https://audio.example.com')));
     expect(fakeDao.store.keys, isNot(contains('https://comic.example.com')));
   });
+
+  test('clearInvalidSources removes login-required sources', () async {
+    fakeDao.store['https://valid.example.com'] = BookSource(
+      bookSourceUrl: 'https://valid.example.com',
+      bookSourceName: '正常源',
+      bookSourceType: SourceType.book,
+    );
+    fakeDao.store['https://login.example.com'] = BookSource(
+      bookSourceUrl: 'https://login.example.com',
+      bookSourceName: '登入牆源',
+      bookSourceType: SourceType.book,
+      bookSourceGroup: loginRequiredSourceGroupTag,
+    );
+    fakeDao.store['https://search-broken.example.com'] = BookSource(
+      bookSourceUrl: 'https://search-broken.example.com',
+      bookSourceName: '搜尋失效源',
+      bookSourceType: SourceType.book,
+      bookSourceGroup: searchBrokenSourceGroupTag,
+    );
+
+    final provider = SourceManagerProvider();
+    await provider.clearInvalidSources();
+
+    expect(fakeDao.store.keys, contains('https://valid.example.com'));
+    expect(fakeDao.store.keys, isNot(contains('https://login.example.com')));
+    expect(fakeDao.store.keys, contains('https://search-broken.example.com'));
+  });
 }

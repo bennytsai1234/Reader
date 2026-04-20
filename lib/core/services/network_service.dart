@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 import 'package:inkpage_reader/core/network/interceptors/app_interceptor.dart';
+import 'package:inkpage_reader/core/network/interceptors/lenient_cookie_manager.dart';
 
 /// NetworkService - 專業網路伺服 (具備反爬蟲對應能力)
 /// 封裝全域 Dio 實例並支持 Cookie 持久化與書源併發控制
@@ -47,7 +47,7 @@ class NetworkService {
       ),
     );
 
-    _dio.interceptors.add(CookieManager(_cookieJar));
+    _dio.interceptors.add(LenientCookieManager(_cookieJar));
     _dio.interceptors.add(AppInterceptor());
 
     _isInitialized = true;
@@ -88,8 +88,11 @@ class NetworkService {
   /// 手動保存 Cookie (用於 WebView 同步等場景)
   Future<void> saveCookies(String url, String cookieStr) async {
     final uri = Uri.parse(url);
-    await _cookieJar.saveFromResponse(uri, [
-      Cookie.fromSetCookieValue(cookieStr),
-    ]);
+    final cookie = parseSetCookieValueLenient(
+      cookieStr,
+      ignoreInvalidCookies: true,
+    );
+    if (cookie == null) return;
+    await _cookieJar.saveFromResponse(uri, [cookie]);
   }
 }

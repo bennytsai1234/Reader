@@ -56,6 +56,32 @@ void main() {
       expect(analyzer.getString('.title@text'), 'Test Title');
     });
 
+    test(
+      'Default CSS string mode joins multiple matches while isUrl keeps first match',
+      () async {
+        final analyzer = AnalyzeRule().setContent('''
+          <div id="article">
+            <p>第一段</p>
+            <p>第二段</p>
+          </div>
+          <div class="links">
+            <a href="/chapter/1">第一章</a>
+            <a href="/chapter/2">第二章</a>
+          </div>
+          ''', baseUrl: 'https://example.com/book/1');
+
+        expect(analyzer.getString('#article@p@textNodes'), '第一段\n第二段');
+        expect(
+          await analyzer.getStringAsync('#article@p@textNodes'),
+          '第一段\n第二段',
+        );
+        expect(
+          analyzer.getString('.links@tag.a@href', isUrl: true),
+          'https://example.com/chapter/1',
+        );
+      },
+    );
+
     test('Routing to JsonPath parser', () {
       final analyzer = AnalyzeRule().setContent(jsonStr);
       expect(analyzer.getString(r'$.title'), 'JSON Title');
@@ -164,27 +190,30 @@ void main() {
       expect(analyzer.getString('@get:{tempVar}'), 'Hello');
     });
 
-    test('java.put values survive across analyze rules for the same source', () {
-      final source = BookSource(
-        bookSourceUrl: 'https://example.com/source',
-        bookSourceName: 'Shared Scope Source',
-      );
+    test(
+      'java.put values survive across analyze rules for the same source',
+      () {
+        final source = BookSource(
+          bookSourceUrl: 'https://example.com/source',
+          bookSourceName: 'Shared Scope Source',
+        );
 
-      final writer = AnalyzeRule(source: source).setContent(htmlStr);
-      final reader = AnalyzeRule(source: source).setContent(htmlStr);
+        final writer = AnalyzeRule(source: source).setContent(htmlStr);
+        final reader = AnalyzeRule(source: source).setContent(htmlStr);
 
-      expect(
-        writer.evalJS(
-          'java.put("headers", "{\\"headers\\":{\\"X-Test\\":\\"1\\"}}")',
-          null,
-        ),
-        isNotNull,
-      );
-      expect(
-        reader.evalJS('java.get("headers")', null),
-        '{"headers":{"X-Test":"1"}}',
-      );
-    });
+        expect(
+          writer.evalJS(
+            'java.put("headers", "{\\"headers\\":{\\"X-Test\\":\\"1\\"}}")',
+            null,
+          ),
+          isNotNull,
+        );
+        expect(
+          reader.evalJS('java.get("headers")', null),
+          '{"headers":{"X-Test":"1"}}',
+        );
+      },
+    );
 
     test('java.getElements exposes parsed element lists to rule js', () {
       final analyzer = AnalyzeRule().setContent(htmlStr);
@@ -225,12 +254,10 @@ void main() {
     });
 
     test('isUrl=true prefers redirectUrl over baseUrl', () {
-      final analyzer = AnalyzeRule()
-        ..setContent(
-          htmlStr,
-          baseUrl: 'https://example.com/search?q=test',
-        )
-        ..setRedirectUrl('https://cdn.example.net/results/list.html');
+      final analyzer =
+          AnalyzeRule()
+            ..setContent(htmlStr, baseUrl: 'https://example.com/search?q=test')
+            ..setRedirectUrl('https://cdn.example.net/results/list.html');
 
       expect(
         analyzer.getString('.link@href', isUrl: true),
@@ -271,6 +298,60 @@ void main() {
           await analyzer.getStringAsync(r'/books?bookId={$.bookId}'),
           '/books?bookId=47749',
         );
+      },
+    );
+
+    test(
+      'dynamic map-backed js rules still execute instead of returning raw code',
+      () async {
+        final analyzer = AnalyzeRule().setContent({'id': '47749'});
+
+        expect(
+          analyzer.getString(r'@js:"/books?bookId={{$.id}}"'),
+          '/books?bookId=47749',
+        );
+        expect(
+          await analyzer.getStringAsync(r'@js:"/books?bookId={{$.id}}"'),
+          '/books?bookId=47749',
+        );
+      },
+    );
+
+    test(
+      'isUrl=true treats analyzeUrl-style literal paths as urls instead of xpath',
+      () async {
+        final analyzer = AnalyzeRule().setContent(
+          '<html></html>',
+          baseUrl: 'https://ixdzs8.com/read/17047/',
+        );
+
+        final result = await analyzer.getStringAsync(
+          r'''/novel/clist/,{"body":"bid={{baseUrl.match(/(\d+).$/)[1]}}","method":"POST"}''',
+          isUrl: true,
+        );
+
+        expect(
+          result,
+          'https://ixdzs8.com/novel/clist/,{"body":"bid=17047","method":"POST"}',
+        );
+      },
+    );
+
+    test(
+      'getStringListAsync with url regex extraction returns captured urls only',
+      () async {
+        final analyzer = AnalyzeRule().setContent('''
+<script src="http://m.bqgcn.com/bqgcn/mobile/js/jquery.min.js"></script>
+<script>var next = "http://m.bqgcn.com/21_21466/15743972.html?page=_2";</script>
+<script src="http://m.bqgcn.com/bqgcn/mobile/js/wap.js"></script>
+''', baseUrl: 'http://m.bqgcn.com/21_21466/15743972.html');
+
+        final result = await analyzer.getStringListAsync(
+          r'script@html##(http[^"]+page[^"]+)##$1###',
+          isUrl: true,
+        );
+
+        expect(result, ['http://m.bqgcn.com/21_21466/15743972.html?page=_2']);
       },
     );
 
@@ -316,12 +397,13 @@ void main() {
     test(
       'getStringAsync with isUrl=true prefers redirectUrl over baseUrl',
       () async {
-        final analyzer = AnalyzeRule()
-          ..setContent(
-            htmlStr,
-            baseUrl: 'https://example.com/search?q=test',
-          )
-          ..setRedirectUrl('https://cdn.example.net/results/list.html');
+        final analyzer =
+            AnalyzeRule()
+              ..setContent(
+                htmlStr,
+                baseUrl: 'https://example.com/search?q=test',
+              )
+              ..setRedirectUrl('https://cdn.example.net/results/list.html');
 
         expect(
           await analyzer.getStringAsync('.link@href', isUrl: true),
@@ -333,11 +415,11 @@ void main() {
     test(
       'getStringAsync expands async importScript fragments in browser mode',
       () async {
-      final tempDir = await Directory.systemTemp.createTemp(
-        'analyze_rule_import_script_test_',
-      );
-      final scriptFile = File('${tempDir.path}/helper.js');
-      await scriptFile.writeAsString(r'''
+        final tempDir = await Directory.systemTemp.createTemp(
+          'analyze_rule_import_script_test_',
+        );
+        final scriptFile = File('${tempDir.path}/helper.js');
+        await scriptFile.writeAsString(r'''
 !function(root, factory) {
   if (typeof exports === "object" && typeof module !== "undefined") {
     module.exports = factory(require("./core.min"));
@@ -355,28 +437,25 @@ void main() {
 });
 ''');
 
-      try {
-        final analyzer = AnalyzeRule().setContent(htmlStr);
-        final value = await analyzer.getStringAsync(
-          '@js:{{java.importScript("${scriptFile.path}")}}\nHelper.value("ok")',
-        );
+        try {
+          final analyzer = AnalyzeRule().setContent(htmlStr);
+          final value = await analyzer.getStringAsync(
+            '@js:{{java.importScript("${scriptFile.path}")}}\nHelper.value("ok")',
+          );
 
-        expect(value, 'ok!');
-      } finally {
-        if (await tempDir.exists()) {
-          await tempDir.delete(recursive: true);
+          expect(value, 'ok!');
+        } finally {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
         }
-      }
       },
     );
 
     test(
       'getStringListAsync resolves async dynamic rules before css parsing',
       () async {
-        await CookieStore().setCookie(
-          'https://example.com',
-          'selector=.links',
-        );
+        await CookieStore().setCookie('https://example.com', 'selector=.links');
         try {
           final analyzer = AnalyzeRule().setContent(
             htmlStr,
@@ -388,10 +467,7 @@ void main() {
               '{{java.getCookie("https://example.com", "selector")}}@tag.a@href',
               isUrl: true,
             ),
-            [
-              'https://example.com/chapter/1',
-              'https://example.com/chapter/2',
-            ],
+            ['https://example.com/chapter/1', 'https://example.com/chapter/2'],
           );
         } finally {
           await CookieStore().removeCookie('https://example.com');
@@ -400,22 +476,15 @@ void main() {
     );
 
     test('leading standalone comment lines are ignored before json rules', () {
-      final analyzer = AnalyzeRule().setContent({
-        'isvip': true,
-      });
+      final analyzer = AnalyzeRule().setContent({'isvip': true});
 
-      expect(
-        analyzer.getString('// 删掉这行字，vip章节会显示🔓\n\$.isvip'),
-        'true',
-      );
+      expect(analyzer.getString('// 删掉这行字，vip章节会显示🔓\n\$.isvip'), 'true');
     });
 
     test(
       'leading standalone comment lines are ignored before json rules asynchronously',
       () async {
-        final analyzer = AnalyzeRule().setContent({
-          'isvip': true,
-        });
+        final analyzer = AnalyzeRule().setContent({'isvip': true});
 
         expect(
           await analyzer.getStringAsync('// 删掉这行字，vip章节会显示🔓\n\$.isvip'),

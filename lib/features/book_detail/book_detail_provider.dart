@@ -25,6 +25,8 @@ class BookDetailProvider extends ChangeNotifier {
   bool _isInBookshelf = false;
   BookSource? _currentSource;
   BookSource? get currentSource => _currentSource;
+  String? _sourceIssueMessage;
+  String? get sourceIssueMessage => _sourceIssueMessage;
 
   Book get book => _book;
   List<BookChapter> get filteredChapters => _displayChapters;
@@ -35,20 +37,23 @@ class BookDetailProvider extends ChangeNotifier {
   String _searchQuery = '';
   bool _isReversed = false;
   bool get isReversed => _isReversed;
-  
+
   Timer? _debounce;
 
   BookDetailProvider(AggregatedSearchBook searchBook) {
-    _book = searchBook.book is Book ? searchBook.book as Book : Book(
-      bookUrl: searchBook.book.bookUrl,
-      name: searchBook.book.name,
-      author: searchBook.book.author ?? '未知',
-      coverUrl: searchBook.book.coverUrl,
-      intro: searchBook.book.intro,
-      origin: searchBook.book.origin,
-      originName: searchBook.book.originName ?? '發現',
-      type: searchBook.book.type,
-    );
+    _book =
+        searchBook.book is Book
+            ? searchBook.book as Book
+            : Book(
+              bookUrl: searchBook.book.bookUrl,
+              name: searchBook.book.name,
+              author: searchBook.book.author ?? '未知',
+              coverUrl: searchBook.book.coverUrl,
+              intro: searchBook.book.intro,
+              origin: searchBook.book.origin,
+              originName: searchBook.book.originName ?? '發現',
+              type: searchBook.book.type,
+            );
     _init();
   }
 
@@ -67,12 +72,23 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<void> _loadSource() async {
     _currentSource = await _sourceDao.getByUrl(_book.origin);
+    final health = _currentSource?.runtimeHealth;
+    if (health != null &&
+        health.category != SourceHealthCategory.healthy &&
+        !health.allowsReading) {
+      _sourceIssueMessage = health.description;
+    } else {
+      _sourceIssueMessage = null;
+    }
   }
 
   /// 載入書籍詳情 (對標 Android BookInfoViewModel.loadBookInfo)
   /// 從書源獲取完整書籍資訊，包含 tocUrl、簡介、封面等
   Future<void> _loadBookInfo() async {
     if (_currentSource == null) return;
+    if (!_currentSource!.isReadingEnabledByRuntime) {
+      return;
+    }
     try {
       final updatedBook = await _service.getBookInfo(_currentSource!, _book);
       _book = updatedBook;
@@ -91,12 +107,19 @@ class BookDetailProvider extends ChangeNotifier {
 
   Future<void> _loadChapters() async {
     _allChapters = await _chapterDao.getChapters(_book.bookUrl);
-    
+
     if (_allChapters.isEmpty && _currentSource != null) {
+      if (!_currentSource!.isReadingEnabledByRuntime) {
+        _applyFilter();
+        return;
+      }
       try {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
         if (_isInBookshelf) await _chapterDao.insertChapters(_allChapters);
-      } catch (e) { AppLog.e('加載目錄失敗: $e', error: e); }
+      } catch (e) {
+        _sourceIssueMessage = '目前來源目錄載入失敗，建議換源後再試';
+        AppLog.e('加載目錄失敗: $e', error: e);
+      }
     }
     _applyFilter();
   }
@@ -117,7 +140,13 @@ class BookDetailProvider extends ChangeNotifier {
   void _applyFilter() {
     var list = _allChapters;
     if (_searchQuery.isNotEmpty) {
-      list = list.where((c) => c.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+      list =
+          list
+              .where(
+                (c) =>
+                    c.title.toLowerCase().contains(_searchQuery.toLowerCase()),
+              )
+              .toList();
     }
     _displayChapters = _isReversed ? list.reversed.toList() : List.from(list);
     notifyListeners();
@@ -145,14 +174,18 @@ class BookDetailProvider extends ChangeNotifier {
       }
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
-    } catch (e) { AppLog.e('換源失敗: $e', error: e); }
-    finally { _isLoading = false; notifyListeners(); }
+    } catch (e) {
+      AppLog.e('換源失敗: $e', error: e);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> toggleInBookshelf() async {
     _isInBookshelf = !_isInBookshelf;
     _book.isInBookshelf = _isInBookshelf;
-    
+
     if (_isInBookshelf) {
       _isLoading = true;
       notifyListeners();
@@ -174,13 +207,21 @@ class BookDetailProvider extends ChangeNotifier {
       await _bookDao.upsert(_book);
       // 選用：移除書架時是否刪除章節？通常保留以利再次加入
     }
-    
+
     AppEventBus().fire(AppEventBus.upBookshelf);
     notifyListeners();
   }
 
-  Future<void> updateBookInfo(String name, String author, String intro, String coverUrl) async {
-    _book.name = name; _book.author = author; _book.intro = intro; _book.coverUrl = coverUrl;
+  Future<void> updateBookInfo(
+    String name,
+    String author,
+    String intro,
+    String coverUrl,
+  ) async {
+    _book.name = name;
+    _book.author = author;
+    _book.intro = intro;
+    _book.coverUrl = coverUrl;
     if (_isInBookshelf) await _bookDao.upsert(_book);
     notifyListeners();
   }

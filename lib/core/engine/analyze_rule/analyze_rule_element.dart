@@ -27,6 +27,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }
@@ -128,6 +129,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }
@@ -229,6 +231,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }
@@ -339,6 +342,7 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
 
     if (result != null && ruleList.isNotEmpty) {
       for (final sourceRule in ruleList) {
+        result = coerceNullInterimResult(result, sourceRule);
         if (result == null) {
           break;
         }

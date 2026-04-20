@@ -78,6 +78,62 @@ class AsyncJsRewriter {
     return _scan(source, rewrite: true).result;
   }
 
+  /// Normalize legacy template-literal escapes that Rhino-tolerant book source
+  /// rules sometimes emit, such as `` `${callback}\((.*)\)` ``.
+  ///
+  /// QuickJS treats unknown escapes inside untagged template literals as syntax
+  /// errors, while legacy Rhino-style rules often use forms like `\(` as if
+  /// they were plain `(` when composing regex source strings. For compatibility
+  /// we drop the invalid backslash and keep the following character.
+  static String normalizeLegacyTemplateEscapes(String source) {
+    if (!source.contains('`') || !source.contains(r'\')) {
+      return source;
+    }
+
+    final sb = StringBuffer();
+    final n = source.length;
+    var i = 0;
+    while (i < n) {
+      final c = source.codeUnitAt(i);
+      if (c == _slash && i + 1 < n) {
+        final next = source.codeUnitAt(i + 1);
+        if (next == _slash) {
+          final end = source.indexOf('\n', i);
+          final stop = end == -1 ? n : end;
+          sb.write(source.substring(i, stop));
+          i = stop;
+          continue;
+        }
+        if (next == _star) {
+          final end = source.indexOf('*/', i + 2);
+          final stop = end == -1 ? n : end + 2;
+          sb.write(source.substring(i, stop));
+          i = stop;
+          continue;
+        }
+        if (_isRegexLiteralStart(source, i)) {
+          final endIdx = _skipRegexLiteral(source, i);
+          sb.write(source.substring(i, endIdx));
+          i = endIdx;
+          continue;
+        }
+      }
+      if (c == _dquote || c == _squote) {
+        final endIdx = _skipString(source, i, c);
+        sb.write(source.substring(i, endIdx));
+        i = endIdx;
+        continue;
+      }
+      if (c == _backtick) {
+        i = _appendNormalizedTemplateLiteral(source, i, sb);
+        continue;
+      }
+      sb.writeCharCode(c);
+      i++;
+    }
+    return sb.toString();
+  }
+
   // ─── internal ────────────────────────────────────────────────────────
 
   static _ScanResult _scan(String source, {required bool rewrite}) {
@@ -503,6 +559,120 @@ class AsyncJsRewriter {
     return cu == _space || cu == _tab || cu == _lf || cu == _cr;
   }
 
+  static int _appendNormalizedTemplateLiteral(
+    String source,
+    int startIdx,
+    StringBuffer sb,
+  ) {
+    final n = source.length;
+    var i = startIdx;
+    sb.writeCharCode(_backtick);
+    i++;
+    while (i < n) {
+      final c = source.codeUnitAt(i);
+      if (c == _backslash) {
+        if (i + 1 >= n) {
+          sb.writeCharCode(_backslash);
+          return n;
+        }
+        final next = source.codeUnitAt(i + 1);
+        if (_isValidTemplateEscapeStart(next)) {
+          sb.write(source.substring(i, i + 2));
+        } else {
+          sb.writeCharCode(next);
+        }
+        i += 2;
+        continue;
+      }
+      if (c == _dollar && i + 1 < n && source.codeUnitAt(i + 1) == _lbrace) {
+        sb.write(r'${');
+        i = _appendTemplateInterpolation(source, i + 2, sb);
+        continue;
+      }
+      sb.writeCharCode(c);
+      i++;
+      if (c == _backtick) {
+        return i;
+      }
+    }
+    return n;
+  }
+
+  static int _appendTemplateInterpolation(
+    String source,
+    int startIdx,
+    StringBuffer sb,
+  ) {
+    final n = source.length;
+    var depth = 1;
+    var i = startIdx;
+    while (i < n && depth > 0) {
+      final c = source.codeUnitAt(i);
+      if (c == _slash && i + 1 < n) {
+        final next = source.codeUnitAt(i + 1);
+        if (next == _slash) {
+          final end = source.indexOf('\n', i);
+          final stop = end == -1 ? n : end;
+          sb.write(source.substring(i, stop));
+          i = stop;
+          continue;
+        }
+        if (next == _star) {
+          final end = source.indexOf('*/', i + 2);
+          final stop = end == -1 ? n : end + 2;
+          sb.write(source.substring(i, stop));
+          i = stop;
+          continue;
+        }
+        if (_isRegexLiteralStart(source, i)) {
+          final endIdx = _skipRegexLiteral(source, i);
+          sb.write(source.substring(i, endIdx));
+          i = endIdx;
+          continue;
+        }
+      }
+      if (c == _dquote || c == _squote) {
+        final endIdx = _skipString(source, i, c);
+        sb.write(source.substring(i, endIdx));
+        i = endIdx;
+        continue;
+      }
+      if (c == _backtick) {
+        i = _appendNormalizedTemplateLiteral(source, i, sb);
+        continue;
+      }
+      sb.writeCharCode(c);
+      if (c == _lbrace) {
+        depth++;
+      } else if (c == _rbrace) {
+        depth--;
+      }
+      i++;
+    }
+    return i;
+  }
+
+  static bool _isValidTemplateEscapeStart(int cu) {
+    return cu == _backslash ||
+        cu == _backtick ||
+        cu == _dollar ||
+        cu == _dquote ||
+        cu == _squote ||
+        cu == _char0 ||
+        cu == _charLowerB ||
+        cu == _charLowerF ||
+        cu == _charLowerN ||
+        cu == _charLowerR ||
+        cu == _charLowerT ||
+        cu == _charLowerV ||
+        cu == _charLowerX ||
+        cu == _charLowerU ||
+        cu == _charUpperX ||
+        cu == _charUpperU ||
+        cu == _lf ||
+        cu == _cr;
+  }
+
   // ─── char code constants ─────────────────────────────────────────────
   static const int _slash = 0x2F;
   static const int _star = 0x2A;
@@ -541,8 +711,18 @@ class AsyncJsRewriter {
   static const int _char0 = 0x30;
   static const int _char9 = 0x39;
   static const int _charUpperA = 0x41;
+  static const int _charUpperU = 0x55;
+  static const int _charUpperX = 0x58;
   static const int _charUpperZ = 0x5A;
   static const int _charLowerA = 0x61;
+  static const int _charLowerB = 0x62;
+  static const int _charLowerF = 0x66;
+  static const int _charLowerN = 0x6E;
+  static const int _charLowerR = 0x72;
+  static const int _charLowerT = 0x74;
+  static const int _charLowerU = 0x75;
+  static const int _charLowerV = 0x76;
+  static const int _charLowerX = 0x78;
   static const int _charLowerZ = 0x7A;
 
   static const Set<String> _javaGetResponseMembers = {

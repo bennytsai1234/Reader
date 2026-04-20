@@ -91,7 +91,135 @@ void main() {
     );
 
     expect(result.chapters, hasLength(2));
-    expect(result.chapters.map((chapter) => chapter.title), <String>['第一章', '第二章']);
+    expect(result.chapters.map((chapter) => chapter.title), <String>[
+      '第一章',
+      '第二章',
+    ]);
     expect(result.nextUrls, isEmpty);
+  });
+
+  test(
+    'ChapterListParser exposes chapter context during chapterUrl js evaluation',
+    () async {
+      final source = BookSource.fromJson({
+        'bookSourceUrl': 'https://example.com',
+        'bookSourceName': '章節上下文測試書源',
+        'ruleToc': {
+          'chapterList': 'li',
+          'chapterName': 'a@text',
+          'chapterUrl': r'''<js>
+chapter.putVariable("capturedTitle", chapter.title);
+chapter.putVariable("capturedHref", java.getString("a@href"));
+java.getString("a@href");
+</js>''',
+        },
+      });
+      final book = Book(
+        bookUrl: 'https://example.com/book/1',
+        tocUrl: 'https://example.com/book/1/index.html',
+        origin: 'https://example.com',
+        originName: '章節上下文測試書源',
+      );
+
+      const tocHtml = '''
+<ul class="chapters">
+  <li><a href="/chapter/1">第一章</a></li>
+  <li><a href="/chapter/2">第二章</a></li>
+</ul>
+''';
+
+      final result = await ChapterListParser.parse(
+        source: source,
+        book: book,
+        body: tocHtml,
+        baseUrl: book.tocUrl,
+      );
+
+      expect(result.chapters, hasLength(2));
+      expect(result.chapters[0].title, '第一章');
+      expect(result.chapters[0].url, 'https://example.com/chapter/1');
+      expect(result.chapters[0].getVariable('capturedTitle'), '第一章');
+      expect(result.chapters[0].getVariable('capturedHref'), '/chapter/1');
+    },
+  );
+
+  test(
+    'ChapterListParser accepts Jsoup selection results returned from js rules',
+    () async {
+      final source = BookSource.fromJson({
+        'bookSourceUrl': 'https://example.com',
+        'bookSourceName': 'Jsoup 目录回传测试书源',
+        'ruleToc': {
+          'chapterList': r'''<js>
+org.jsoup.Jsoup.parse('<div><a href="/chapter/1">第一章</a><a href="/chapter/2">第二章</a></div>').select('a')
+</js>''',
+          'chapterName': 'text',
+          'chapterUrl': 'href',
+        },
+      });
+      final book = Book(
+        bookUrl: 'https://example.com/book/1',
+        tocUrl: 'https://example.com/book/1/index.html',
+        origin: 'https://example.com',
+        originName: 'Jsoup 目录回传测试书源',
+      );
+
+      final result = await ChapterListParser.parse(
+        source: source,
+        book: book,
+        body: '<html></html>',
+        baseUrl: book.tocUrl,
+      );
+
+      expect(result.chapters, hasLength(2));
+      expect(result.chapters[0].title, '第一章');
+      expect(result.chapters[0].url, 'https://example.com/chapter/1');
+      expect(result.chapters[1].title, '第二章');
+      expect(result.chapters[1].url, 'https://example.com/chapter/2');
+    },
+  );
+
+  test('ChapterListParser supports legado legacy regex toc rules', () async {
+    final source = BookSource.fromJson({
+      'bookSourceUrl': 'https://example.com',
+      'bookSourceName': 'Legacy Regex 目录书源',
+      'ruleToc': {
+        'chapterList': r':(?s)(\d+)" class="(isvip)?[^"]*name[^>]*>([^<]*)',
+        'chapterName': r'$2$3',
+        'chapterUrl': r'https://a.heiyan.com/ajax/chapter/content/$1',
+      },
+    });
+    final book = Book(
+      bookUrl: 'https://example.com/book/1',
+      tocUrl: 'https://example.com/chapter/1',
+      origin: 'https://example.com',
+      originName: 'Legacy Regex 目录书源',
+    );
+
+    const tocHtml = '''
+<ul class="float-list fill-block">
+  <li><a href="https://www.heiyan.com/book/143131/11804588" class="name">第一章</a></li>
+  <li><a href="https://www.heiyan.com/book/143131/11804591" class="isvip name">第二章</a></li>
+</ul>
+''';
+
+    final result = await ChapterListParser.parse(
+      source: source,
+      book: book,
+      body: tocHtml,
+      baseUrl: book.tocUrl,
+    );
+
+    expect(result.chapters, hasLength(2));
+    expect(result.chapters[0].title, '第一章');
+    expect(
+      result.chapters[0].url,
+      'https://a.heiyan.com/ajax/chapter/content/11804588',
+    );
+    expect(result.chapters[1].title, 'isvip第二章');
+    expect(
+      result.chapters[1].url,
+      'https://a.heiyan.com/ajax/chapter/content/11804591',
+    );
   });
 }

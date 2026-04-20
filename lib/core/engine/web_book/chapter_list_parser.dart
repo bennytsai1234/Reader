@@ -77,40 +77,57 @@ class ChapterListParser {
         source: source,
         ruleData: book,
       ).setContent(elements[i], baseUrl: baseUrl);
+      final chapter = BookChapter(
+        baseUrl: baseUrl,
+        bookUrl: book.bookUrl,
+        index: i,
+      );
+      itemRule.setChapter(chapter);
 
-      final title = await _readString(
+      chapter.title = await _readString(
         itemRule,
         chapterNameRule,
         needsAsync: chapterNameRuleNeedsAsync,
       );
-      if (title.isEmpty) continue;
+      if (chapter.title.isEmpty) continue;
 
-      var url = await _readString(
+      chapter.url = await _readString(
         itemRule,
         chapterUrlRule,
         needsAsync: chapterUrlRuleNeedsAsync,
         isUrl: true,
       );
-      final updateTime = await _readString(
+      chapter.tag = await _readString(
         itemRule,
         updateTimeRule,
         needsAsync: updateTimeRuleNeedsAsync,
       );
-      final isVolume = _isTrue(
+      chapter.isVolume = _isTrue(
         await _readString(
           itemRule,
           isVolumeRule,
           needsAsync: isVolumeRuleNeedsAsync,
         ),
       );
-      final isVip = _isTrue(
+
+      // 空 URL 後備處理 (對標 Android 邏輯)
+      if (chapter.url.isEmpty) {
+        if (chapter.isVolume) {
+          // 卷標題若無 url，使用 "title + index" 構造唯一標識避免 LinkedHashSet 去重誤判
+          chapter.url = '${chapter.title}$i';
+        } else {
+          chapter.url = baseUrl;
+        }
+      }
+
+      chapter.isVip = _isTrue(
         await _readString(
           itemRule,
           isVipRule,
           needsAsync: isVipRuleNeedsAsync,
         ),
       );
-      final isPay = _isTrue(
+      chapter.isPay = _isTrue(
         await _readString(
           itemRule,
           isPayRule,
@@ -118,30 +135,7 @@ class ChapterListParser {
         ),
       );
 
-      // 空 URL 後備處理 (對標 Android 邏輯)
-      if (url.isEmpty) {
-        if (isVolume) {
-          // 卷標題若無 url，使用 "title + index" 構造唯一標識避免 LinkedHashSet 去重誤判
-          url = '$title$i';
-        } else {
-          url = baseUrl;
-        }
-      }
-
-      chapters.add(
-        BookChapter(
-          title: title,
-          url: url,
-          baseUrl: baseUrl,
-          bookUrl: book.bookUrl,
-          isVolume: isVolume,
-          isVip: isVip,
-          isPay: isPay,
-          tag: updateTime.isNotEmpty ? updateTime : null,
-          // index 在 WebBook 統一重新編號後才是最終值
-          index: i,
-        ),
-      );
+      chapters.add(chapter);
       if (maxChapters != null && chapters.length >= maxChapters) {
         return ChapterListResult(
           chapters: chapters,

@@ -62,17 +62,19 @@ class JsEngine {
       return _mockEvaluate(jsCode, context);
     }
 
-    if (AsyncJsRewriter.needsAsync(jsCode)) {
+    final normalizedJs = AsyncJsRewriter.normalizeLegacyTemplateEscapes(jsCode);
+
+    if (AsyncJsRewriter.needsAsync(normalizedJs)) {
       AppLog.e(
         'JsEngine.evaluate() called with async JS; '
         'switch caller to evaluateAsync(). Source prefix: '
-        '${jsCode.substring(0, jsCode.length.clamp(0, 120))}',
+        '${normalizedJs.substring(0, normalizedJs.length.clamp(0, 120))}',
       );
     }
 
     _injectContext(context);
     _ensureSourceJsLibLoadedSync();
-    final result = _evaluateRuleScript(jsCode);
+    final result = _evaluateRuleScript(normalizedJs);
     return _decodeContextValue(result.rawResult);
   }
 
@@ -90,20 +92,17 @@ class JsEngine {
       return _mockEvaluate(jsCode, context);
     }
 
-    if (!AsyncJsRewriter.needsAsync(jsCode)) {
-      // Fast path: 純同步 rule JS
-      _injectContext(context);
-      _ensureSourceJsLibLoadedSync();
-      final res = _evaluateRuleScript(jsCode);
-      if (res.isError) {
-        throw StateError('rule JS evaluate error: ${res.stringResult}');
-      }
-      return _decodeContextValue(res.rawResult);
+    final normalizedJs = AsyncJsRewriter.normalizeLegacyTemplateEscapes(jsCode);
+
+    // Sync-only 規則不需要 Promise bridge。直接走同步路徑可避免額外包裝
+    // 干擾原本就合法的 searchUrl / tocUrl 組裝腳本。
+    if (!AsyncJsRewriter.needsAsync(normalizedJs)) {
+      return evaluate(normalizedJs, context: context);
     }
 
     _injectContext(context);
     await _ensureSourceJsLibLoadedAsync();
-    final rewritten = AsyncJsRewriter.rewrite(jsCode);
+    final rewritten = AsyncJsRewriter.rewrite(normalizedJs);
     final (callId, future) = _extensions!.registerRuleCall();
     final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
 
@@ -149,9 +148,7 @@ class JsEngine {
     }
     final result = _runtime!.evaluate(resolved);
     if (result.isError) {
-      AppLog.e(
-        'JsEngine source jsLib sync load error: ${result.stringResult}',
-      );
+      AppLog.e('JsEngine source jsLib sync load error: ${result.stringResult}');
       return;
     }
     _loadedSourceJsLibKey = jsLib;
@@ -302,7 +299,10 @@ class JsEngine {
         trimmed,
         options: Options(responseType: ResponseType.bytes),
       );
-      final content = utf8.decode(response.data ?? const <int>[], allowMalformed: true);
+      final content = utf8.decode(
+        response.data ?? const <int>[],
+        allowMalformed: true,
+      );
       _resolvedJsLibCache[trimmed] = content;
       return content;
     }
@@ -310,14 +310,23 @@ class JsEngine {
   }
 
   JsEvalResult _evaluateRuleScript(String jsCode) {
-    final wrapped = 'eval(${jsonEncode(jsCode)})';
+    final wrapped =
+        'typeof __lrNormalizeRuleResult === "function" '
+        '? __lrNormalizeRuleResult(eval(${jsonEncode(jsCode)})) '
+        ': eval(${jsonEncode(jsCode)})';
     final result = _runtime!.evaluate(wrapped);
     if (!result.isError) {
       return result;
     }
     // 某些 legacy rule 在 eval(...) 路徑會被 QuickJS 誤判語法，
-    // 退回原生 evaluate 以保住兼容性。
-    return _runtime!.evaluate(jsCode);
+    // 改走 IIFE + final-return 注入，既保留最後表達式結果，也讓 normalize
+    // 邏輯繼續生效。
+    final fallbackBody = JsRuleAsyncWrapper.injectFinalReturn(jsCode);
+    final fallbackWrapped =
+        'typeof __lrNormalizeRuleResult === "function" '
+        '? __lrNormalizeRuleResult((function() {\n$fallbackBody\n})()) '
+        ': (function() {\n$fallbackBody\n})()';
+    return _runtime!.evaluate(fallbackWrapped);
   }
 
   void _injectContext(Map<String, dynamic>? context) {
@@ -436,6 +445,34 @@ class JsEngine {
     );
     return null;
   };
+  if ($scopeLiteral === "book") {
+    obj.setReverseToc = function(value) {
+      sendMessage(
+        'scopedObjectSetField',
+        JSON.stringify([$scopeLiteral, 'reverseToc', !!value])
+      );
+      return null;
+    };
+    obj.getReverseToc = function() {
+      return !!sendMessage(
+        'scopedObjectGetField',
+        JSON.stringify([$scopeLiteral, 'reverseToc'])
+      );
+    };
+    obj.setUseReplaceRule = function(value) {
+      sendMessage(
+        'scopedObjectSetField',
+        JSON.stringify([$scopeLiteral, 'useReplaceRule', !!value])
+      );
+      return null;
+    };
+    obj.getUseReplaceRule = function() {
+      return !!sendMessage(
+        'scopedObjectGetField',
+        JSON.stringify([$scopeLiteral, 'useReplaceRule'])
+      );
+    };
+  }
   return obj;
 })()
 ''';

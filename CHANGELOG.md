@@ -4,6 +4,29 @@
 
 ---
 
+## [0.2.4] — 2026-04-20
+
+### 新功能 / 整合
+
+- **書源相容層大幅補強（對標 Legado）**：補齊大量 URL、Regex、CSS、JsonPath、JS bridge 與章節解析差異，前 `1-300` 個純小說源的主要共性缺口已大幅收斂
+- **書源狀態系統接入 App**：校驗結果不再只停留在工具輸出，現在會直接落成書源狀態、標籤與註解，並反映在書源管理頁
+- **執行期隔離策略上線**：搜尋失效、詳情失效、目錄失效、正文失效、上游異常、下載站、需要登入、非小說源等狀態，現在會影響搜尋池、閱讀可用性與清理建議
+- **閱讀失敗換源流程**：正文或章節失敗時，閱讀器可直接自動換源或手動換源，並保留閱讀進度
+
+### 體驗優化
+
+- **移除回應時間 UI**：書源管理、書籍詳情換源與相關選單不再顯示 `ms` 響應時間，也移除依響應時間排序
+- **純小說產品策略落地**：非小說源、下載站與需要登入的來源會被明確標示，並可在校驗結果中集中清理
+- **書源管理頁強化**：新增校驗結果摘要、結果對話框與批次刪除建議來源流程
+
+### 修復
+
+- 修正多種 `POST redirect`、JSONP、async JS、舊式 Regex、`Map` 動態 URL、Jsoup/CSS selector 與 `chapter.putVariable(...)` 相關解析差異
+- 修正搜尋、詳情、目錄、正文之間的資料傳遞斷點，減少「搜尋能進、閱讀失敗」的鏈路落差
+- 修正 cookie 容錯與部分慢源 / 壞源分類，讓校驗結果更接近實際可用性
+
+---
+
 ## [0.2.1] — 2026-04-10
 
 ### 增強
@@ -89,6 +112,7 @@
 ---
 
 [0.2.1]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.1
+[0.2.4]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.4
 [0.2.0]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.0
 [0.1.9]: https://github.com/bennytsai1234/reader/releases/tag/v0.1.9
 [0.1.8]: https://github.com/bennytsai1234/reader/releases/tag/v0.1.8

@@ -97,19 +97,29 @@ class SearchScope {
 
     if (_scope.isEmpty) {
       // 全部啟用書源
-      return _sortSources(await dao.getEnabled());
+      return _sortSources(
+        (await dao.getEnabled())
+            .where((source) => source.isSearchEnabledByRuntime)
+            .toList(),
+      );
     }
 
     if (_scope.contains('::')) {
       // 單一書源
       final url = _scope.substring(_scope.indexOf('::') + 2);
       final source = await dao.getByUrl(url);
-      return source != null ? _sortSources([source]) : [];
+      if (source == null || !source.isSearchEnabledByRuntime) {
+        return [];
+      }
+      return _sortSources([source]);
     }
 
     // 分組模式
     final groups = _scope.split(',').where((s) => s.isNotEmpty).toList();
-    final allEnabled = await dao.getEnabled();
+    final allEnabled =
+        (await dao.getEnabled())
+            .where((source) => source.isSearchEnabledByRuntime)
+            .toList();
     final result = <BookSource>[];
     final validGroups = <String>[];
 
@@ -128,7 +138,11 @@ class SearchScope {
     // 若分組內已無可用書源，退回全部
     if (result.isEmpty) {
       _scope = '';
-      return _sortSources(await dao.getEnabled());
+      return _sortSources(
+        (await dao.getEnabled())
+            .where((source) => source.isSearchEnabledByRuntime)
+            .toList(),
+      );
     }
 
     // 清理無效分組

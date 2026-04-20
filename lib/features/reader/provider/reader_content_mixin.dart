@@ -44,8 +44,19 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   int? _pendingRecenterChapterIndex;
   final ReaderContentCoordinator _contentCoordinator =
       const ReaderContentCoordinator();
+  final Map<int, String> _chapterFailureMessages = <int, String>{};
 
   List<String> _chapterDisplayTitles = const [];
+
+  String? chapterFailureMessage(int chapterIndex) =>
+      _chapterFailureMessages[chapterIndex];
+
+  bool hasChapterFailure(int chapterIndex) =>
+      _chapterFailureMessages.containsKey(chapterIndex);
+
+  void clearChapterFailure(int chapterIndex) {
+    _chapterFailureMessages.remove(chapterIndex);
+  }
 
   /// Inject typed callbacks from ReadBookController.
   set contentCallbacks(ContentCallbacks callbacks) =>
@@ -672,7 +683,14 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
   Future<FetchResult> _fetchChapterData(int i) async {
     final chapter = chapters[i];
     AppLog.d('Reader: Fetching content for chapter $i: ${chapter.title}');
-    return _chapterContentLoader!.load(i, chapter);
+    final result = await _chapterContentLoader!.load(i, chapter);
+    if (result.failureMessage == null ||
+        result.failureMessage!.trim().isEmpty) {
+      _chapterFailureMessages.remove(i);
+    } else {
+      _chapterFailureMessages[i] = result.failureMessage!;
+    }
+    return result;
   }
 
   String? _nextReadableChapterUrl(int currentIndex) {
@@ -698,6 +716,7 @@ mixin ReaderContentMixin on ReaderProviderBase, ReaderSettingsMixin {
     _contentManager?.dispose();
     _contentManager = null;
     _chapterContentLoader = null;
+    _chapterFailureMessages.clear();
   }
 
   bool _shouldNotifyChapterReady(int chapterIndex) {

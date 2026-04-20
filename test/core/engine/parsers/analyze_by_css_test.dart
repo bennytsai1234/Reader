@@ -235,10 +235,7 @@ void main() {
         <div class="section plain"><span>B</span></div>
         ''');
 
-      expect(
-        helper.getString('@CSS:.section:not(:has(a))@text'),
-        'B',
-      );
+      expect(helper.getString('@CSS:.section:not(:has(a))@text'), 'B');
     });
 
     test('19. nth-of-type with sibling combinator matches TOC anchors', () {
@@ -254,10 +251,10 @@ void main() {
         </div>
         ''');
 
-      expect(
-        helper.getStringList('#list@dt:nth-of-type(2)~a@href'),
-        ['/1', '/2'],
-      );
+      expect(helper.getStringList('#list@dt:nth-of-type(2)~a@href'), [
+        '/1',
+        '/2',
+      ]);
     });
 
     test('20. nth-child and eq pseudos match Jsoup-style structure rules', () {
@@ -274,6 +271,21 @@ void main() {
         ['二', '三'],
       );
       expect(helper.getString('@CSS:.stats > li:eq(1) span@text'), '二');
+    });
+
+    test('21. regex attribute selectors match legado-style href patterns', () {
+      final helper = AnalyzeByCss('''
+        <div class="chapters">
+          <a href="/read/1001">第一章</a>
+          <a href="/read/1002">第二章</a>
+          <a href="/book/1003">不是章节</a>
+        </div>
+        ''');
+
+      expect(helper.getStringList('@CSS:a[href~=/read/\\d+]@text'), [
+        '第一章',
+        '第二章',
+      ]);
     });
   });
 }

@@ -5,6 +5,43 @@ import '../book.dart';
 
 /// Book 業務邏輯擴展
 extension BookLogic on Book {
+  void overwriteFrom(Book other) {
+    bookUrl = other.bookUrl;
+    tocUrl = other.tocUrl;
+    origin = other.origin;
+    originName = other.originName;
+    name = other.name;
+    author = other.author;
+    kind = other.kind;
+    customTag = other.customTag;
+    coverUrl = other.coverUrl;
+    customCoverUrl = other.customCoverUrl;
+    intro = other.intro;
+    customIntro = other.customIntro;
+    charset = other.charset;
+    type = other.type;
+    group = other.group;
+    latestChapterTitle = other.latestChapterTitle;
+    latestChapterTime = other.latestChapterTime;
+    lastCheckTime = other.lastCheckTime;
+    lastCheckCount = other.lastCheckCount;
+    totalChapterNum = other.totalChapterNum;
+    durChapterTitle = other.durChapterTitle;
+    durChapterIndex = other.durChapterIndex;
+    durChapterPos = other.durChapterPos;
+    durChapterTime = other.durChapterTime;
+    wordCount = other.wordCount;
+    canUpdate = other.canUpdate;
+    order = other.order;
+    originOrder = other.originOrder;
+    variable = other.variable;
+    readConfig = other.readConfig;
+    syncTime = other.syncTime;
+    isInBookshelf = other.isInBookshelf;
+    infoHtml = other.infoHtml;
+    tocHtml = other.tocHtml;
+  }
+
   void setVariable(String key, String value) {
     var map = variableMap;
     map[key] = value;
@@ -45,9 +82,10 @@ extension BookLogic on Book {
 
     return newBook.copyWith(
       durChapterIndex: alignedIndex,
-      durChapterTitle: (toc != null && alignedIndex < toc.length)
-          ? toc[alignedIndex].title
-          : durChapterTitle,
+      durChapterTitle:
+          (toc != null && alignedIndex < toc.length)
+              ? toc[alignedIndex].title
+              : durChapterTitle,
       durChapterPos: durChapterPos,
       durChapterTime: durChapterTime,
       group: group,
@@ -101,4 +139,3 @@ extension BookLogic on Book {
     return null;
   }
 }
-

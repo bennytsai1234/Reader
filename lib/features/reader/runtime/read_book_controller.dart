@@ -6,6 +6,8 @@ import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/models/search_book.dart';
+import 'package:inkpage_reader/core/services/source_switch_service.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
@@ -52,6 +54,7 @@ class ReadBookController extends ReaderProviderBase
       ReaderScrollVisibilityCoordinator();
   final ReaderDisplayCoordinator _displayCoordinator =
       const ReaderDisplayCoordinator();
+  final SourceSwitchService _sourceSwitchService = SourceSwitchService();
   late final ReaderProgressCoordinator _progressCoordinator;
   late final ReaderSessionState _sessionState;
   late final ReaderSessionCoordinator _sessionCoordinator;
@@ -59,6 +62,8 @@ class ReadBookController extends ReaderProviderBase
   bool _initialSessionPrimed = false;
   DateTime? _ignoreViewportChangesUntil;
   bool _pendingRepaginateForLatestViewport = false;
+  bool _isSwitchingSource = false;
+  String? _sourceSwitchMessage;
 
   /// 初始章節字元偏移（由呼叫方傳入，用於還原閱讀位置）
   int initialCharOffset = 0;
@@ -125,6 +130,10 @@ class ReadBookController extends ReaderProviderBase
   ReaderLocation get visibleLocation => _sessionCoordinator.visibleLocation;
   ReaderLocation get durableLocation => _sessionCoordinator.durableLocation;
   ReaderSessionPhase get sessionPhase => _sessionCoordinator.phase;
+  bool get isSwitchingSource => _isSwitchingSource;
+  String? get sourceSwitchMessage => _sourceSwitchMessage;
+  String? get currentChapterFailureMessage =>
+      chapterFailureMessage(currentChapterIndex);
 
   ReadAloudController _buildReadAloudController() {
     return ReadAloudController(
@@ -430,7 +439,6 @@ class ReadBookController extends ReaderProviderBase
       if (isDisposed) return;
     }
 
-
     // Apply restore position + transition to ready in ONE update
     batchUpdate(() {
       bootstrapChapterWindow(currentChapterIndex);
@@ -624,7 +632,10 @@ class ReadBookController extends ReaderProviderBase
 
   /// 當目前頁接近所在章節的末尾或開頭時，提前觸發相鄰章節的優先預載。
   /// [lookAheadPages]：距邊界幾頁內開始預載（預設 3 頁）。
-  void _prefetchSlideNeighborIfNearBoundary(int globalPageIndex, {int lookAheadPages = 3}) {
+  void _prefetchSlideNeighborIfNearBoundary(
+    int globalPageIndex, {
+    int lookAheadPages = 3,
+  }) {
     if (!hasContentManager || slidePages.isEmpty) return;
     if (globalPageIndex < 0 || globalPageIndex >= slidePages.length) return;
 
@@ -854,12 +865,123 @@ class ReadBookController extends ReaderProviderBase
     if (index >= 0 && index < chapters.length) {
       chapters[index].content = content;
       contentManager.putContent(index, content);
+      clearChapterFailure(index);
       chapterPagesCache.remove(index);
       _chapterRuntimeCache.remove(index);
       if (index == currentChapterIndex) {
         unawaited(loadChapter(index, reason: ReaderCommandReason.system));
       }
       notifyListeners();
+    }
+  }
+
+  Future<bool> autoChangeSourceForCurrentChapter() async {
+    if (_isSwitchingSource) return false;
+    _isSwitchingSource = true;
+    _sourceSwitchMessage = '正在尋找可用來源...';
+    notifyListeners();
+
+    try {
+      final resolution = await _sourceSwitchService.autoResolveSwitch(
+        book,
+        targetChapterIndex: currentChapterIndex,
+        targetChapterTitle: currentChapterTitle,
+      );
+      if (resolution == null) {
+        _sourceSwitchMessage = '找不到可自動切換的可用來源';
+        notifyListeners();
+        return false;
+      }
+      await _applySourceSwitchResolution(resolution);
+      _sourceSwitchMessage = '已切換到 ${resolution.source.bookSourceName}';
+      notifyListeners();
+      return true;
+    } catch (error) {
+      _sourceSwitchMessage = '自動換源失敗: $error';
+      notifyListeners();
+      return false;
+    } finally {
+      _isSwitchingSource = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> changeBookSourceTo(SearchBook searchBook) async {
+    if (_isSwitchingSource) return;
+    _isSwitchingSource = true;
+    _sourceSwitchMessage = '正在切換來源...';
+    notifyListeners();
+
+    try {
+      final resolution = await _sourceSwitchService.resolveSwitch(
+        book,
+        searchBook,
+        targetChapterIndex: currentChapterIndex,
+        targetChapterTitle: currentChapterTitle,
+        validateTargetContent: true,
+      );
+      await _applySourceSwitchResolution(resolution);
+      _sourceSwitchMessage = '已切換到 ${resolution.source.bookSourceName}';
+    } catch (error) {
+      _sourceSwitchMessage = '換源失敗: $error';
+      rethrow;
+    } finally {
+      _isSwitchingSource = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _applySourceSwitchResolution(
+    SourceSwitchResolution resolution,
+  ) async {
+    final oldBookUrl = book.bookUrl;
+    final newBook = resolution.migratedBook;
+    book.overwriteFrom(newBook);
+    source = resolution.source;
+    chapters = resolution.chapters;
+    clearChapterFailure(resolution.targetChapterIndex);
+
+    await refreshChapterDisplayTitles(notify: false);
+    disposeContentManager();
+    initContentManager();
+
+    if (resolution.validatedContent != null &&
+        resolution.targetChapterIndex >= 0 &&
+        resolution.targetChapterIndex < chapters.length) {
+      chapters[resolution.targetChapterIndex].content =
+          resolution.validatedContent;
+      contentManager.putContent(
+        resolution.targetChapterIndex,
+        resolution.validatedContent!,
+      );
+    }
+
+    if (book.isInBookshelf) {
+      if (oldBookUrl != book.bookUrl) {
+        await bookDao.deleteByUrl(oldBookUrl);
+        await chapterDao.deleteByBook(oldBookUrl);
+      }
+      await chapterDao.deleteByBook(book.bookUrl);
+      await bookDao.upsert(book);
+      await chapterDao.insertChapters(chapters);
+    }
+
+    _updateSessionLocation(
+      ReaderLocation(
+        chapterIndex: resolution.targetChapterIndex,
+        charOffset: book.durChapterPos,
+      ),
+    );
+    await loadChapter(
+      resolution.targetChapterIndex,
+      reason: ReaderCommandReason.system,
+    );
+    if (book.durChapterPos > 0) {
+      jumpToChapterCharOffset(
+        chapterIndex: resolution.targetChapterIndex,
+        charOffset: book.durChapterPos,
+        reason: ReaderCommandReason.system,
+      );
     }
   }
 

@@ -9,7 +9,11 @@ List<Element> querySelectorAllCompat(Element root, String selector) {
     return _querySelectorAllUnsupportedCompat(root, normalizedSelector);
   }
   try {
-    return root.querySelectorAll(normalizedSelector);
+    final matches = root.querySelectorAll(normalizedSelector);
+    if (_shouldIncludeRootMatch(root, normalizedSelector)) {
+      return [root, ...matches];
+    }
+    return matches;
   } on UnimplementedError {
     return _querySelectorAllUnsupportedCompat(root, normalizedSelector);
   } catch (_) {
@@ -32,9 +36,10 @@ bool matchesSelectorWithinParentCompat(Element temp, String selector) {
     }
   }
   try {
-    return _querySelectorAllFromContainer(temp.parentNode, trimmed).contains(
-      temp,
-    );
+    return _querySelectorAllFromContainer(
+      temp.parentNode,
+      trimmed,
+    ).contains(temp);
   } catch (_) {
     return false;
   }
@@ -56,13 +61,26 @@ List<Element> _querySelectorAllUnsupportedCompat(
       matches.add(element);
     }
   }
-  return root.querySelectorAll('*').where(matches.contains).toList();
+  final ordered = <Element>[];
+  if (_shouldIncludeRootMatch(root, selector) && matches.contains(root)) {
+    ordered.add(root);
+  }
+  ordered.addAll(root.querySelectorAll('*').where(matches.contains));
+  return ordered;
+}
+
+bool _shouldIncludeRootMatch(Element root, String selector) {
+  if (root.localName == 'html') {
+    return false;
+  }
+  return _matchesSelectorAgainstElement(root, selector);
 }
 
 bool _needsCompatSelector(String selector) {
   return selector.contains(':contains(') ||
       selector.contains(':containsOwn(') ||
       selector.contains(':has(') ||
+      _hasRegexAttributeSelector(selector) ||
       selector.contains(':eq(') ||
       selector.contains(':nth-child(') ||
       selector.contains(':nth-last-child(') ||
@@ -96,9 +114,9 @@ List<Element> _querySelectorGroupCompat(Element root, String selector) {
     }
   }
 
-  return candidates.where(
-    (element) => _matchesSelectorAgainstElement(element, selector),
-  ).toList();
+  return candidates
+      .where((element) => _matchesSelectorAgainstElement(element, selector))
+      .toList();
 }
 
 bool _matchesSelectorAgainstElement(Element element, String selector) {
@@ -126,7 +144,10 @@ bool _matchesSelectorPathFrom(
   return false;
 }
 
-Iterable<Element> _relatedElementsForCombinator(Element element, String combinator) sync* {
+Iterable<Element> _relatedElementsForCombinator(
+  Element element,
+  String combinator,
+) sync* {
   switch (combinator) {
     case '>':
       final parent = element.parent;
@@ -158,6 +179,12 @@ bool _matchesCompoundSelector(Element element, String compound) {
   final parsed = _parsedCompoundSelectorFor(compound);
   if (!_matchesBaseSelector(element, parsed.baseSelector)) {
     return false;
+  }
+  for (final attributeRegex in parsed.attributeRegexes) {
+    final value = element.attributes[attributeRegex.name] ?? '';
+    if (!attributeRegex.pattern.hasMatch(value)) {
+      return false;
+    }
   }
 
   final text = element.text;
@@ -210,9 +237,10 @@ bool _matchesBaseSelector(Element element, String selector) {
     return false;
   }
   try {
-    return _querySelectorAllFromContainer(parentNode, trimmed).contains(
-      element,
-    );
+    return _querySelectorAllFromContainer(
+      parentNode,
+      trimmed,
+    ).contains(element);
   } catch (_) {
     return false;
   }
@@ -246,11 +274,10 @@ bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
     return false;
   }
   if (classToken.isNotEmpty) {
-    final classes =
-        classToken
-            .split('.')
-            .where((value) => value.isNotEmpty)
-            .toList(growable: false);
+    final classes = classToken
+        .split('.')
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
     for (final className in classes) {
       if (!element.classes.contains(className)) {
         return false;
@@ -435,7 +462,9 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
         _StructuralPseudo.nthLastChild(pseudo.argument.trim()),
       );
     } else if (pseudo.name == ':nth-of-type') {
-      structuralPseudos.add(_StructuralPseudo.nthOfType(pseudo.argument.trim()));
+      structuralPseudos.add(
+        _StructuralPseudo.nthOfType(pseudo.argument.trim()),
+      );
     } else if (pseudo.name == ':nth-last-of-type') {
       structuralPseudos.add(
         _StructuralPseudo.nthLastOfType(pseudo.argument.trim()),
@@ -444,8 +473,11 @@ _ParsedCompoundSelector _parseCompoundSelector(String compound) {
     i = pseudo.endIndex;
   }
 
+  final extracted = _extractRegexAttributeSelectors(base.toString().trim());
+
   return _ParsedCompoundSelector(
-    baseSelector: base.toString().trim(),
+    baseSelector: extracted.baseSelector,
+    attributeRegexes: extracted.attributeRegexes,
     containsValues: containsValues,
     containsOwnValues: containsOwnValues,
     hasSelectors: hasSelectors,
@@ -582,6 +614,67 @@ String normalizeCssSelectorCompat(String selector) {
   });
 }
 
+bool _hasRegexAttributeSelector(String selector) {
+  return _extractRegexAttributeSelectors(selector).attributeRegexes.isNotEmpty;
+}
+
+({String baseSelector, List<_AttributeRegexSelector> attributeRegexes})
+_extractRegexAttributeSelectors(String selector) {
+  final attributeRegexes = <_AttributeRegexSelector>[];
+  final normalized = selector.replaceAllMapped(
+    RegExp(r'\[\s*([^\s~=\]]+)\s*~=\s*([^\]]+)\]'),
+    (match) {
+      final name = match.group(1)!.trim();
+      final rawPattern = match.group(2)!.trim();
+      if (!_looksLikeRegexAttributeValue(rawPattern)) {
+        return match.group(0)!;
+      }
+      final pattern = _buildRegexAttributePattern(rawPattern);
+      if (pattern == null) {
+        return match.group(0)!;
+      }
+      attributeRegexes.add(
+        _AttributeRegexSelector(name: name, pattern: pattern),
+      );
+      return '';
+    },
+  );
+  return (
+    baseSelector: normalized.replaceAll(RegExp(r'\s+'), ' ').trim(),
+    attributeRegexes: attributeRegexes,
+  );
+}
+
+bool _looksLikeRegexAttributeValue(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return false;
+  }
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return false;
+  }
+  return trimmed.startsWith('/') ||
+      trimmed.contains(r'\') ||
+      trimmed.contains('+') ||
+      trimmed.contains('*') ||
+      trimmed.contains('?') ||
+      trimmed.contains('(') ||
+      trimmed.contains('[') ||
+      trimmed.contains('{') ||
+      trimmed.contains('|') ||
+      trimmed.contains('^') ||
+      trimmed.contains(r'$');
+}
+
+RegExp? _buildRegexAttributePattern(String rawPattern) {
+  try {
+    return RegExp(rawPattern.trim());
+  } catch (_) {
+    return null;
+  }
+}
+
 String _normalizeContainsNeedle(String value) {
   final trimmed = value.trim();
   if (trimmed.length >= 2 &&
@@ -601,6 +694,7 @@ class _SelectorSegment {
 
 class _ParsedCompoundSelector {
   final String baseSelector;
+  final List<_AttributeRegexSelector> attributeRegexes;
   final List<String> containsValues;
   final List<String> containsOwnValues;
   final List<String> hasSelectors;
@@ -609,12 +703,20 @@ class _ParsedCompoundSelector {
 
   const _ParsedCompoundSelector({
     required this.baseSelector,
+    required this.attributeRegexes,
     required this.containsValues,
     required this.containsOwnValues,
     required this.hasSelectors,
     required this.notSelectors,
     required this.structuralPseudos,
   });
+}
+
+class _AttributeRegexSelector {
+  final String name;
+  final RegExp pattern;
+
+  const _AttributeRegexSelector({required this.name, required this.pattern});
 }
 
 class _PseudoMatch {
@@ -712,7 +814,9 @@ List<Element> _sameTypeSiblings(Element element) {
   final parent = element.parent;
   if (parent == null) return [element];
   final localName = element.localName;
-  return parent.children.where((child) => child.localName == localName).toList();
+  return parent.children
+      .where((child) => child.localName == localName)
+      .toList();
 }
 
 bool _matchesNthExpression(int index1Based, String? expression) {

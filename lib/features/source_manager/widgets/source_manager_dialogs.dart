@@ -73,8 +73,9 @@ class SourceManagerDialogs {
                     itemCount: provider.groups.length,
                     itemBuilder: (ctx, i) {
                       final g = provider.groups[i];
-                      if (g == '全部' || g == '未分組')
+                      if (g == '全部' || g == '未分組') {
                         return const SizedBox.shrink();
+                      }
                       return ListTile(
                         title: Text(g),
                         dense: true,
@@ -119,8 +120,8 @@ class SourceManagerDialogs {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            title: const Text('清理失效書源'),
-            content: const Text('確定要刪除所有標記為「失效」或「搜尋失效」的書源嗎？'),
+            title: const Text('清理建議刪除來源'),
+            content: const Text('會刪除目前標記為非小說、需要登入或下載站的來源。這些來源不會再參與搜尋或閱讀。'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -134,6 +135,161 @@ class SourceManagerDialogs {
                 child: const Text('確定刪除', style: TextStyle(color: Colors.red)),
               ),
             ],
+          ),
+    );
+  }
+
+  static void showCheckResults(
+    BuildContext context,
+    SourceManagerProvider provider,
+  ) {
+    final report = provider.lastCheckReport;
+    final affectedEntries = report.affectedEntries;
+    final selected = report.cleanupCandidateUrls.toSet();
+
+    showDialog(
+      context: context,
+      builder:
+          (dialogContext) => StatefulBuilder(
+            builder:
+                (context, setState) => AlertDialog(
+                  title: const Text('校驗結果'),
+                  content: SizedBox(
+                    width: double.maxFinite,
+                    height: 420,
+                    child:
+                        affectedEntries.isEmpty
+                            ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(report.summary),
+                                const SizedBox(height: 12),
+                                const Text('這次沒有需要處理的書源'),
+                              ],
+                            )
+                            : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  report.summary,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                const SizedBox(height: 12),
+                                Expanded(
+                                  child: ListView.separated(
+                                    itemCount: affectedEntries.length,
+                                    separatorBuilder:
+                                        (_, __) => const Divider(height: 1),
+                                    itemBuilder: (context, index) {
+                                      final entry = affectedEntries[index];
+                                      final isChecked = selected.contains(
+                                        entry.sourceUrl,
+                                      );
+                                      final badgeColor =
+                                          entry.cleanupCandidate
+                                              ? Colors.red
+                                              : entry.health.quarantined
+                                              ? Colors.orange
+                                              : Colors.blueGrey;
+                                      return CheckboxListTile(
+                                        value: isChecked,
+                                        onChanged:
+                                            (_) => setState(() {
+                                              if (isChecked) {
+                                                selected.remove(
+                                                  entry.sourceUrl,
+                                                );
+                                              } else {
+                                                selected.add(entry.sourceUrl);
+                                              }
+                                            }),
+                                        title: Text(
+                                          entry.sourceName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        subtitle: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const SizedBox(height: 4),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: badgeColor.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                              child: Text(
+                                                entry.health.label,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: badgeColor,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              entry.message,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                        controlAffinity:
+                                            ListTileControlAffinity.leading,
+                                        contentPadding: EdgeInsets.zero,
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                  ),
+                  actions: [
+                    if (affectedEntries.isNotEmpty)
+                      TextButton(
+                        onPressed:
+                            () => setState(() {
+                              selected
+                                ..clear()
+                                ..addAll(report.cleanupCandidateUrls);
+                            }),
+                        child: const Text('全選建議清理'),
+                      ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('關閉'),
+                    ),
+                    if (selected.isNotEmpty)
+                      TextButton(
+                        onPressed: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final deleteCount = selected.length;
+                          await provider.deleteSourcesByUrls(selected);
+                          if (context.mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('已刪除 $deleteCount 個書源')),
+                            );
+                          }
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext);
+                          }
+                        },
+                        child: const Text(
+                          '刪除選中',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                  ],
+                ),
           ),
     );
   }

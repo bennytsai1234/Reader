@@ -179,7 +179,10 @@ class ChangeSourceProvider extends ChangeNotifier {
       !_disposed && searchId == _activeSearchId;
 
   Future<List<BookSource>> _loadEnabledSources() async {
-    var enabledSources = await _sourceDao.getEnabled();
+    var enabledSources =
+        (await _sourceDao.getEnabled())
+            .where((source) => source.isSearchEnabledByRuntime)
+            .toList();
     if (selectedGroup == '全部') {
       return enabledSources;
     }

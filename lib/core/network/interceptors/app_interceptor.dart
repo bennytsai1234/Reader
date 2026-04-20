@@ -163,7 +163,6 @@ class AppInterceptor extends Interceptor {
       requestEncoder: request.requestEncoder,
       responseDecoder: request.responseDecoder,
       listFormat: request.listFormat,
-      sourceStackTrace: request.sourceStackTrace,
     );
     redirectedRequest.cancelToken?.requestOptions = redirectedRequest;
 

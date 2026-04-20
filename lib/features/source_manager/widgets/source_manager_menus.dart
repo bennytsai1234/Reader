@@ -111,7 +111,6 @@ class SourceManagerMenus {
             _buildRadioItem('2', provider.sortMode == 2, '按名稱'),
             _buildRadioItem('3', provider.sortMode == 3, '按地址'),
             _buildRadioItem('4', provider.sortMode == 4, '按更新時間'),
-            _buildRadioItem('5', provider.sortMode == 5, '按響應時間'),
           ],
     );
   }
@@ -122,6 +121,7 @@ class SourceManagerMenus {
     SourceManagerProvider provider, {
     required Function(SourceManagerProvider) onClearInvalid,
     required Function(SourceManagerProvider) onDeleteNonNovel,
+    required Function(SourceManagerProvider) onShowLastCheckResults,
   }) {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert),
@@ -145,6 +145,9 @@ class SourceManagerMenus {
           case 'clean_non_novel':
             onDeleteNonNovel(provider);
             break;
+          case 'check_results':
+            onShowLastCheckResults(provider);
+            break;
           case 'help': /* 跳轉幫助 */
             break;
         }
@@ -155,7 +158,13 @@ class SourceManagerMenus {
             _buildCheckedItem('group_domain', provider.groupByDomain, '按域名分組'),
             _buildItem('subscriptions', Icons.rss_feed, '書源訂閱'),
             const PopupMenuDivider(),
-            _buildItem('clear_invalid', Icons.delete_sweep_outlined, '清理無效書源'),
+            if (provider.hasLastCheckReport)
+              _buildItem('check_results', Icons.rule_folder_outlined, '查看校驗結果'),
+            _buildItem(
+              'clear_invalid',
+              Icons.delete_sweep_outlined,
+              '清理建議刪除來源',
+            ),
             _buildItem(
               'clean_non_novel',
               Icons.delete_forever_outlined,
