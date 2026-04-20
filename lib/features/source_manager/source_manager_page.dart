@@ -3,16 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
 import 'qr_scan_page.dart';
-import 'explore_sources_page.dart';
 import 'source_group_manage_page.dart';
 import 'package:inkpage_reader/core/models/book_source_part.dart';
+import 'package:inkpage_reader/features/search/search_page.dart';
 import 'package:inkpage_reader/shared/widgets/app_bottom_sheet.dart';
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
-import 'widgets/source_filter_bar.dart';
 import 'widgets/source_batch_toolbar.dart';
 import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
@@ -43,20 +43,23 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
             title: const Text('書源管理'),
             actions: [
               SourceManagerMenus.buildSortMenu(context, provider),
-              SourceManagerMenus.buildGroupMenu(context, provider),
-              SourceManagerMenus.buildAddMenu(
+              SourceManagerMenus.buildGroupMenu(
+                context,
+                provider,
+                onManageGroups:
+                    () => nav.push(
+                      MaterialPageRoute(
+                        builder: (_) => const SourceGroupManagePage(),
+                      ),
+                    ),
+              ),
+              SourceManagerMenus.buildMoreMenu(
                 context,
                 provider,
                 onImportUrl: () => _showImportDialog(context, true),
                 onImportFile: () => _importFromFile(context),
                 onImportClipboard: () => _importFromClipboard(context),
                 onScanQr: () => _scanQrCode(context, provider),
-                onExplore:
-                    () => nav.push(
-                      MaterialPageRoute(
-                        builder: (_) => const ExploreSourcesPage(),
-                      ),
-                    ),
                 onManageGroups:
                     () => nav.push(
                       MaterialPageRoute(
@@ -69,10 +72,6 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                         builder: (_) => const SourceEditorPage(),
                       ),
                     ),
-              ),
-              SourceManagerMenus.buildMoreMenu(
-                context,
-                provider,
                 onClearInvalid:
                     (p) => SourceManagerDialogs.confirmClearInvalid(context, p),
                 onDeleteNonNovel:
@@ -123,7 +122,6 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                   onChanged: provider.setSearchQuery,
                 ),
               ),
-              SourceFilterBar(provider: provider),
               Expanded(child: _buildMainContent(provider)),
             ],
           ),
@@ -134,6 +132,9 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
             onDisable: () => provider.batchSetEnabled(false),
             onAddGroup: () => _showAddGroupDialog(context, provider),
             onRemoveGroup: () => _showRemoveGroupDialog(context, provider),
+            onEnableExplore: () => provider.batchSetEnabledExplore(true),
+            onDisableExplore: () => provider.batchSetEnabledExplore(false),
+            onSelectInterval: provider.checkSelectedInterval,
             onMoveToTop: () => provider.moveSelectedToTop(),
             onMoveToBottom: () => provider.moveSelectedToBottom(),
             onExport: () async {
@@ -160,12 +161,8 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
     final list = p.sources;
     if (list.isEmpty) return const Center(child: Text('暫無書源'));
 
-    if (p.groupByDomain) {
-      return _buildGroupedList(p);
-    }
-
     // 只有在手動排序 (0) 模式下才允許拖拽
-    final bool canReorder = p.sortMode == 0;
+    final bool canReorder = p.sortMode == 0 && !p.groupByDomain;
 
     if (canReorder) {
       return ReorderableListView.builder(
@@ -177,45 +174,8 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
       return ListView.separated(
         itemCount: list.length,
         separatorBuilder: (ctx, i) => const Divider(height: 1),
-        itemBuilder: (ctx, i) => _buildItem(p, list[i]),
+        itemBuilder: (ctx, i) => _buildItem(p, list[i], index: i),
       );
-    }
-  }
-
-  Widget _buildGroupedList(SourceManagerProvider p) {
-    final Map<String, List<BookSourcePart>> groups = {};
-    for (var s in p.sources) {
-      final domain = _getDomain(s.bookSourceUrl);
-      groups.putIfAbsent(domain, () => []).add(s);
-    }
-    final sortedDomains = groups.keys.toList()..sort();
-
-    return ListView.builder(
-      itemCount: sortedDomains.length,
-      itemBuilder: (ctx, index) {
-        final domain = sortedDomains[index];
-        final items = groups[domain]!;
-        return ExpansionTile(
-          title: Text(
-            domain,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          subtitle: Text(
-            '共 ${items.length} 個書源',
-            style: const TextStyle(fontSize: 11, color: Colors.grey),
-          ),
-          children: items.map((s) => _buildItem(p, s)).toList(),
-        );
-      },
-    );
-  }
-
-  String _getDomain(String url) {
-    try {
-      final uri = Uri.parse(url);
-      return uri.host.isNotEmpty ? uri.host : '其他';
-    } catch (_) {
-      return '其他';
     }
   }
 
@@ -227,15 +187,15 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
       index: index,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl),
       onTap: () async {
-        final nav = Navigator.of(context);
-        final full = await p.getFullSource(s.bookSourceUrl);
-        if (full != null && mounted) {
-          nav.push(
-            MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
-          );
-        }
+        await _openEditor(p, s.bookSourceUrl);
       },
       onLongPress: () {
+        _showSourceMenu(context, p, s);
+      },
+      onEdit: () async {
+        await _openEditor(p, s.bookSourceUrl);
+      },
+      onShowMenu: () {
         _showSourceMenu(context, p, s);
       },
       onEnabledChanged: (v) => p.toggleEnabled(s),
@@ -257,13 +217,17 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          leading: const Icon(Icons.bug_report_outlined),
-          title: const Text('調試書源', style: TextStyle(fontSize: 14)),
+          leading: const Icon(Icons.search),
+          title: const Text('在此書源中搜尋', style: TextStyle(fontSize: 14)),
           onTap: () async {
             Navigator.pop(context);
             final full = await p.getFullSource(s.bookSourceUrl);
             if (full != null && context.mounted) {
-              SourceManagerDialogs.showDebugInput(context, full);
+              nav.push(
+                MaterialPageRoute(
+                  builder: (_) => SearchPage(initialSource: full),
+                ),
+              );
             }
           },
         ),
@@ -275,16 +239,54 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
           title: const Text('編輯書源', style: TextStyle(fontSize: 14)),
           onTap: () async {
             Navigator.pop(context);
+            await _openEditor(p, s.bookSourceUrl);
+          },
+        ),
+        ListTile(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          leading: const Icon(Icons.bug_report_outlined),
+          title: const Text('調試書源', style: TextStyle(fontSize: 14)),
+          onTap: () async {
+            Navigator.pop(context);
             final full = await p.getFullSource(s.bookSourceUrl);
-            if (full != null && mounted) {
-              nav.push(
-                MaterialPageRoute(
-                  builder: (_) => SourceEditorPage(source: full),
-                ),
-              );
+            if (full != null && context.mounted) {
+              SourceManagerDialogs.showDebugInput(context, full);
             }
           },
         ),
+        if (s.hasLoginUrl)
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            leading: const Icon(Icons.login_outlined),
+            title: const Text('登入書源', style: TextStyle(fontSize: 14)),
+            onTap: () async {
+              Navigator.pop(context);
+              await _openLoginUrl(s);
+            },
+          ),
+        if (s.hasExploreUrl)
+          ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            leading: Icon(
+              s.enabledExplore
+                  ? Icons.explore_off_outlined
+                  : Icons.travel_explore,
+            ),
+            title: Text(
+              s.enabledExplore ? '停用發現' : '啟用發現',
+              style: const TextStyle(fontSize: 14),
+            ),
+            onTap: () async {
+              Navigator.pop(context);
+              await p.toggleEnabledExplore(s);
+            },
+          ),
         const Divider(indent: 16, endIndent: 16),
         ListTile(
           shape: RoundedRectangleBorder(
@@ -363,17 +365,12 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
   void _showCheckSourceDialog(BuildContext context, SourceManagerProvider p) {
     final count = p.selectedUrls.length;
     if (count == 0) return;
-    final ctrl = TextEditingController(text: '我的');
     showDialog(
       context: context,
       builder:
           (ctx) => AlertDialog(
             title: Text('校驗選中書源 ($count)'),
-            content: TextField(
-              controller: ctrl,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: '搜尋關鍵字'),
-            ),
+            content: const Text('會依書源自己的校驗關鍵字執行檢查，若未設定則使用預設值。'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -615,5 +612,23 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
     if (data?.text != null && context.mounted) {
       await _importWithPreview(context, data!.text!);
     }
+  }
+
+  Future<void> _openEditor(SourceManagerProvider p, String sourceUrl) async {
+    final nav = Navigator.of(context);
+    final full = await p.getFullSource(sourceUrl);
+    if (full != null && mounted) {
+      nav.push(
+        MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
+      );
+    }
+  }
+
+  Future<void> _openLoginUrl(BookSourcePart source) async {
+    final loginUrl = source.loginUrl?.trim();
+    if (loginUrl == null || loginUrl.isEmpty) return;
+    final uri = Uri.tryParse(loginUrl);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }

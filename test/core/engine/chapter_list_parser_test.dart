@@ -8,6 +8,7 @@ import '../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   test('ChapterListParser handles sync dynamic json chapter urls', () async {
     final source = BookSource.fromJson({
@@ -53,7 +54,7 @@ void main() {
       result.chapters[1].url,
       'https://example.com/content,{"method":"POST","body":{"bookId":"1137339371","chapterId":"102"}}',
     );
-  });
+  }, skip: quickJsSkip);
 
   test('ChapterListParser respects maxChapters limit', () async {
     final source = BookSource.fromJson({
@@ -141,6 +142,7 @@ java.getString("a@href");
       expect(result.chapters[0].getVariable('capturedTitle'), '第一章');
       expect(result.chapters[0].getVariable('capturedHref'), '/chapter/1');
     },
+    skip: quickJsSkip,
   );
 
   test(
@@ -177,6 +179,7 @@ org.jsoup.Jsoup.parse('<div><a href="/chapter/1">第一章</a><a href="/chapter/
       expect(result.chapters[1].title, '第二章');
       expect(result.chapters[1].url, 'https://example.com/chapter/2');
     },
+    skip: quickJsSkip,
   );
 
   test('ChapterListParser supports legado legacy regex toc rules', () async {

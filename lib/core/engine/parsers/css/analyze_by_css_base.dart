@@ -31,6 +31,13 @@ abstract class AnalyzeByCssBase {
   }
 
   Element _parseRootElement(String html) {
+    final trimmed = html.trimLeft();
+    if (RegExp(
+      r'^<(?:!doctype\s+html|html|body)\b',
+      caseSensitive: false,
+    ).hasMatch(trimmed)) {
+      return html_parser.parse(html).documentElement!;
+    }
     final fragment = html_parser.parseFragment(html);
     final meaningfulNodes =
         fragment.nodes.where((node) {

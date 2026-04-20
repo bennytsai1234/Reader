@@ -4,6 +4,26 @@
 
 ---
 
+## [0.2.5] — 2026-04-20
+
+### 新功能 / 整合
+
+- **書源管理頁對齊 Legado 操作流**：主頁收斂為 `排序 / 分組 / 更多` 三個入口，單列補齊 `編輯 / 更多 / 啟用開關`，批量操作新增發現開關與連續選取
+- **單書源搜尋入口補齊**：從書源管理頁可直接在指定書源內搜尋，並帶正確 scope 進搜尋頁
+- **交接與架構文檔刷新**：補齊下一階段交接稿，更新 README、roadmap、database 與 reader/current architecture 文檔
+
+### 修復
+
+- 修正從搜尋結果進入書籍詳情後，點擊「開始閱讀」直接顯示「暫無章節」的鏈路問題，詳情頁已載入的目錄會正確交給閱讀器
+- 修正部分 CSS self-match、attribute selector 與章節標題重複問題，補齊對應 targeted tests
+- 將 QuickJS 依賴測試改成 CI-safe，在缺少 native library 的 runner 上自動跳過，避免把 CI 誤打紅
+
+### 體驗優化
+
+- 書源管理頁移除過多入口，列表改為更貼近 Legado 的平鋪式管理介面
+- 域名分組改為清晰的 host header 顯示，不再使用展開群組卡片
+- 校驗選中書源時不再顯示沒有實際作用的手動關鍵字輸入
+
 ## [0.2.4] — 2026-04-20
 
 ### 新功能 / 整合
@@ -112,6 +132,7 @@
 ---
 
 [0.2.1]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.1
+[0.2.5]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.5
 [0.2.4]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.4
 [0.2.0]: https://github.com/bennytsai1234/reader/releases/tag/v0.2.0
 [0.1.9]: https://github.com/bennytsai1234/reader/releases/tag/v0.1.9

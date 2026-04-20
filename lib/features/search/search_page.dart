@@ -20,7 +20,13 @@ class SearchPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => SearchProvider(),
+      create:
+          (_) => SearchProvider(
+            initialScope:
+                initialSource != null
+                    ? SearchScope.fromSource(initialSource!)
+                    : null,
+          ),
       child: _SearchPageContent(
         initialQuery: initialQuery,
         initialSource: initialSource,

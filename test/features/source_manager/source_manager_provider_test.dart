@@ -169,4 +169,64 @@ void main() {
     expect(fakeDao.store.keys, isNot(contains('https://login.example.com')));
     expect(fakeDao.store.keys, contains('https://search-broken.example.com'));
   });
+
+  test('filterGroup supports enabled and disabled explore buckets', () async {
+    fakeDao.store['https://explore-on.example.com'] = BookSource(
+      bookSourceUrl: 'https://explore-on.example.com',
+      bookSourceName: '可發現源',
+      bookSourceType: SourceType.book,
+      exploreUrl: '/explore',
+      enabledExplore: true,
+    );
+    fakeDao.store['https://explore-off.example.com'] = BookSource(
+      bookSourceUrl: 'https://explore-off.example.com',
+      bookSourceName: '停用發現源',
+      bookSourceType: SourceType.book,
+      exploreUrl: '/explore',
+      enabledExplore: false,
+    );
+
+    final provider = SourceManagerProvider();
+    await provider.loadSources();
+
+    provider.setFilterGroup('已啟用發現');
+    expect(provider.sources.map((source) => source.bookSourceUrl), [
+      'https://explore-on.example.com',
+    ]);
+
+    provider.setFilterGroup('已禁用發現');
+    expect(provider.sources.map((source) => source.bookSourceUrl), [
+      'https://explore-off.example.com',
+    ]);
+  });
+
+  test(
+    'checkSelectedInterval selects sources between first and last selection',
+    () async {
+      for (var index = 0; index < 4; index++) {
+        fakeDao.store['https://$index.example.com'] = BookSource(
+          bookSourceUrl: 'https://$index.example.com',
+          bookSourceName: '源$index',
+          bookSourceType: SourceType.book,
+          customOrder: index,
+        );
+      }
+
+      final provider = SourceManagerProvider();
+      await provider.loadSources();
+
+      provider.toggleSelect('https://0.example.com');
+      provider.toggleSelect('https://2.example.com');
+      provider.checkSelectedInterval();
+
+      expect(
+        provider.selectedUrls,
+        containsAll(<String>[
+          'https://0.example.com',
+          'https://1.example.com',
+          'https://2.example.com',
+        ]),
+      );
+    },
+  );
 }

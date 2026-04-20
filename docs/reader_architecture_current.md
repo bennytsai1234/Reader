@@ -1,6 +1,6 @@
 # 閱讀器架構（現況）
 
-更新日期：2026-04-16
+更新日期：2026-04-20
 
 本文只描述 `lib/features/reader` 目前已落地的閱讀器架構，不沿用舊版 mixin 時代或早期對照稿的說法。
 
@@ -24,6 +24,7 @@
 - 目前閱讀位置與可見位置
 - 章節 runtime 快取
 - 對外 jump / persist / TTS 命令入口
+- 閱讀失敗後的自動換源 / 手動換源協調
 
 閱讀進度持久化真源仍是 `Book` 上的：
 
@@ -155,12 +156,24 @@ Scroll retry     ScrollRestoreRunner
 - `scroll_execution_adapter.dart` — scroll pixel、ensureVisible、anchor 執行
 - `scroll_restore_runner.dart` — scroll restore retry、reload、完成判定
 - `scroll_runtime_executor.dart` — scroll runtime 指令執行
-- `scroll_auto_page_driver.dart` — scroll 自動翻頁驅動
 - `delegate/page_mode_delegate.dart` — 平移翻頁模式（`PageAnim.slide`）
 - `delegate/scroll_mode_delegate.dart` — 捲動模式（`PageAnim.scroll`）
 - `slide_page_controller.dart` — 平移模式底層的 `PageView` 管理器（用 `SlideWindow`/`SlideSegment`，`PageController(initialPage:)` 重建替代延遲 jumpToPage）
 
 使用者可選的翻頁模式僅兩種：**平移**與**捲動**。`PageAnim` 類別另保留 `simulation` / `none` 常數僅作為 Legado 設定匯入相容性，不對應實際實作。
+
+## 正文失敗與換源恢復
+
+`ReadBookController` 現在已接入來源切換恢復鏈：
+
+- 章節內容抓取失敗時，`ReaderChapterContentLoader` 會把失敗訊息透過 `FetchResult.failureMessage` 回傳
+- `ReaderContentMixin` 會按章節保存失敗狀態
+- `page_view_widget.dart` 會在頁面內顯示恢復卡片，而不是只丟一行錯誤字串
+- 使用者可以：
+  - 直接點「自動換源」讓 controller 尋找同名同作者的可用來源
+  - 點「手動換源」打開 `reader_source_fallback_sheet.dart`
+
+這條鏈的定位是**閱讀期恢復機制**，不是 parser / 書源健康判定的替代品。
 
 ## Read Aloud / TTS
 
@@ -198,6 +211,7 @@ Scroll retry     ScrollRestoreRunner
 - scroll 模式的 auto-page ticker 仍在 `ReadViewRuntime` 層
 - `ChapterContentManager.targetWindow` 尚未完全收回內部細節
 - `ReadBookController` 本身仍偏大
+- 換源目前仍偏向「正文失敗後恢復」，尚未前移到詳情 / 目錄階段做更無感的自癒
 
 ## 測試保護
 

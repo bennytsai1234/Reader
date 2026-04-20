@@ -72,10 +72,14 @@ class ReadBookController extends ReaderProviderBase
     required Book book,
     int chapterIndex = 0,
     int chapterPos = 0,
+    List<BookChapter> initialChapters = const [],
   }) : super(book) {
     currentChapterIndex = chapterIndex;
     visibleChapterIndex = chapterIndex;
     initialCharOffset = chapterPos;
+    if (initialChapters.isNotEmpty) {
+      chapters = List<BookChapter>.from(initialChapters);
+    }
     _sessionState = ReaderSessionState(
       initialLocation: ReaderLocation(
         chapterIndex: chapterIndex,
@@ -526,6 +530,12 @@ class ReadBookController extends ReaderProviderBase
   }
 
   Future<void> _loadChapters() async {
+    if (chapters.isNotEmpty) {
+      if (isDisposed) return;
+      await refreshChapterDisplayTitles(notify: false);
+      if (!isDisposed) notifyListeners();
+      return;
+    }
     chapters = await chapterDao.getChapters(book.bookUrl);
     if (isDisposed) return;
     await refreshChapterDisplayTitles(notify: false);

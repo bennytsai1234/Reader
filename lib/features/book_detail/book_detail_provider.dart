@@ -30,6 +30,7 @@ class BookDetailProvider extends ChangeNotifier {
 
   Book get book => _book;
   List<BookChapter> get filteredChapters => _displayChapters;
+  List<BookChapter> get allChapters => List.unmodifiable(_allChapters);
   int get totalChapterCount => _allChapters.length;
   bool get isLoading => _isLoading;
   bool get isInBookshelf => _isInBookshelf;

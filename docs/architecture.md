@@ -1,6 +1,6 @@
 # 目標架構
 
-更新日期：2026-04-16
+更新日期：2026-04-20
 
 本文描述墨頁（Inkpage）應收斂的架構方向。它不是一次性重寫指令，而是用來約束整理順序與責任邊界。閱讀器 runtime 現況請先看 [reader_architecture_current.md](reader_architecture_current.md)。
 
@@ -24,7 +24,7 @@ lib/
     engine/    規則解析、JS、Web 書源、URL 分析、charset
     local_book/ TXT / EPUB / MOBI / PDF / UMD
     network/   Dio、API 包裝、Cookie、攔截
-    services/   備份、還原、TTS、更新、資源、下載、widget
+    services/   備份、還原、TTS、下載、書源校驗、換源、widget
     storage/    路徑 registry、metrics
     utils/      純工具
   features/
@@ -33,7 +33,7 @@ lib/
     book_detail/    書籍詳情
     search/         搜尋（SearchProvider → SearchModel）
     explore/        發現（雙層書源）
-    source_manager/ 書源管理、登入、訂閱
+    source_manager/ 書源管理、登入、校驗、隔離、清理
     local_book/     本地匯入
     settings/       設定
     association/    深連結、檔案關聯
@@ -90,6 +90,11 @@ lib/
 - 能被單測與 integration test 保護
 - 與 Legado 對齊時以可驗證行為為準
 
+補充：
+
+- 書源健康狀態屬於**系統狀態**，不應長期與使用者手動分組語義耦合。
+- 目前 app 仍以來源 tag / comment 推導 runtime health，屬過渡實作；後續應收斂為正式欄位或獨立狀態表。
+
 ### `features/`
 
 產品功能主場。每個 feature 內部至少分出三種責任：畫面 / widget、狀態協調、feature-specific 資料適配。不一定要立刻搬成 presentation/application/domain/data 四層，但新代碼應往這個方向靠。
@@ -138,6 +143,8 @@ DAO 責任窄：CRUD、watch / query、針對資料表的聚合查詢。**不應
 - 章節內容：DB + network + parser + cache
 - 備份：DB + file + zip + share
 - 匯出：chapter dao + storage path + share
+- 書源校驗：source dao + engine + runtime health policy
+- 換源：搜尋快取 + source dao + chapter/book migration
 
 ## 近期應避免
 

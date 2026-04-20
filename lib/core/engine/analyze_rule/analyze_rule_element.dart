@@ -70,17 +70,20 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = evalJS(rule, result);
               break;
             default:
-              final elements = sourceRule
-                  .getAnalyzeByJSoup(this, result)
-                  .getElements(rule);
-              tempResult = elements.isNotEmpty ? elements.first : null;
-              if (tempResult == null && isJsonLikeRuleInput(result)) {
-                final jsonRule = buildJsonFallbackRule(rule);
-                if (jsonRule != null) {
-                  tempResult = sourceRule
-                      .getAnalyzeByJSonPath(this, result)
-                      .getObject(jsonRule);
-                }
+              final jsonRule =
+                  isJsonLikeRuleInput(result)
+                      ? buildJsonFallbackRule(rule)
+                      : null;
+              if (jsonRule != null) {
+                tempResult = sourceRule
+                    .getAnalyzeByJSonPath(this, result)
+                    .getObject(jsonRule);
+              }
+              if (tempResult == null) {
+                final elements = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getElements(rule);
+                tempResult = elements.isNotEmpty ? elements.first : null;
               }
           }
         } catch (e) {
@@ -172,17 +175,20 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = await evalJSAsync(rule, result);
               break;
             default:
-              final elements = sourceRule
-                  .getAnalyzeByJSoup(this, result)
-                  .getElements(rule);
-              tempResult = elements.isNotEmpty ? elements.first : null;
-              if (tempResult == null && isJsonLikeRuleInput(result)) {
-                final jsonRule = buildJsonFallbackRule(rule);
-                if (jsonRule != null) {
-                  tempResult = sourceRule
-                      .getAnalyzeByJSonPath(this, result)
-                      .getObject(jsonRule);
-                }
+              final jsonRule =
+                  isJsonLikeRuleInput(result)
+                      ? buildJsonFallbackRule(rule)
+                      : null;
+              if (jsonRule != null) {
+                tempResult = sourceRule
+                    .getAnalyzeByJSonPath(this, result)
+                    .getObject(jsonRule);
+              }
+              if (tempResult == null) {
+                final elements = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getElements(rule);
+                tempResult = elements.isNotEmpty ? elements.first : null;
               }
           }
         } catch (e) {
@@ -272,18 +278,19 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = evalJS(rule, result);
               break;
             default:
-              tempResult = sourceRule
-                  .getAnalyzeByJSoup(this, result)
-                  .getElements(rule);
-              if (tempResult is List &&
-                  tempResult.isEmpty &&
-                  isJsonLikeRuleInput(result)) {
-                final jsonRule = buildJsonFallbackRule(rule);
-                if (jsonRule != null) {
-                  tempResult = sourceRule
-                      .getAnalyzeByJSonPath(this, result)
-                      .getElements(jsonRule);
-                }
+              final jsonRule =
+                  isJsonLikeRuleInput(result)
+                      ? buildJsonFallbackRule(rule)
+                      : null;
+              if (jsonRule != null) {
+                tempResult = sourceRule
+                    .getAnalyzeByJSonPath(this, result)
+                    .getElements(jsonRule);
+              }
+              if (tempResult is! List || tempResult.isEmpty) {
+                tempResult = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getElements(rule);
               }
           }
         } catch (e) {
@@ -383,18 +390,19 @@ mixin AnalyzeRuleElement on AnalyzeRuleBase, AnalyzeRuleRegexHelper {
               tempResult = await evalJSAsync(rule, result);
               break;
             default:
-              tempResult = sourceRule
-                  .getAnalyzeByJSoup(this, result)
-                  .getElements(rule);
-              if (tempResult is List &&
-                  tempResult.isEmpty &&
-                  isJsonLikeRuleInput(result)) {
-                final jsonRule = buildJsonFallbackRule(rule);
-                if (jsonRule != null) {
-                  tempResult = sourceRule
-                      .getAnalyzeByJSonPath(this, result)
-                      .getElements(jsonRule);
-                }
+              final jsonRule =
+                  isJsonLikeRuleInput(result)
+                      ? buildJsonFallbackRule(rule)
+                      : null;
+              if (jsonRule != null) {
+                tempResult = sourceRule
+                    .getAnalyzeByJSonPath(this, result)
+                    .getElements(jsonRule);
+              }
+              if (tempResult is! List || tempResult.isEmpty) {
+                tempResult = sourceRule
+                    .getAnalyzeByJSoup(this, result)
+                    .getElements(rule);
               }
           }
         } catch (e) {

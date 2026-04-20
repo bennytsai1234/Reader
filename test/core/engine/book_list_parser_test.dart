@@ -7,6 +7,7 @@ import '../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   test(
     'search bookUrl can reference fields populated earlier on SearchBook',
@@ -33,5 +34,6 @@ void main() {
       expect(books.first.kind, '47749');
       expect(books.first.bookUrl, 'https://example.com/book/47749');
     },
+    skip: quickJsSkip,
   );
 }

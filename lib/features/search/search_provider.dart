@@ -23,6 +23,7 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   late final SearchModel _searchModel;
   late SearchScope _searchScope;
+  final SearchScope? _initialScope;
   bool _scopeLoaded = false;
 
   // --- UI State ---
@@ -57,15 +58,20 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   SearchScope get searchScope => _searchScope;
   bool get scopeLoaded => _scopeLoaded;
 
-  SearchProvider({BookshelfStateTracker? bookshelfTracker})
-    : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker() {
+  SearchProvider({
+    BookshelfStateTracker? bookshelfTracker,
+    SearchScope? initialScope,
+  }) : _bookshelfTracker = bookshelfTracker ?? BookshelfStateTracker(),
+       _initialScope = initialScope {
     _searchModel = SearchModel(callback: this);
-    _searchScope = SearchScope();
+    _searchScope = initialScope ?? SearchScope();
     _init();
   }
 
   Future<void> _init() async {
-    _searchScope = await SearchScope.load();
+    if (_initialScope == null) {
+      _searchScope = await SearchScope.load();
+    }
     _scopeLoaded = true;
     await _bookshelfTracker.initialize(onChanged: notifyListeners);
     await _loadGroups();

@@ -7,5 +7,6 @@ class ReaderProvider extends ReadBookController {
     required super.book,
     super.chapterIndex = 0,
     super.chapterPos = 0,
+    super.initialChapters = const [],
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
 import '../book_detail_provider.dart';
 
 class BookInfoHeader extends StatelessWidget {
@@ -9,7 +10,7 @@ class BookInfoHeader extends StatelessWidget {
   final Function(BuildContext, String) showPhotoView;
   final VoidCallback onEdit;
   final Function(BuildContext, Book) showSourceOptions;
-  final Function(BuildContext, Book, int) navigateToReader;
+  final Function(BuildContext, Book, int, List<BookChapter>) navigateToReader;
   final Function(BuildContext, BookDetailProvider) showChangeSource;
 
   const BookInfoHeader({
@@ -95,6 +96,7 @@ class BookInfoHeader extends StatelessWidget {
                                 context,
                                 book,
                                 book.durChapterIndex,
+                                provider.allChapters,
                               ),
                           child: Text(
                             book.durChapterIndex == 0 && book.durChapterPos == 0

@@ -6,6 +6,7 @@ import '../../../test_helper.dart';
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('JsEngine', () {
     test('evaluateAsync handles sync-only helper calls', () async {
@@ -22,7 +23,7 @@ java.desEncodeToBase64String("hello", "12345678", "DES/ECB/PKCS5Padding", "").to
       expect((digest as String), isNotEmpty);
       expect(encrypted, isA<String>());
       expect((encrypted as String), isNotEmpty);
-    });
+    }, skip: quickJsSkip);
 
     test('evaluateAsync handles sync-only scope writes', () async {
       final engine = JsEngine();
@@ -54,7 +55,7 @@ java.get("tmpToken")
       expect((computedPutGet as String), isNotEmpty);
       expect(result, isA<String>());
       expect((result as String), isNotEmpty);
-    });
+    }, skip: quickJsSkip);
 
     test(
       'evaluateAsync falls back to sync execution for sync-only url scripts',
@@ -72,6 +73,7 @@ option={"method":"POST","body":"keyword=我的"};
         expect(result, startsWith('/goway/search?_p='));
         expect(result, contains(',{"method":"POST","body":"keyword=我的"}'));
       },
+      skip: quickJsSkip,
     );
   });
 }

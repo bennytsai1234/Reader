@@ -5,6 +5,7 @@ import 'package:inkpage_reader/features/book_detail/book_detail_provider.dart';
 import 'package:inkpage_reader/features/book_detail/change_cover_sheet.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/export_book_service.dart';
 import 'package:inkpage_reader/features/source_manager/source_editor_page.dart';
 import 'package:inkpage_reader/features/source_manager/source_debug_page.dart';
@@ -109,6 +110,7 @@ class BookDetailPage extends StatelessWidget {
                                     context,
                                     currentBook,
                                     chapter.index,
+                                    provider.allChapters,
                                   ),
                             );
                           }, childCount: provider.filteredChapters.length),
@@ -239,17 +241,26 @@ class BookDetailPage extends StatelessWidget {
     );
   }
 
-  void _navigateToReader(BuildContext context, Book b, int index) =>
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (ctx) => ChangeNotifierProvider(
-                create: (_) => ReaderProvider(book: b, chapterIndex: index),
-                child: ReaderPage(book: b, chapterIndex: index),
-              ),
-        ),
-      );
+  void _navigateToReader(
+    BuildContext context,
+    Book b,
+    int index,
+    List<BookChapter> initialChapters,
+  ) => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder:
+          (ctx) => ChangeNotifierProvider(
+            create:
+                (_) => ReaderProvider(
+                  book: b,
+                  chapterIndex: index,
+                  initialChapters: initialChapters,
+                ),
+            child: ReaderPage(book: b, chapterIndex: index),
+          ),
+    ),
+  );
 
   void _showChangeSourceDialog(BuildContext context, BookDetailProvider p) =>
       showModalBottomSheet(

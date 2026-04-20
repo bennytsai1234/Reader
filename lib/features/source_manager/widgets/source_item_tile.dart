@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:inkpage_reader/core/models/source/book_source_logic.dart';
-import '../source_manager_provider.dart';
 import 'package:inkpage_reader/core/models/book_source_part.dart';
+import 'package:inkpage_reader/core/models/source/book_source_logic.dart';
 
-/// 書源列表項 — 對標 legado item_book_source
-/// 始終顯示 checkbox，點擊 checkbox 切換選取，點擊行本身編輯。
+import '../source_manager_provider.dart';
+
 class SourceItemTile extends StatelessWidget {
   final BookSourcePart source;
   final SourceManagerProvider provider;
   final bool isSelected;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback onEdit;
+  final VoidCallback onShowMenu;
   final ValueChanged<bool?> onEnabledChanged;
   final int? index;
 
@@ -21,106 +22,172 @@ class SourceItemTile extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     required this.onLongPress,
+    required this.onEdit,
+    required this.onShowMenu,
     required this.onEnabledChanged,
     this.index,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool canDrag = provider.sortMode == 0 && !provider.groupByDomain;
+    final canDrag = provider.sortMode == 0 && !provider.groupByDomain;
+    final showHostHeader =
+        index != null && provider.shouldShowHostHeaderAt(index!);
+    final host = provider.getSourceHost(source.bookSourceUrl);
+    final errorLine = _errorLine;
+    final hasStatusDot = source.hasExploreUrl;
 
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        color:
-            isSelected
-                ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
-                : null,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            // 拖拽手柄 (手動排序時)
-            if (canDrag && index != null)
-              ReorderableDragStartListener(
-                index: index!,
-                child: const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
-                ),
-              ),
-
-            // Checkbox — 始終顯示 (對標 legado cbBookSource)
-            GestureDetector(
-              onTap: () => provider.toggleSelect(source.bookSourceUrl),
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Icon(
-                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                  size: 22,
-                  color:
-                      isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : Colors.grey,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showHostHeader)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(
+              host,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w700,
               ),
             ),
-
-            // 名稱 + URL + 標籤
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _displayNameGroup(),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+          ),
+        InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Container(
+            color:
+                isSelected
+                    ? Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.08)
+                    : null,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (canDrag && index != null)
+                      ReorderableDragStartListener(
+                        index: index!,
+                        child: const Padding(
+                          padding: EdgeInsets.only(top: 10, right: 4),
+                          child: Icon(
+                            Icons.drag_handle,
+                            size: 20,
+                            color: Colors.grey,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (source.runtimeHealth.category !=
-                          SourceHealthCategory.healthy)
-                        _buildStatusTag(source.runtimeHealth),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    source.bookSourceUrl,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 3),
-                  _buildTags(),
-                ],
-              ),
+                    GestureDetector(
+                      onTap: () => provider.toggleSelect(source.bookSourceUrl),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10, right: 8),
+                        child: Icon(
+                          isSelected
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          size: 22,
+                          color:
+                              isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.grey,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _displayNameGroup(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (hasStatusDot)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: Icon(
+                                    Icons.circle,
+                                    size: 8,
+                                    color:
+                                        source.enabledExplore
+                                            ? Colors.green
+                                            : Colors.grey,
+                                  ),
+                                ),
+                              if (source.runtimeHealth.category !=
+                                  SourceHealthCategory.healthy)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: _buildStatusTag(source.runtimeHealth),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            source.bookSourceUrl,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          _buildTags(),
+                          if (errorLine != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              errorLine,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange.shade800,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 50,
+                      child: Switch(
+                        value: source.enabled,
+                        onChanged: onEnabledChanged,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '編輯',
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                    ),
+                    IconButton(
+                      tooltip: '更多',
+                      onPressed: onShowMenu,
+                      icon: const Icon(Icons.more_vert, size: 20),
+                    ),
+                  ],
+                ),
+              ],
             ),
-
-            const SizedBox(width: 4),
-
-            // 啟用 Switch (對標 legado swtEnabled)
-            SizedBox(
-              width: 44,
-              child: Switch(
-                value: source.enabled,
-                onChanged: onEnabledChanged,
-                activeThumbColor: Colors.blue,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
-  /// 對標 legado getDisPlayNameGroup: 名稱 [分組]
   String _displayNameGroup() {
     final group = source.bookSourceGroup;
     if (group != null && group.isNotEmpty) {
@@ -137,7 +204,6 @@ class SourceItemTile extends StatelessWidget {
             ? Colors.orange
             : Colors.blueGrey;
     return Container(
-      margin: const EdgeInsets.only(left: 8),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
@@ -156,9 +222,9 @@ class SourceItemTile extends StatelessWidget {
   }
 
   Widget _buildTags() {
-    final List<String> tags = [];
+    final tags = <String>[];
     if (source.hasSearchUrl) tags.add('搜');
-    if (source.hasExploreUrl) tags.add('發');
+    if (source.hasExploreUrl) tags.add(source.enabledExplore ? '發' : '停發');
     if (source.hasBookInfoRule) tags.add('詳');
     if (source.hasTocRule) tags.add('目');
     if (source.hasContentRule) tags.add('正');
@@ -166,10 +232,11 @@ class SourceItemTile extends StatelessWidget {
 
     return Wrap(
       spacing: 4,
+      runSpacing: 4,
       children:
           tags
               .map(
-                (t) => Container(
+                (tag) => Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 4,
                     vertical: 1,
@@ -179,12 +246,24 @@ class SourceItemTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(2),
                   ),
                   child: Text(
-                    t,
+                    tag,
                     style: const TextStyle(fontSize: 9, color: Colors.blueGrey),
                   ),
                 ),
               )
               .toList(),
     );
+  }
+
+  String? get _errorLine {
+    final comment = source.bookSourceComment?.trim();
+    if (comment == null || comment.isEmpty) return null;
+    for (final line in comment.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('// Error:')) {
+        return trimmed.replaceFirst('// Error:', '').trim();
+      }
+    }
+    return null;
   }
 }

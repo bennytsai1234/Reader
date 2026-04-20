@@ -56,6 +56,10 @@ class SourceManagerProvider with ChangeNotifier {
       list = list.where((s) => s.enabled).toList();
     } else if (filterGroup == '已禁用') {
       list = list.where((s) => !s.enabled).toList();
+    } else if (filterGroup == '已啟用發現') {
+      list = list.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
+    } else if (filterGroup == '已禁用發現') {
+      list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
     } else if (filterGroup == '需登錄') {
       list = list.where((s) => s.hasLoginUrl).toList();
     } else if (filterGroup == '無分組') {
@@ -72,31 +76,19 @@ class SourceManagerProvider with ChangeNotifier {
               .toList();
     }
 
-    int multiplier = sortDesc ? -1 : 1;
-    switch (sortMode) {
-      case 0:
-        list.sort(
-          (a, b) => a.customOrder.compareTo(b.customOrder) * multiplier,
-        );
-        break;
-      case 1:
-        list.sort((a, b) => b.weight.compareTo(a.weight) * multiplier);
-        break;
-      case 2:
-        list.sort(
-          (a, b) => a.bookSourceName.compareTo(b.bookSourceName) * multiplier,
-        );
-        break;
-      case 3:
-        list.sort(
-          (a, b) => a.bookSourceUrl.compareTo(b.bookSourceUrl) * multiplier,
-        );
-        break;
-      case 4:
-        list.sort(
-          (a, b) => a.lastUpdateTime.compareTo(b.lastUpdateTime) * multiplier,
-        );
-        break;
+    final comparator = _buildComparator();
+    if (groupByDomain) {
+      list.sort((a, b) {
+        final hostCompare = getSourceHost(
+          a.bookSourceUrl,
+        ).compareTo(getSourceHost(b.bookSourceUrl));
+        if (hostCompare != 0) {
+          return hostCompare;
+        }
+        return comparator(a, b);
+      });
+    } else {
+      list.sort(comparator);
     }
     return list;
   }
@@ -159,6 +151,27 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  String getSourceHost(String url) {
+    try {
+      final uri = Uri.parse(url);
+      final host = uri.host.trim();
+      return host.isEmpty ? '其他' : host;
+    } catch (_) {
+      return '其他';
+    }
+  }
+
+  bool shouldShowHostHeaderAt(int index) {
+    if (!groupByDomain || index < 0 || index >= sources.length) {
+      return false;
+    }
+    if (index == 0) {
+      return true;
+    }
+    return getSourceHost(sources[index - 1].bookSourceUrl) !=
+        getSourceHost(sources[index].bookSourceUrl);
+  }
+
   void toggleSelect(String url) {
     if (_selectedUrls.contains(url)) {
       _selectedUrls.remove(url);
@@ -196,6 +209,16 @@ class SourceManagerProvider with ChangeNotifier {
     }
   }
 
+  Future<void> toggleEnabledExplore(dynamic source) async {
+    final String url = source.bookSourceUrl;
+    final fullSource = await _dao.getByUrl(url);
+    if (fullSource != null) {
+      fullSource.enabledExplore = !fullSource.enabledExplore;
+      await _dao.upsert(fullSource);
+      await loadSources();
+    }
+  }
+
   Future<void> deleteSource(dynamic source) async {
     final String url = source.bookSourceUrl;
     await _dao.deleteByUrl(url);
@@ -219,6 +242,37 @@ class SourceManagerProvider with ChangeNotifier {
       }
     }
     await loadSources();
+  }
+
+  Future<void> batchSetEnabledExplore(bool enabled) async {
+    for (final url in _selectedUrls) {
+      final s = await _dao.getByUrl(url);
+      if (s != null) {
+        s.enabledExplore = enabled;
+        await _dao.upsert(s);
+      }
+    }
+    await loadSources();
+  }
+
+  void checkSelectedInterval() {
+    if (_selectedUrls.length < 2) return;
+    final visibleSources = sources;
+    final selectedIndices =
+        visibleSources
+            .asMap()
+            .entries
+            .where((entry) => _selectedUrls.contains(entry.value.bookSourceUrl))
+            .map((entry) => entry.key)
+            .toList()
+          ..sort();
+    if (selectedIndices.length < 2) return;
+    final start = selectedIndices.first;
+    final end = selectedIndices.last;
+    for (var index = start; index <= end; index++) {
+      _selectedUrls.add(visibleSources[index].bookSourceUrl);
+    }
+    notifyListeners();
   }
 
   Future<void> moveSelectedToTop() async {
@@ -544,5 +598,26 @@ class SourceManagerProvider with ChangeNotifier {
 
   Future<int> importFromText(String text) async {
     return await importFromJson(text);
+  }
+
+  int Function(BookSourcePart a, BookSourcePart b) _buildComparator() {
+    final multiplier = sortDesc ? -1 : 1;
+    switch (sortMode) {
+      case 0:
+        return (a, b) => a.customOrder.compareTo(b.customOrder) * multiplier;
+      case 1:
+        return (a, b) => b.weight.compareTo(a.weight) * multiplier;
+      case 2:
+        return (a, b) =>
+            a.bookSourceName.compareTo(b.bookSourceName) * multiplier;
+      case 3:
+        return (a, b) =>
+            a.bookSourceUrl.compareTo(b.bookSourceUrl) * multiplier;
+      case 4:
+        return (a, b) =>
+            a.lastUpdateTime.compareTo(b.lastUpdateTime) * multiplier;
+      default:
+        return (a, b) => a.customOrder.compareTo(b.customOrder) * multiplier;
+    }
   }
 }

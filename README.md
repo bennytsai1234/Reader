@@ -13,7 +13,7 @@
 
 ## 版本資訊
 
-- App version：`0.2.4` (build `19`)
+- App version：`0.2.5` (build `20`)
 - Dart SDK：`^3.7.0`
 - 資料庫 schema：v8
 - 開發主線：`main`
@@ -44,8 +44,10 @@ release-notes/  各版本 release note
 - 搜尋（支援全部 / 分類 / 單一書源）與探索頁
 - 本地 TXT / EPUB 匯入
 - 網路書源解析、登入、WebView 抓取
+- 書源校驗結果、隔離與建議清理
 - 兩種閱讀模式：平移 / 捲動
 - 閱讀進度保存與還原
+- 閱讀失敗時的自動換源 / 手動換源
 - TTS 朗讀、章節跟隨、自動翻頁
 - 本地備份 / 還原、匯出、分享導入
 
@@ -98,14 +100,20 @@ CI 自動觸發 build-release workflow，約 25 分鐘後 GitHub Releases 頁面
 - [docs/reader_architecture_current.md](docs/reader_architecture_current.md) — 閱讀器 runtime 現況
 - [docs/DATABASE.md](docs/DATABASE.md) — Drift schema、DAO 與 migration
 - [docs/roadmap.md](docs/roadmap.md) — 當前主線、不做清單與下一階段
+- [docs/next_stage_handoff.md](docs/next_stage_handoff.md) — 下一階段交接、風險與執行順序
 
 ## 測試
 
-目前有 58 個測試檔覆蓋：
+目前有 82 個測試檔覆蓋：
 
 - 閱讀器 runtime：lifecycle、restore、progress、navigation、scroll/slide、TTS follow
 - 書源引擎：parser、URL 分析、JS extensions、JS promise bridge、integration
 - 本地書解析、備份、下載與工具服務
+
+注意：
+
+- 在某些 WSL / VM 環境，若缺少 QuickJS native library（`libquickjs_c_bridge_plugin.so`），部分 JS / compatibility 測試會失敗。
+- 這類情況下，請以 CI 或具備完整 native library 的本機環境確認 full suite。
 
 提交前最低要求：
 

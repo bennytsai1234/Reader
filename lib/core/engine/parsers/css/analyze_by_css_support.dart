@@ -10,17 +10,15 @@ List<Element> querySelectorAllCompat(Element root, String selector) {
   }
   try {
     final matches = root.querySelectorAll(normalizedSelector);
-    if (_shouldIncludeRootMatch(root, normalizedSelector)) {
+    if (_shouldIncludeRootMatch(root, normalizedSelector) &&
+        !matches.contains(root)) {
       return [root, ...matches];
     }
     return matches;
   } on UnimplementedError {
     return _querySelectorAllUnsupportedCompat(root, normalizedSelector);
   } catch (_) {
-    if (_needsCompatSelector(normalizedSelector)) {
-      return _querySelectorAllUnsupportedCompat(root, normalizedSelector);
-    }
-    return [];
+    return _querySelectorAllUnsupportedCompat(root, normalizedSelector);
   }
 }
 
@@ -70,9 +68,6 @@ List<Element> _querySelectorAllUnsupportedCompat(
 }
 
 bool _shouldIncludeRootMatch(Element root, String selector) {
-  if (root.localName == 'html') {
-    return false;
-  }
   return _matchesSelectorAgainstElement(root, selector);
 }
 
@@ -81,6 +76,7 @@ bool _needsCompatSelector(String selector) {
       selector.contains(':containsOwn(') ||
       selector.contains(':has(') ||
       _hasRegexAttributeSelector(selector) ||
+      _hasExactAttributeSelector(selector) ||
       selector.contains(':eq(') ||
       selector.contains(':nth-child(') ||
       selector.contains(':nth-last-child(') ||
@@ -105,18 +101,33 @@ List<Element> _querySelectorGroupCompat(Element root, String selector) {
   } else {
     try {
       candidates = root.querySelectorAll(baseSelector);
+      if (candidates.isEmpty && _hasExactAttributeSelector(baseSelector)) {
+        candidates = _fallbackCandidatesForBaseSelector(root, baseSelector);
+      }
     } catch (_) {
-      candidates =
-          root
-              .querySelectorAll('*')
-              .where((element) => _matchesBaseSelector(element, baseSelector))
-              .toList();
+      candidates = _fallbackCandidatesForBaseSelector(root, baseSelector);
     }
   }
 
   return candidates
       .where((element) => _matchesSelectorAgainstElement(element, selector))
       .toList();
+}
+
+List<Element> _fallbackCandidatesForBaseSelector(
+  Element root,
+  String baseSelector,
+) {
+  final candidates = <Element>[];
+  if (_matchesBaseSelector(root, baseSelector)) {
+    candidates.add(root);
+  }
+  candidates.addAll(
+    root
+        .querySelectorAll('*')
+        .where((element) => _matchesBaseSelector(element, baseSelector)),
+  );
+  return candidates;
 }
 
 bool _matchesSelectorAgainstElement(Element element, String selector) {
@@ -247,18 +258,24 @@ bool _matchesBaseSelector(Element element, String selector) {
 }
 
 bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
-  if (selector.contains(' ') ||
-      selector.contains('>') ||
-      selector.contains('+') ||
-      selector.contains('~') ||
-      selector.contains('[') ||
-      selector.contains(':')) {
+  final extracted = _extractExactAttributeSelectors(selector);
+  final normalizedSelector = extracted.baseSelector;
+
+  if (normalizedSelector.contains(' ') ||
+      normalizedSelector.contains('>') ||
+      normalizedSelector.contains('+') ||
+      normalizedSelector.contains('~') ||
+      normalizedSelector.contains(':')) {
+    return null;
+  }
+
+  if (_hasUnsupportedAttributeSyntax(normalizedSelector)) {
     return null;
   }
 
   final match = RegExp(
     r'^([a-zA-Z][\w-]*)?(#[\w-]+)?((?:\.[\w-]+)*)$',
-  ).firstMatch(selector);
+  ).firstMatch(normalizedSelector);
   if (match == null) {
     return null;
   }
@@ -282,6 +299,11 @@ bool? _matchesSimpleBaseSelectorDirectly(Element element, String selector) {
       if (!element.classes.contains(className)) {
         return false;
       }
+    }
+  }
+  for (final attribute in extracted.attributeSelectors) {
+    if ((element.attributes[attribute.name] ?? '') != attribute.value) {
+      return false;
     }
   }
   return true;
@@ -614,6 +636,10 @@ String normalizeCssSelectorCompat(String selector) {
   });
 }
 
+bool _hasExactAttributeSelector(String selector) {
+  return RegExp(r'\[\s*([^\s~=\]]+)\s*=\s*([^\]]+)\]').hasMatch(selector);
+}
+
 bool _hasRegexAttributeSelector(String selector) {
   return _extractRegexAttributeSelectors(selector).attributeRegexes.isNotEmpty;
 }
@@ -643,6 +669,32 @@ _extractRegexAttributeSelectors(String selector) {
     baseSelector: normalized.replaceAll(RegExp(r'\s+'), ' ').trim(),
     attributeRegexes: attributeRegexes,
   );
+}
+
+({String baseSelector, List<_AttributeExactSelector> attributeSelectors})
+_extractExactAttributeSelectors(String selector) {
+  final attributeSelectors = <_AttributeExactSelector>[];
+  final normalized = selector.replaceAllMapped(
+    RegExp(r'\[\s*([^\s~=\]]+)\s*=\s*([^\]]+)\]'),
+    (match) {
+      final name = match.group(1)!.trim();
+      final rawValue = match.group(2)!.trim();
+      if (rawValue.isEmpty || _looksLikeRegexAttributeValue(rawValue)) {
+        return match.group(0)!;
+      }
+      final value = _unwrapCssAttributeValue(rawValue);
+      attributeSelectors.add(_AttributeExactSelector(name: name, value: value));
+      return '';
+    },
+  );
+  return (
+    baseSelector: normalized.replaceAll(RegExp(r'\s+'), ' ').trim(),
+    attributeSelectors: attributeSelectors,
+  );
+}
+
+bool _hasUnsupportedAttributeSyntax(String selector) {
+  return selector.contains('[') || selector.contains(']');
 }
 
 bool _looksLikeRegexAttributeValue(String value) {
@@ -685,6 +737,16 @@ String _normalizeContainsNeedle(String value) {
   return trimmed;
 }
 
+String _unwrapCssAttributeValue(String value) {
+  final trimmed = value.trim();
+  if (trimmed.length >= 2 &&
+      ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+          (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
+    return trimmed.substring(1, trimmed.length - 1);
+  }
+  return trimmed;
+}
+
 class _SelectorSegment {
   final String compound;
   final String? combinator;
@@ -717,6 +779,13 @@ class _AttributeRegexSelector {
   final RegExp pattern;
 
   const _AttributeRegexSelector({required this.name, required this.pattern});
+}
+
+class _AttributeExactSelector {
+  final String name;
+  final String value;
+
+  const _AttributeExactSelector({required this.name, required this.value});
 }
 
 class _PseudoMatch {
@@ -1027,7 +1096,11 @@ class ElementsSingle {
     if (selfMatches) {
       results.add(temp);
     }
-    results.addAll(descendants);
+    for (final element in descendants) {
+      if (!results.contains(element)) {
+        results.add(element);
+      }
+    }
     return results;
   }
 
@@ -1071,7 +1144,8 @@ class ElementsSingle {
     final curList = <int?>[];
     var l = '';
 
-    var head = rus.endsWith(']');
+    var head =
+        rus.endsWith(']') && RegExp(r'\[(?:!?[-\d:,\s]+)\]\s*$').hasMatch(rus);
 
     if (head) {
       len--;

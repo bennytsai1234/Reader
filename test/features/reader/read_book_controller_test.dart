@@ -31,13 +31,11 @@ class _FakeBookDao implements BookDao {
     String chapterTitle,
     int pos,
   ) async {
-    updates.add(
-      (
-        chapterIndex: chapterIndex,
-        chapterTitle: chapterTitle,
-        pos: pos,
-      ),
-    );
+    updates.add((
+      chapterIndex: chapterIndex,
+      chapterTitle: chapterTitle,
+      pos: pos,
+    ));
   }
 
   @override
@@ -106,13 +104,13 @@ void _setupDi() {
 }
 
 Book _makeBook() => Book(
-      bookUrl: 'http://test.com/book',
-      name: 'Test Book',
-      author: 'Author',
-      origin: 'local',
-      durChapterIndex: 0,
-      durChapterPos: 0,
-    );
+  bookUrl: 'http://test.com/book',
+  name: 'Test Book',
+  author: 'Author',
+  origin: 'local',
+  durChapterIndex: 0,
+  durChapterPos: 0,
+);
 
 List<BookChapter> _fakeChaptersFromDao = [];
 
@@ -123,9 +121,10 @@ List<TextPage> _buildPages(
 }) {
   return List.generate(pageStarts.length, (pageIndex) {
     final start = pageStarts[pageIndex];
-    final nextStart = pageIndex + 1 < pageStarts.length
-        ? pageStarts[pageIndex + 1]
-        : start + 8;
+    final nextStart =
+        pageIndex + 1 < pageStarts.length
+            ? pageStarts[pageIndex + 1]
+            : start + 8;
     final length = (nextStart - start).clamp(4, 12);
     return TextPage(
       index: pageIndex,
@@ -164,14 +163,14 @@ void main() {
     // so TTS calls don't crash in tests
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('flutter_tts'),
-      (call) async => null,
-    );
+          const MethodChannel('flutter_tts'),
+          (call) async => null,
+        );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('com.ryanheise.audio_service.methods'),
-      (call) async => null,
-    );
+          const MethodChannel('com.ryanheise.audio_service.methods'),
+          (call) async => null,
+        );
   });
 
   group('ReadBookController lifecycle', () {
@@ -211,6 +210,23 @@ void main() {
       controller.dispose();
     });
 
+    test('帶入 initialChapters 時不會被空 DAO 覆蓋成暫無章節', () async {
+      _fakeChaptersFromDao = [];
+      final initialChapters = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: initialChapters,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(controller.chapters, hasLength(2));
+      expect(controller.chapters.first.title, 'c0');
+      controller.dispose();
+    });
+
     test('dispose 後 isLoading 中的章節集合仍可安全讀取', () {
       final controller = ReadBookController(book: _makeBook());
       controller.dispose();
@@ -222,10 +238,7 @@ void main() {
         BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
         BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
       ];
-      final controller = ReadBookController(
-        book: _makeBook(),
-        chapterIndex: 1,
-      );
+      final controller = ReadBookController(book: _makeBook(), chapterIndex: 1);
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       controller.pageTurnMode = PageAnim.slide;
@@ -247,61 +260,75 @@ void main() {
       controller.dispose();
     });
 
-    test('slide 模式 charOffset restore 會保留 restore reason 給 page change', () async {
-      _fakeChaptersFromDao = [
-        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
-        BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
-      ];
-      final controller = ReadBookController(
-        book: _makeBook(),
-        chapterIndex: 1,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+    test(
+      'slide 模式 charOffset restore 會保留 restore reason 給 page change',
+      () async {
+        _fakeChaptersFromDao = [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+          BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+        ];
+        final controller = ReadBookController(
+          book: _makeBook(),
+          chapterIndex: 1,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      controller.pageTurnMode = PageAnim.slide;
-      controller.chapterPagesCache[0] = _buildPages(0, [0], title: 'c0');
-      controller.chapterPagesCache[1] = _buildPages(1, [0, 8, 16], title: 'c1');
-      controller.slidePages = [
-        ...controller.chapterPagesCache[0]!,
-        ...controller.chapterPagesCache[1]!,
-      ];
+        controller.pageTurnMode = PageAnim.slide;
+        controller.chapterPagesCache[0] = _buildPages(0, [0], title: 'c0');
+        controller.chapterPagesCache[1] = _buildPages(1, [
+          0,
+          8,
+          16,
+        ], title: 'c1');
+        controller.slidePages = [
+          ...controller.chapterPagesCache[0]!,
+          ...controller.chapterPagesCache[1]!,
+        ];
 
-      controller.jumpToChapterCharOffset(
-        chapterIndex: 1,
-        charOffset: 8,
-        reason: ReaderCommandReason.restore,
-        isRestoringJump: true,
-      );
+        controller.jumpToChapterCharOffset(
+          chapterIndex: 1,
+          charOffset: 8,
+          reason: ReaderCommandReason.restore,
+          isRestoringJump: true,
+        );
 
-      expect(controller.currentPageIndex, 2);
-      expect(controller.consumePendingSlidePageIndex(), 2);
-      expect(
-        controller.consumePendingSlideJumpReason(),
-        ReaderCommandReason.restore,
-      );
-      controller.dispose();
-    });
+        expect(controller.currentPageIndex, 2);
+        expect(controller.consumePendingSlidePageIndex(), 2);
+        expect(
+          controller.consumePendingSlideJumpReason(),
+          ReaderCommandReason.restore,
+        );
+        controller.dispose();
+      },
+    );
 
-    test('scroll 模式 charOffset repaginate 會暫時抑制 visible progress persist', () async {
-      _fakeChaptersFromDao = [
-        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
-      ];
-      final controller = ReadBookController(book: _makeBook());
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+    test(
+      'scroll 模式 charOffset repaginate 會暫時抑制 visible progress persist',
+      () async {
+        _fakeChaptersFromDao = [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        ];
+        final controller = ReadBookController(book: _makeBook());
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      controller.pageTurnMode = PageAnim.scroll;
-      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
-      controller.refreshChapterRuntime(0);
+        controller.pageTurnMode = PageAnim.scroll;
+        controller.chapterPagesCache[0] = _buildPages(0, [
+          0,
+          8,
+          16,
+        ], title: 'c0');
+        controller.refreshChapterRuntime(0);
 
-      controller.jumpToChapterCharOffset(
-        chapterIndex: 0,
-        charOffset: 8,
-        reason: ReaderCommandReason.settingsRepaginate,
-      );
+        controller.jumpToChapterCharOffset(
+          chapterIndex: 0,
+          charOffset: 8,
+          reason: ReaderCommandReason.settingsRepaginate,
+        );
 
-      expect(controller.shouldPersistVisiblePosition(), isFalse);
-      controller.dispose();
-    });
+        expect(controller.shouldPersistVisiblePosition(), isFalse);
+        controller.dispose();
+      },
+    );
 
     test('slide user page change 只會持久化一次正確進度', () async {
       _fakeChaptersFromDao = [
@@ -387,8 +414,9 @@ void main() {
       controller.refreshChapterRuntime(0);
       controller.visibleChapterIndex = 0;
       controller.currentChapterIndex = 0;
-      controller.visibleChapterLocalOffset =
-          controller.chapterAt(0)!.localOffsetFromCharOffset(8);
+      controller.visibleChapterLocalOffset = controller
+          .chapterAt(0)!
+          .localOffsetFromCharOffset(8);
 
       controller.setPageTurnMode(PageAnim.slide);
 

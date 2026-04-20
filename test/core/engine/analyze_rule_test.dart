@@ -28,6 +28,7 @@ class MockRuleData extends RuleDataInterface {
 void main() {
   setupTestDI();
   TestWidgetsFlutterBinding.ensureInitialized();
+  final quickJsSkip = quickJsUnavailableReason();
 
   group('AnalyzeRule Tests', () {
     const htmlStr = '''
@@ -213,16 +214,21 @@ void main() {
           '{"headers":{"X-Test":"1"}}',
         );
       },
+      skip: quickJsSkip,
     );
 
-    test('java.getElements exposes parsed element lists to rule js', () {
-      final analyzer = AnalyzeRule().setContent(htmlStr);
+    test(
+      'java.getElements exposes parsed element lists to rule js',
+      () {
+        final analyzer = AnalyzeRule().setContent(htmlStr);
 
-      expect(
-        analyzer.evalJS('java.getElements(".links@tag.a").join("|")', null),
-        '<a href="/chapter/1">Chapter 1</a>|<a href="/chapter/2">Chapter 2</a>',
-      );
-    });
+        expect(
+          analyzer.evalJS('java.getElements(".links@tag.a").join("|")', null),
+          '<a href="/chapter/1">Chapter 1</a>|<a href="/chapter/2">Chapter 2</a>',
+        );
+      },
+      skip: quickJsSkip,
+    );
 
     test('@put runs before rule evaluation in getString', () {
       final analyzer = AnalyzeRule(
@@ -283,6 +289,7 @@ void main() {
           'https://api-bc.wtzw.com/api/v4/book/detail?id=1,{"headers":{"X-Test":"1"}}',
         );
       },
+      skip: quickJsSkip,
     );
 
     test(
@@ -315,6 +322,7 @@ void main() {
           '/books?bookId=47749',
         );
       },
+      skip: quickJsSkip,
     );
 
     test(
@@ -335,6 +343,7 @@ void main() {
           'https://ixdzs8.com/novel/clist/,{"body":"bid=17047","method":"POST"}',
         );
       },
+      skip: quickJsSkip,
     );
 
     test(
@@ -450,6 +459,7 @@ void main() {
           }
         }
       },
+      skip: quickJsSkip,
     );
 
     test(
@@ -473,6 +483,7 @@ void main() {
           await CookieStore().removeCookie('https://example.com');
         }
       },
+      skip: quickJsSkip,
     );
 
     test('leading standalone comment lines are ignored before json rules', () {

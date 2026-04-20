@@ -1,8 +1,8 @@
 # 路線圖
 
-更新日期：2026-04-17
+更新日期：2026-04-20
 
-這份 roadmap 不是零碎待辦清單，而是墨頁在 `0.2.1` 之後的優先級約束。原則只有一個：**不再擴充新功能，持續優化既有的核心能力**。
+這份 roadmap 不是零碎待辦清單，而是墨頁在 `v0.2.4` 之後的優先級約束。原則只有一個：**不再擴充新功能，持續優化既有的核心能力**。
 
 ## 專案目標
 
@@ -14,7 +14,7 @@
 - 有穩定閱讀器 runtime、可預測書源引擎、可追蹤資料層
 - 可自行建置、側載、測試、持續發版的 app
 
-## 到 0.2.1 為止的進度
+## 到 0.2.4 為止的進度
 
 **核心架構已落地**：
 
@@ -22,7 +22,7 @@
 - `core/engine` 有完整 parser + source login + charset 偵測
 - Drift + DAO（schema v8）資料層骨架穩定
 - 備份、還原、匯出、下載、widget 等平台能力有基礎實作
-- 61 個測試檔覆蓋閱讀器主流程、parser、book source、JS extensions、bookshelf exchange
+- 82 個測試檔覆蓋閱讀器主流程、parser、book source、JS extensions、bookshelf exchange、source manager 與 source health
 
 **已完成的主要里程碑**：
 
@@ -41,19 +41,20 @@
 | M9 | 閱讀器 Runtime 收斂與產品模組清理（TTS mixin 提取、settings 重組、scroll_auto_page_driver 刪除、battery mixin 提取） | ✅ |
 | M10 | 備份 / 還原能力補齊（RestoreService 實作、BackupSettingsPage UI、備份一致性優化、下載任務備份擴充） | ✅ |
 | M11 | 書架匯入匯出與本地格式管理（BookshelfExchangeService、LocalBookFormats 集中化、UMD parser 重寫） | ✅ |
+| M12 | 書源相容層與產品策略收斂（source parity、書源狀態系統、執行期隔離、閱讀失敗換源） | ✅ |
 
 ## 長期目標
 
-`0.2.1` 之後，專案定位為**不再擴充新功能**，而是持續優化既有的 8 項基礎能力。每項基礎走完四個階段才算穩定：
+`v0.2.4` 之後，專案定位仍然是**不再擴充新功能**，而是持續優化既有的 8 項基礎能力。每項基礎走完四個階段才算穩定：
 
 **8 項基礎能力與當前階段**
 
 | # | 基礎能力 | 設計 | 可用 | 流暢 | UI/UX | 備註 |
 |---|---------|------|------|------|-------|------|
 | 1 | 書架管理、分組、書籍詳情、章節列表 | ✅ | ✅ | — | — | M11 新增匯入匯出功能 |
-| 2 | 搜尋（全部 / 分類 / 單一書源）與探索頁 | ✅ | ✅ | — | — | M6 / M7 完成重構 |
+| 2 | 搜尋（全部 / 分類 / 單一書源）與探索頁 | ✅ | ✅ | — | — | M6 / M7 完成重構，已接入書源健康過濾 |
 | 3 | 本地 TXT / EPUB / MOBI / PDF / UMD 匯入 | ✅ | ⚙️ | — | — | UMD parser 已重寫；LocalBookFormats 集中化 |
-| 4 | 網路書源解析、登入、WebView 抓取 | ✅ | ⚙️ | — | — | 錯誤追蹤尚未到 rule 層級 |
+| 4 | 網路書源解析、登入、WebView 抓取 | ✅ | ⚙️ | — | — | source parity 與隔離策略已接入，但 rule 級診斷與 WebView recovery 未完成 |
 | 5 | 兩種閱讀模式：平移 / 捲動 | ✅ | ✅ | — | — | scroll_auto_page_driver 已刪除、auto-page 統一 |
 | 6 | 閱讀進度保存、還原與多點同步 | ✅ | ✅ | — | — | RestoreService 已實作端到端還原 |
 | 7 | TTS 朗讀、章節跟隨、自動翻頁 | ✅ | ⚙️ | — | — | ReaderTtsMixin 已提取、TTS settings 獨立頁面 |
@@ -70,62 +71,59 @@
 | 流暢 | I/O 與排版耗時可預期、無明顯卡頓 |
 | UI / UX | 視覺、互動、操作手感對齊產品直覺 |
 
-目前 8 項基礎的「設計」階段全數完成，多數已進入或達到「可用」。下一輪焦點是把 #3、#4、#7 的可用補齊，再整體向「流暢」與「UI/UX」推進。不跳階、不平行擴張。
+目前 8 項基礎的「設計」階段全數完成，多數已進入或達到「可用」。下一輪焦點不再是擴大書源審計，而是把 #4 的可預測性、#5/#6 的恢復能力、以及整體測試環境可信度補齊，再整體向「流暢」與「UI/UX」推進。不跳階、不平行擴張。
 
 ## 主線優先級
 
 下面是目前（仍在**設計 → 可用**過渡期）的近期焦點。時間有限時永遠先保護前兩項。
 
-### 1. 閱讀器 runtime 繼續收斂（最高）
+### 1. JS 引擎與 full suite 可信度（最高）
 
-**近期進展（M9）**：
+`v0.2.4` 已把 source parity 與書源狀態系統接入主線，但完整 `flutter test` 在部分 VM / WSL 環境仍不穩定，主要因為：
 
-- `ReadBookController` 從 ~1300 行降至 ~1076 行（第二輪瘦身）
-- `ReaderTtsMixin`（185 行）從 controller 提取為獨立 mixin
-- `ReaderBatteryMixin`（25 行）提取為獨立 mixin
-- `scroll_auto_page_driver.dart` 已刪除，auto-page 統一由 `reader_auto_page_coordinator` 驅動
-- `ReaderDisplayCoordinator` 接管顯示資訊投影職責
-- `ContentCallbacks` 新增，明確化內容回呼介面
-
-**仍存在**：
-
-- `ReadBookController` 仍有 ~1076 行，目標降至 ~800 行
-- `ReaderContentMixin` 有 ~1001 行，歷史責任尚未完全退出
-- `ChapterContentManager._targetWindow` 細節仍未完全收回內部
-
-**目標**：繼續把 `ReaderContentMixin` 的責任移至 coordinator，`ReadBookController` 降到 800 行以下。
-
-**完成標準**：`ReadBookController` 可讀性到「10 分鐘能讀懂責任鏈」、mixin 鏈中每個 mixin 責任單一且不超過 300 行。
-
-### 2. 書源引擎可預測性
-
-當前已有 parser alignment，但：
-
-- JS extensions 行為在邊緣條件（大檔案、binary、非同步 error）仍可能差異
-- WebView 書源（headless）error recovery 路徑未覆蓋完整測試
-- source login 只有基礎回歸
-
-**目標**：把 engine 對外 API 進一步語意化，錯誤訊息可追蹤到 rule 層級。
-
-**完成標準**：書源報錯時，能在 engine 層給出「第幾條 rule、哪個 URL、哪個階段」而不是 UI 層猜測。
-
-### 3. 發版與平台能力一致性
-
-當前：
-
-- iOS 側載路徑（AltStore IPA）正常
-- Android APK release 正常
-- 沒有自動 TestFlight、沒有 WebDAV、沒有 in-app update
+- `JsEngine` 在 native QuickJS library 缺失時會落回 mock 路徑
+- 一批 JS / compatibility 測試會因此轉成 `JS_ERROR: Library not available`
+- 仍有少數 CSS / integration 級紅燈沒有完全收斂
 
 **目標**：
 
-- 備份 manifest 版本口徑與 schema / pubspec 保持同步檢查（可加 CI lint）
-- Android widget 行為與 iOS 缺失功能列表有明確文檔
-- Crash log 收集流程端到端可驗證
+- 讓 full suite 在本地與 CI 都有可預期的執行方式
+- 明確區分「環境缺件」與「真 regression」
+- 把現存 compatibility 紅燈收斂到可接受的少數 canary
 
-### 4. 產品模組收尾
+**完成標準**：`flutter analyze` 穩定全綠，`flutter test` 不再被 QuickJS 缺件大面積污染，剩餘失敗能明確指向真實 parser/runtime 問題。
 
-**近期進展（M9 – M11）**：
+### 2. 書源狀態與校驗資料正規化
+
+目前已做到：
+
+- 書源健康狀態可影響搜尋、閱讀、清理與換源
+- 來源管理頁可直接查看校驗結果與批次清理建議來源
+
+但目前 health 仍是依賴 `group/comment` 推導，`SourceCheckReport` 也只有 service 記憶體內的最近一次結果。
+
+**目標**：
+
+- 把書源健康狀態收斂為正式欄位或獨立狀態表
+- 保留最後校驗時間、階段、錯誤摘要與必要歷史
+- 讓 UI 不再依賴暫時性 tag/comment 技巧推導狀態
+
+**完成標準**：書源健康狀態、校驗摘要與清理建議都能持久化，重啟 app 後不丟失，且與手動分組語義解耦。
+
+### 3. 書源引擎可預測性與 rule 級診斷
+
+當前 source parity 已有大量進展，但還差兩塊：
+
+- 錯誤訊息還沒全面下沉到 rule 級
+- WebView / login / anti-bot recovery 的覆蓋還不完整
+
+**目標**：讓 engine 對外 API 進一步語意化，錯誤訊息可追蹤到 rule 層級，WebView 失敗能更像正常 runtime 問題而不是黑盒 timeout。
+
+**完成標準**：書源報錯時，能在 engine 層給出「第幾條 rule、哪個 URL、哪個階段」而不是 UI 層猜測；WebView / login 類失敗有穩定 recovery 與測試護欄。
+
+### 4. 閱讀器 runtime 與換源流程收尾
+
+**近期進展（M9 – M12）**：
 
 - `settings/` 已完成重組：舊的 `theme_settings_page`、`aloud_settings_page` 與三個 `settings_group_*.dart` widget 刪除
 - 新增 `appearance_settings_page.dart`（252 行）統一視覺設定、`tts_settings_page.dart`（112 行）獨立 TTS 設定
@@ -133,9 +131,12 @@
 - `BookshelfExchangeService`（177 行）提供書架匯入 / 匯出，整合至書架頁溢出選單
 - `LocalBookFormats` 集中管理所有本地書格式常數
 - `UmdParser` 重寫（261 行），新增 UMD 匯入測試
+- 閱讀器已接入正文失敗後的自動換源 / 手動換源
 
 **仍待處理**：
 
+- `ReadBookController` 本身仍偏大
+- 換源目前偏「正文失敗後補救」，尚未前移到詳情 / 目錄階段
 - `cache_manager` 與 `download_manager` 責任仍有重疊，考慮統一入口
 - `dict`、`replace_rule`、`txt_toc_rule` 工具頁 UI 風格可對齊
 - `storage_management_page` 已初步重構但可進一步精簡
@@ -167,7 +168,7 @@
 
 ## 發版原則
 
-從 `0.2.1` 起沿用：
+從 `v0.2.4` 起沿用：
 
 - 每次發版先統一 `pubspec.yaml`、iOS version metadata、備份 manifest 版本口徑
 - 發版前至少跑 `flutter analyze` 與 `flutter test`
