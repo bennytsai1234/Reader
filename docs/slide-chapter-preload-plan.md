@@ -8,7 +8,7 @@
 
 現在的 slide 模式不是單靠 `PageView` 翻頁，而是依賴：
 
-- `ReaderContentMixin`
+- `ReaderContentFacadeMixin`
 - `ChapterContentManager`
 - `SlideWindow`
 - `ReadBookController` 的邊界預抓
@@ -19,7 +19,7 @@
 
 ### 1. slide 模式有固定 warmup radius
 
-從 [reader_content_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_mixin.dart:122) 可以直接看到：
+從 [reader_content_facade_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_facade_mixin.dart:122) 可以直接看到：
 
 - `_defaultSlideWarmupRadius => 2`
 
@@ -50,7 +50,7 @@
 
 ### 4. deferred warmup 仍存在
 
-從 [reader_content_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_mixin.dart:442) 可直接看到：
+從 [reader_content_facade_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_facade_mixin.dart:442) 可直接看到：
 
 - `scheduleDeferredWindowWarmup(...)`
 

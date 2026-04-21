@@ -16,6 +16,7 @@ import 'tts_dialog.dart';
 import 'auto_read_dialog.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
 import 'package:inkpage_reader/features/reader/reader_layout.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_page_viewport_bridge.dart';
 import 'package:inkpage_reader/features/reader/view/slide_page_controller.dart';
 
 class ReaderPage extends StatefulWidget {
@@ -37,7 +38,7 @@ class _ReaderPageState extends State<ReaderPage> {
   final GlobalKey<ScaffoldState> _key = GlobalKey<ScaffoldState>();
   late SlidePageController _slideCtrl;
   int _controllerGeneration = 0;
-  bool _recenterPollScheduled = false;
+  final ReaderPageViewportBridge _viewportBridge = ReaderPageViewportBridge();
   bool _isHandlingExit = false;
 
   @override
@@ -66,29 +67,23 @@ class _ReaderPageState extends State<ReaderPage> {
     _controllerGeneration++;
   }
 
-  /// Ensure a single recenter poll is in flight. Deduplicated so multiple
-  /// [Consumer] rebuilds while [hasPendingSlideRecenter] is true don't stack
-  /// up redundant callbacks.
-  void _ensureRecenterPoll(ReaderProvider p) {
-    if (_recenterPollScheduled) return;
-    _recenterPollScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _pollRecenter(p));
-  }
-
   /// Poll each frame until the page scroll animation has settled, then
   /// apply the deferred slide window recenter atomically.
   void _pollRecenter(ReaderProvider p) {
-    _recenterPollScheduled = false;
-    if (!mounted || !p.hasPendingSlideRecenter) return;
-    if (_pageCtrl.hasClients && _pageCtrl.position.isScrollingNotifier.value) {
-      // Still animating — retry next frame.
-      _recenterPollScheduled = true;
+    final action = _viewportBridge.handleRecenterPoll(
+      isMounted: mounted,
+      hasPendingSlideRecenter: p.hasPendingSlideRecenter,
+      isPageScrolling:
+          _pageCtrl.hasClients && _pageCtrl.position.isScrollingNotifier.value,
+    );
+    if (action == ReaderPageRecenterAction.none) return;
+    if (action == ReaderPageRecenterAction.reschedule) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _pollRecenter(p));
-    } else {
-      // Scroll settled — rebuild window + reset controller atomically.
-      // This triggers notifyListeners → Consumer rebuild → consumeControllerReset.
-      p.applyPendingSlideRecenter();
+      return;
     }
+    // Scroll settled — rebuild window + reset controller atomically.
+    // This triggers notifyListeners → Consumer rebuild → consumeControllerReset.
+    p.applyPendingSlideRecenter();
   }
 
   void _handleTap(Offset pos, Size size, ReaderProvider p) {
@@ -163,22 +158,19 @@ class _ReaderPageState extends State<ReaderPage> {
   }
 
   Widget _buildBody(BuildContext context, ReaderProvider p) {
-    // Controller reset: recreate PageController at the correct page
-    // to avoid the one-frame glitch during chapter recentering.
-    // This is only called AFTER the scroll has settled (via
-    // applyPendingSlideRecenter), so no animation is in progress here.
-    final resetTarget = p.consumeControllerReset();
+    final shellUpdate = _viewportBridge.resolveBuildUpdate(
+      controllerResetPage: p.consumeControllerReset(),
+      hasPendingSlideRecenter: p.hasPendingSlideRecenter,
+      pendingJumpPage: p.consumePendingJump(),
+    );
+    final resetTarget = shellUpdate.controllerResetPage;
     if (resetTarget != null) {
       _resetController(resetTarget);
     }
-
-    // If a slide window recenter is pending (chapter just changed
-    // mid-animation), poll until the scroll settles then apply it.
-    if (p.hasPendingSlideRecenter) {
-      _ensureRecenterPoll(p);
+    if (shellUpdate.shouldScheduleRecenterPoll) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _pollRecenter(p));
     }
-
-    final pendingJump = p.consumePendingJump();
+    final pendingJump = shellUpdate.pendingJumpPage;
     if (pendingJump != null) {
       _slideCtrl.jumpTo(
         pendingJump,

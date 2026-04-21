@@ -544,6 +544,66 @@ void main() {
       controller.dispose();
     });
 
+    test('persistExitProgress 在 scroll 模式會保存目前可見 charOffset', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.refreshChapterRuntime(0);
+      final localOffset = controller.chapterAt(0)!.localOffsetFromCharOffset(8);
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: localOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+      );
+
+      await controller.persistExitProgress();
+
+      expect(_FakeBookDao.updates, isNotEmpty);
+      expect(_FakeBookDao.updates.last.chapterIndex, 0);
+      expect(_FakeBookDao.updates.last.pos, 8);
+      expect(
+        controller.durableLocation,
+        const ReaderLocation(chapterIndex: 0, charOffset: 8),
+      );
+      controller.dispose();
+    });
+
+    test(
+      'replaceChapterSource 會透過 content facade 失效舊 cache 與 runtime',
+      () async {
+        _fakeChaptersFromDao = [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+          BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+        ];
+        final controller = ReadBookController(
+          book: _makeBook(),
+          initialChapters: _fakeChaptersFromDao,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        controller.chapterPagesCache[1] = _buildPages(1, [0, 12], title: 'c1');
+        controller.refreshChapterRuntime(1);
+
+        expect(controller.chapterAt(1), isNotNull);
+
+        controller.replaceChapterSource(1, BookSource(), 'updated content');
+
+        expect(controller.chapters[1].content, 'updated content');
+        expect(controller.chapterPagesCache.containsKey(1), isFalse);
+        expect(controller.chapterAt(1), isNull);
+        controller.dispose();
+      },
+    );
+
     test('未加入書架且已有閱讀進度時，退出會建議加入書架', () async {
       _fakeChaptersFromDao = [
         BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),

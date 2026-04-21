@@ -266,7 +266,7 @@ class BookDetailPage extends StatelessWidget {
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
-        builder: (ctx) => ChangeSourceSheet(book: p.book),
+        builder: (ctx) => ChangeSourceSheet(book: p.book, detailProvider: p),
       );
 
   void _showDownloadSheet(BuildContext context, BookDetailProvider provider) {
@@ -419,7 +419,12 @@ class BookDetailPage extends StatelessWidget {
         context: context,
         isScrollControlled: true,
         builder:
-            (ctx) =>
-                ChangeCoverSheet(bookName: p.book.name, author: p.book.author),
+            (ctx) => ChangeNotifierProvider.value(
+              value: p,
+              child: ChangeCoverSheet(
+                bookName: p.book.name,
+                author: p.book.author,
+              ),
+            ),
       );
 }

@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
+import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/reader_layout.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_view_runtime_coordinator.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_viewport_execution_bridge.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_viewport_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
 import 'package:inkpage_reader/features/reader/view/delegate/scroll_mode_delegate.dart';
 import 'package:inkpage_reader/features/reader/view/delegate/page_mode_delegate.dart';
@@ -39,9 +42,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       ItemPositionsListener.create();
   final Map<String, GlobalKey> _pageKeys = {};
   Timer? _userScrollResetTimer;
-  bool _isUserScrolling = false;
-  int _lastTtsFollowOffset = -1;
-  late int _lastPageTurnMode;
   late final ScrollExecutionAdapter _scrollExecution = ScrollExecutionAdapter(
     pageKeys: _pageKeys,
     onStateChanged: () {
@@ -53,11 +53,17 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   final ScrollRestoreRunner _scrollRestoreRunner = const ScrollRestoreRunner();
   final ReadViewRuntimeCoordinator _coordinator =
       const ReadViewRuntimeCoordinator();
+  final ReaderViewportExecutionBridge _executionBridge =
+      const ReaderViewportExecutionBridge();
   late final ScrollRuntimeExecutor _scrollRuntimeExecutor;
+  late final ReaderViewportRuntime _viewportRuntime;
 
   @override
   void initState() {
     super.initState();
+    _viewportRuntime = ReaderViewportRuntime(
+      initialPageTurnMode: widget.provider.pageTurnMode,
+    );
     _scrollRuntimeExecutor = ScrollRuntimeExecutor(
       provider: widget.provider,
       itemScrollController: _itemScrollController,
@@ -91,7 +97,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       _contentRevealed = true;
       _fadeCtrl.value = 1.0;
     }
-    _lastPageTurnMode = widget.provider.pageTurnMode;
     widget.provider.addListener(_onProviderStateChanged);
     _itemPositionsListener.itemPositions.addListener(
       _handleItemPositionsChanged,
@@ -108,7 +113,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
     widget.provider.detachAutoPageTicker();
     widget.provider.detachScrollAutoPageDriver();
     _userScrollResetTimer?.cancel();
-    widget.provider.setScrollInteractionActive(false);
+    _viewportRuntime.reset(widget.provider);
     super.dispose();
   }
 
@@ -122,16 +127,14 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
     }
 
     final p = widget.provider;
-    if (_lastPageTurnMode != p.pageTurnMode) {
-      _lastPageTurnMode = p.pageTurnMode;
+    final runtimeUpdate = _viewportRuntime.handleProviderStateChanged(p);
+    if (runtimeUpdate.didModeChange) {
       _pageKeys.clear();
-      _isUserScrolling = false;
       _userScrollResetTimer?.cancel();
-      widget.provider.setScrollInteractionActive(false);
     }
     p.reconcileVisibleScrollLoads();
 
-    final pendingScrollAction = _coordinator.consumePendingScrollAction(p);
+    final pendingScrollAction = runtimeUpdate.pendingScrollAction;
     if (pendingScrollAction != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (pendingScrollAction.isRestore) {
@@ -157,17 +160,10 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       });
     }
 
-    if (_coordinator.shouldFollowTts(
-      p,
-      lastTtsFollowOffset: _lastTtsFollowOffset,
-      isUserScrolling: _isUserScrolling,
-    )) {
-      _lastTtsFollowOffset = _currentTtsFollowOffset(p);
+    if (runtimeUpdate.shouldFollowTts) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollRuntimeExecutor.scrollToTtsHighlight();
       });
-    } else if (_currentTtsFollowOffset(p) < 0) {
-      _lastTtsFollowOffset = -1;
     }
 
     setState(() {});
@@ -176,65 +172,24 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   void _handleItemPositionsChanged() {
     final p = widget.provider;
     if (p.pageTurnMode != PageAnim.scroll) return;
-    final positions =
-        _itemPositionsListener.itemPositions.value.toList()
-          ..sort((a, b) => a.itemLeadingEdge.compareTo(b.itemLeadingEdge));
-    if (positions.isEmpty) return;
-    final visible =
-        positions
-            .where(
-              (item) => item.itemTrailingEdge > 0 && item.itemLeadingEdge < 1,
-            )
-            .toList();
-    if (visible.isEmpty) return;
-    final focusItem = _resolveFocusItem(visible);
-    final chapterIndex = focusItem.index;
-    final viewportHeight = context.size?.height ?? 1.0;
-    final rawLocalOffset = ((0.5 - focusItem.itemLeadingEdge) * viewportHeight)
-        .clamp(0.0, double.infinity);
-    final localOffset = (rawLocalOffset - p.scrollViewportTopInset).clamp(
-      0.0,
-      double.infinity,
+    final update = _executionBridge.resolveVisibleScrollUpdate(
+      positions: _itemPositionsListener.itemPositions.value,
+      viewportHeight: context.size?.height ?? 1.0,
+      chapterHeightFor: (chapterIndex) {
+        final runtimeChapter = p.chapterAt(chapterIndex);
+        return runtimeChapter?.chapterHeight ??
+            ChapterPositionResolver.chapterHeight(
+              p.pagesForChapter(chapterIndex),
+            );
+      },
     );
+    if (update == null) return;
     p.handleVisibleScrollState(
-      chapterIndex: chapterIndex,
-      localOffset: localOffset,
-      alignment: focusItem.itemLeadingEdge.clamp(0.0, 1.0),
-      visibleChapterIndexes: visible.map((item) => item.index).toList(),
+      chapterIndex: update.chapterIndex,
+      localOffset: update.localOffset,
+      alignment: update.alignment,
+      visibleChapterIndexes: update.visibleChapterIndexes,
     );
-  }
-
-  ItemPosition _resolveFocusItem(List<ItemPosition> visible) {
-    const focusLine = 0.5;
-    ItemPosition best = visible.first;
-    var bestDistance = _distanceToFocusLine(best, focusLine);
-    for (final item in visible) {
-      final distance = _distanceToFocusLine(item, focusLine);
-      if (distance < bestDistance) {
-        best = item;
-        bestDistance = distance;
-      }
-      if (distance == 0) {
-        return item;
-      }
-    }
-    return best;
-  }
-
-  double _distanceToFocusLine(ItemPosition item, double focusLine) {
-    if (focusLine < item.itemLeadingEdge) {
-      return item.itemLeadingEdge - focusLine;
-    }
-    if (focusLine > item.itemTrailingEdge) {
-      return focusLine - item.itemTrailingEdge;
-    }
-    return 0.0;
-  }
-
-  int _currentTtsFollowOffset(ReaderProvider provider) {
-    return provider.ttsWordStart >= 0
-        ? provider.ttsWordStart
-        : provider.ttsStart;
   }
 
   @override
@@ -255,18 +210,24 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           top: contentTopInset,
           bottom: contentBottomInset,
         );
-        if ((contentInsetsChanged || scrollInsetsChanged) &&
-            provider.viewSize == size &&
-            provider.isReady) {
+        final layoutUpdate = _executionBridge.resolveLayoutUpdate(
+          size: size,
+          contentInsetsChanged: contentInsetsChanged,
+          scrollInsetsChanged: scrollInsetsChanged,
+          currentViewSize: provider.viewSize,
+          isReady: provider.isReady,
+        );
+        if (layoutUpdate.shouldRepaginate) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               provider.doPaginate();
             }
           });
         }
-        if (provider.viewSize != size) {
+        final nextViewSize = layoutUpdate.nextViewSize;
+        if (nextViewSize != null) {
           WidgetsBinding.instance.addPostFrameCallback(
-            (_) => provider.setViewSize(size),
+            (_) => provider.setViewSize(nextViewSize),
           );
         }
 
@@ -312,7 +273,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
                   itemScrollController: _itemScrollController,
                   itemPositionsListener: _itemPositionsListener,
                   pageKeys: _pageKeys,
-                  isUserScrolling: () => _isUserScrolling,
+                  isUserScrolling: () => _viewportRuntime.isUserScrolling,
                 )
                 : const PageModeDelegate();
 
@@ -350,30 +311,18 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   ) {
     if (notification is ScrollStartNotification &&
         notification.dragDetails != null) {
-      _beginUserScroll(provider);
+      _viewportRuntime.beginUserScroll(provider);
     } else if (notification is ScrollEndNotification) {
       _scheduleUserScrollReset(provider);
     }
     return false;
   }
 
-  void _beginUserScroll(ReaderProvider provider) {
-    _isUserScrolling = true;
-    _userScrollResetTimer?.cancel();
-    provider.autoPageProgressNotifier.value = 0.0;
-    provider.pauseAutoPage();
-    provider.setScrollInteractionActive(true);
-  }
-
   void _scheduleUserScrollReset(ReaderProvider provider) {
     _userScrollResetTimer?.cancel();
     _userScrollResetTimer = Timer(const Duration(milliseconds: 800), () {
       if (!mounted) return;
-      _isUserScrolling = false;
-      provider.setScrollInteractionActive(false);
-      if (!provider.showControls) {
-        provider.resumeAutoPage();
-      }
+      _viewportRuntime.endUserScroll(provider);
     });
   }
 

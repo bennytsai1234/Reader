@@ -10,7 +10,7 @@ import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
-import 'package:inkpage_reader/features/reader/provider/reader_content_mixin.dart';
+import 'package:inkpage_reader/features/reader/provider/reader_content_facade_mixin.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_navigation_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
@@ -82,23 +82,21 @@ void _setupReaderRuntimeTestDi() {
 }
 
 class _ReaderRuntimeHarness extends ReaderProviderBase
-    with ReaderSettingsMixin, ReaderContentMixin {
+    with ReaderSettingsMixin, ReaderContentFacadeMixin {
   final ReaderProgressStore _store = ReaderProgressStore();
   late final ReaderProgressCoordinator _progressCoordinator;
   late final ReaderSessionState _sessionState;
   final Map<int, ReaderChapter> _runtimeChapters = {};
-  final List<({
-    int chapterIndex,
-    int pageIndex,
-    ReaderCommandReason reason,
-  })> persistedRequests = [];
+  final List<({int chapterIndex, int pageIndex, ReaderCommandReason reason})>
+  persistedRequests = [];
 
   ({
     int chapterIndex,
     double localOffset,
     double alignment,
     ReaderCommandReason reason,
-  })? lastChapterJump;
+  })?
+  lastChapterJump;
   int? lastSlideJump;
   ReaderCommandReason? lastSlideJumpReason;
   bool persistVisiblePosition = true;
@@ -120,56 +118,57 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       store: _store,
       durableLocation: () => _sessionState.durableLocation,
       shouldPersistVisiblePosition: () => persistVisiblePosition,
-      updateSessionLocation: (location) =>
-          _sessionState.updateSessionLocation(location),
+      updateVisibleLocation:
+          (location) => _sessionState.updateVisibleLocation(location),
+      updateSessionLocation:
+          (location) => _sessionState.updateSessionLocation(location),
       persistLocation: (location) async => persistLocation(location),
     );
     contentCallbacks = ContentCallbacks(
       refreshChapterRuntime: (_) {},
-      buildSlideRuntimePages: () => buildSlideRuntimePages() as List<dynamic>? ?? [],
-      jumpToSlidePage: (pageIndex, {required reason}) =>
-          jumpToSlidePage(pageIndex, reason: reason as ReaderCommandReason),
-      jumpToChapterLocalOffset: ({
-        required chapterIndex,
-        required localOffset,
-        required alignment,
-        required reason,
-      }) =>
-          jumpToChapterLocalOffset(
-        chapterIndex: chapterIndex,
-        localOffset: localOffset,
-        alignment: alignment,
-        reason: reason as ReaderCommandReason,
-      ),
-      jumpToChapterCharOffset: ({
-        required chapterIndex,
-        required charOffset,
-        required reason,
-        bool isRestoringJump = false,
-      }) =>
-          jumpToChapterCharOffset(
-        chapterIndex: chapterIndex,
-        charOffset: charOffset,
-        reason: reason as ReaderCommandReason,
-        isRestoringJump: isRestoringJump,
-      ),
+      buildSlideRuntimePages:
+          () => buildSlideRuntimePages() as List<dynamic>? ?? [],
+      jumpToSlidePage:
+          (pageIndex, {required reason}) =>
+              jumpToSlidePage(pageIndex, reason: reason as ReaderCommandReason),
+      jumpToChapterLocalOffset:
+          ({
+            required chapterIndex,
+            required localOffset,
+            required alignment,
+            required reason,
+          }) => jumpToChapterLocalOffset(
+            chapterIndex: chapterIndex,
+            localOffset: localOffset,
+            alignment: alignment,
+            reason: reason as ReaderCommandReason,
+          ),
+      jumpToChapterCharOffset:
+          ({
+            required chapterIndex,
+            required charOffset,
+            required reason,
+            bool isRestoringJump = false,
+          }) => jumpToChapterCharOffset(
+            chapterIndex: chapterIndex,
+            charOffset: charOffset,
+            reason: reason as ReaderCommandReason,
+            isRestoringJump: isRestoringJump,
+          ),
       chapterAt: (index) => chapterAt(index),
       pagesForChapter: (index) => pagesForChapter(index),
       progressStore: _store,
       shouldPersistVisiblePosition: () => persistVisiblePosition,
       currentSessionLocation: () => _sessionState.sessionLocation,
-      updateSessionLocation: (location) =>
-          _sessionState.updateSessionLocation(location),
-      persistCurrentProgress: ({
-        required chapterIndex,
-        int? pageIndex,
-        required reason,
-      }) =>
-          persistCurrentProgress(
-        chapterIndex: chapterIndex,
-        pageIndex: pageIndex,
-        reason: reason as ReaderCommandReason,
-      ),
+      updateSessionLocation:
+          (location) => _sessionState.updateSessionLocation(location),
+      persistCurrentProgress:
+          ({required chapterIndex, int? pageIndex, required reason}) =>
+              persistCurrentProgress(
+                chapterIndex: chapterIndex,
+                pageIndex: pageIndex,
+                reason: reason as ReaderCommandReason,
+              ),
     );
   }
 
@@ -249,13 +248,11 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     int? pageIndex,
     ReaderCommandReason reason = ReaderCommandReason.system,
   }) {
-    persistedRequests.add(
-      (
-        chapterIndex: chapterIndex,
-        pageIndex: pageIndex ?? currentPageIndex,
-        reason: reason,
-      ),
-    );
+    persistedRequests.add((
+      chapterIndex: chapterIndex,
+      pageIndex: pageIndex ?? currentPageIndex,
+      reason: reason,
+    ));
   }
 
   Future<void> persistLocation(ReaderLocation location) async {
@@ -272,13 +269,18 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     bool isRestoringJump = false,
   }) {
     final targetChapter = chapterIndex ?? currentChapterIndex;
-    final location = charOffset != null
-        ? ReaderLocation(chapterIndex: targetChapter, charOffset: charOffset)
-        : null;
+    final location =
+        charOffset != null
+            ? ReaderLocation(
+              chapterIndex: targetChapter,
+              charOffset: charOffset,
+            )
+            : null;
     if (pageTurnMode == PageAnim.scroll) {
       final target = ReaderPositionResolver.resolveScrollTarget(
         location:
-            location ?? ReaderLocation(chapterIndex: targetChapter, charOffset: 0),
+            location ??
+            ReaderLocation(chapterIndex: targetChapter, charOffset: 0),
         runtimeChapter: chapterAt(targetChapter),
         pages: pagesForChapter(targetChapter),
       );
@@ -286,9 +288,10 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
         chapterIndex: target.chapterIndex,
         localOffset: target.localOffset,
         alignment: target.alignment,
-        reason: isRestoringJump
-            ? ReaderCommandReason.restore
-            : ReaderCommandReason.system,
+        reason:
+            isRestoringJump
+                ? ReaderCommandReason.restore
+                : ReaderCommandReason.system,
       );
       notifyListeners();
       return;
@@ -304,9 +307,10 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     currentPageIndex = target.globalPageIndex;
     jumpToSlidePage(
       target.globalPageIndex,
-      reason: isRestoringJump
-          ? ReaderCommandReason.restore
-          : ReaderCommandReason.system,
+      reason:
+          isRestoringJump
+              ? ReaderCommandReason.restore
+              : ReaderCommandReason.system,
     );
     notifyListeners();
   }
@@ -340,9 +344,10 @@ List<TextPage> _buildPages(
 }) {
   return List.generate(pageStarts.length, (pageIndex) {
     final start = pageStarts[pageIndex];
-    final nextStart = pageIndex + 1 < pageStarts.length
-        ? pageStarts[pageIndex + 1]
-        : start + 8;
+    final nextStart =
+        pageIndex + 1 < pageStarts.length
+            ? pageStarts[pageIndex + 1]
+            : start + 8;
     final length = (nextStart - start).clamp(4, 12);
     return TextPage(
       index: pageIndex,
@@ -481,8 +486,9 @@ void main() {
       harness.pageTurnMode = PageAnim.scroll;
       harness.currentChapterIndex = 1;
       harness.setChapterPages(1, _buildPages(1, [0, 8, 16], title: 'c1'));
-      final expectedLocalOffset =
-          harness.chapterAt(1)!.localOffsetFromCharOffset(9);
+      final expectedLocalOffset = harness
+          .chapterAt(1)!
+          .localOffsetFromCharOffset(9);
       final expectedAlignment = harness.chapterAt(1)!.alignmentForCharOffset(9);
 
       harness.jumpToPosition(
@@ -501,10 +507,7 @@ void main() {
 
     test('scroll restore pending 狀態只會被消費一次', () {
       final restore = ReaderRestoreCoordinator();
-      restore.registerPendingScrollRestore(
-        chapterIndex: 1,
-        localOffset: 42,
-      );
+      restore.registerPendingScrollRestore(chapterIndex: 1, localOffset: 42);
 
       final first = restore.consumePendingScrollRestore();
       final second = restore.consumePendingScrollRestore();
@@ -573,16 +576,17 @@ void main() {
         isRestoringJump: true,
       );
 
-      expect(harness.sessionLocation, const ReaderLocation(chapterIndex: 1, charOffset: 12));
+      expect(
+        harness.sessionLocation,
+        const ReaderLocation(chapterIndex: 1, charOffset: 12),
+      );
       expect(harness.lastSlideJump, 2);
     });
 
     test('repaginate 後 restore 仍以 charOffset 對齊，不會漂移到舊 pageIndex', () {
       final harness = _ReaderRuntimeHarness(
         book: Book(bookUrl: 'book', name: 'Book', durChapterPos: 12),
-        chapters: [
-          BookChapter(title: 'c1', index: 0, bookUrl: 'book'),
-        ],
+        chapters: [BookChapter(title: 'c1', index: 0, bookUrl: 'book')],
       );
       harness.pageTurnMode = PageAnim.slide;
       harness.currentChapterIndex = 0;
@@ -612,9 +616,7 @@ void main() {
     test('scroll 與 slide 切換時會維持同一個 charOffset 語意', () {
       final harness = _ReaderRuntimeHarness(
         book: Book(bookUrl: 'book', name: 'Book', durChapterPos: 12),
-        chapters: [
-          BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
-        ],
+        chapters: [BookChapter(title: 'c0', index: 0, bookUrl: 'book')],
       );
       harness.setChapterPages(0, _buildPages(0, [0, 8, 16], title: 'c0'));
       harness.setSlidePages(harness.pagesForChapter(0));
@@ -648,9 +650,7 @@ void main() {
           durChapterIndex: 0,
           durChapterPos: 0,
         ),
-        chapters: [
-          BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
-        ],
+        chapters: [BookChapter(title: 'c0', index: 0, bookUrl: 'book')],
       );
       harness.pageTurnMode = PageAnim.scroll;
       harness.persistVisiblePosition = false;
@@ -688,10 +688,7 @@ void main() {
       harness.currentPageIndex = 1;
       harness.currentChapterIndex = 1;
 
-      harness.refreshSlidePagesForTesting(
-        anchorChapterIndex: 1,
-        charOffset: 0,
-      );
+      harness.refreshSlidePagesForTesting(anchorChapterIndex: 1, charOffset: 0);
 
       expect(harness.slidePages[harness.currentPageIndex].chapterIndex, 1);
       expect(harness.slidePages[harness.currentPageIndex].index, 0);
@@ -717,10 +714,7 @@ void main() {
         ...harness.pagesForChapter(2),
       ]);
 
-      harness.refreshSlidePagesForTesting(
-        anchorChapterIndex: 1,
-        charOffset: 0,
-      );
+      harness.refreshSlidePagesForTesting(anchorChapterIndex: 1, charOffset: 0);
       final chapterStartPage = harness.slidePages[harness.currentPageIndex];
 
       harness.refreshSlidePagesForTesting(

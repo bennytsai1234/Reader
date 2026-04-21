@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:inkpage_reader/core/engine/reader/content_processor.dart' as engine;
+import 'package:inkpage_reader/core/engine/reader/content_processor.dart'
+    as engine;
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book/book_content.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
@@ -44,6 +45,8 @@ class ReaderChapterProvider {
       chapter: chapter,
       rawContent: rawContent,
       rulesJson: rulesJson,
+      useReplaceRules: book.getUseReplaceRule(),
+      reSegmentEnabled: book.getReSegment(),
     );
 
     final List<TextPage> pages = await ChapterProvider.paginate(

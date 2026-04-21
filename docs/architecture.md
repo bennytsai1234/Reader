@@ -230,7 +230,7 @@ lib/
 
 - `ReaderProvider` 只是 `ReadBookController` 的別名包裝
 - runtime 在 `features/reader/runtime/`
-- content lifecycle 與 preload 在 `features/reader/provider/reader_content_mixin.dart`
+- content lifecycle 與 preload 在 `features/reader/provider/reader_content_facade_mixin.dart`
 - view 執行在 `features/reader/view/`
 
 和 `legado` 相比：

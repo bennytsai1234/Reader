@@ -205,6 +205,49 @@ void main() {
       await fakeTts.disposeStreams();
     });
 
+    test('toggle 會從目前可見位置開始朗讀，而不是從章首重播', () async {
+      final fakeTts = FakeTtsService();
+      final chapter = buildChapter(
+        index: 0,
+        title: 'Chapter 0',
+        paragraphs: ['AAAAABBBBB', 'CCCCCDDDDD'],
+      );
+
+      final controller = ReadAloudController(
+        tts: fakeTts,
+        nextChapter: () async {},
+        prevChapter: ({bool fromEnd = true}) async {},
+        nextPage: () async {},
+        prevPage: () async {},
+        canMoveToNextPage: () => true,
+        canMoveToPrevPage: () => true,
+        requestJumpToPage: (_) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
+        chapterOf: (_) => chapter,
+        currentChapterIndex: () => 0,
+        visibleChapterIndex: () => 0,
+        currentCharOffset: () => 6,
+        visibleCharOffset: () => 6,
+        isScrollMode: () => true,
+        onStateChanged: () {},
+        updateMediaInfo: (_, __) {},
+      );
+
+      controller.attach();
+      controller.toggle();
+      await flushAsync();
+
+      expect(fakeTts.spokenTexts.single, 'BBBB\nCCCCCDDDDD');
+
+      controller.detach();
+      await fakeTts.disposeStreams();
+    });
+
     test('nextPageOrChapter 在有下一頁時翻頁，否則切章', () async {
       final fakeTts = FakeTtsService();
       final chapters = <int, ReaderChapter>{

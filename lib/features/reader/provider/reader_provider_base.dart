@@ -11,6 +11,7 @@ import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_viewport_mailbox.dart';
 
 enum ReaderLifecycle { loading, ready, disposed }
 
@@ -55,13 +56,10 @@ abstract class ReaderProviderBase extends ChangeNotifier {
   final Set<int> loadingChapters = {};
   bool get isLoading => loadingChapters.isNotEmpty;
 
-  int? _pendingJumpTarget;
-  int? _pendingJumpChapterIndex;
-  double? _pendingJumpAlignment;
-  double? _pendingJumpLocalOffset;
-  int? _pendingSlidePageIndex;
-  int? _pendingControllerReset;
-  ReaderCommandReason _pendingChapterJumpReason = ReaderCommandReason.system;
+  final ReaderViewportMailbox<ReaderCommandReason> _viewportMailbox =
+      ReaderViewportMailbox<ReaderCommandReason>(
+        systemReason: ReaderCommandReason.system,
+      );
 
   bool showControls = false;
   int scrubbingChapterIndex = -1;
@@ -140,14 +138,11 @@ abstract class ReaderProviderBase extends ChangeNotifier {
     int pageIndex, {
     ReaderCommandReason reason = ReaderCommandReason.system,
   }) {
-    _pendingJumpTarget = pageIndex;
-    _pendingSlidePageIndex = pageIndex;
+    _viewportMailbox.requestJumpToPage(pageIndex);
   }
 
   int? consumePendingJump() {
-    final value = _pendingJumpTarget;
-    _pendingJumpTarget = null;
-    return value;
+    return _viewportMailbox.consumePendingJump();
   }
 
   void requestJumpToChapter({
@@ -156,10 +151,12 @@ abstract class ReaderProviderBase extends ChangeNotifier {
     double localOffset = 0.0,
     ReaderCommandReason reason = ReaderCommandReason.system,
   }) {
-    _pendingJumpChapterIndex = chapterIndex;
-    _pendingJumpAlignment = alignment;
-    _pendingJumpLocalOffset = localOffset;
-    _pendingChapterJumpReason = reason;
+    _viewportMailbox.requestJumpToChapter(
+      chapterIndex: chapterIndex,
+      alignment: alignment,
+      localOffset: localOffset,
+      reason: reason,
+    );
   }
 
   ({
@@ -169,41 +166,30 @@ abstract class ReaderProviderBase extends ChangeNotifier {
     ReaderCommandReason reason,
   })?
   consumePendingChapterJump() {
-    final chapterIndex = _pendingJumpChapterIndex;
-    if (chapterIndex == null) return null;
-    final alignment = _pendingJumpAlignment ?? 0.0;
-    final localOffset = _pendingJumpLocalOffset ?? 0.0;
-    final reason = _pendingChapterJumpReason;
-    _pendingJumpChapterIndex = null;
-    _pendingJumpAlignment = null;
-    _pendingJumpLocalOffset = null;
-    _pendingChapterJumpReason = ReaderCommandReason.system;
+    final jump = _viewportMailbox.consumePendingChapterJump();
+    if (jump == null) return null;
     return (
-      chapterIndex: chapterIndex,
-      alignment: alignment,
-      localOffset: localOffset,
-      reason: reason,
+      chapterIndex: jump.chapterIndex,
+      alignment: jump.alignment,
+      localOffset: jump.localOffset,
+      reason: jump.reason,
     );
   }
 
   int? consumePendingSlidePageIndex() {
-    final value = _pendingSlidePageIndex;
-    _pendingSlidePageIndex = null;
-    return value;
+    return _viewportMailbox.consumePendingSlidePageIndex();
   }
 
   /// Request PageController recreation at [pageIndex] to avoid
   /// the one-frame glitch during slide window recentering.
   void requestControllerReset(int pageIndex) {
-    _pendingControllerReset = pageIndex;
+    _viewportMailbox.requestControllerReset(pageIndex);
   }
 
   /// Consume the pending controller reset target.
   /// Returns null if no reset is pending.
   int? consumeControllerReset() {
-    final value = _pendingControllerReset;
-    _pendingControllerReset = null;
-    return value;
+    return _viewportMailbox.consumeControllerReset();
   }
 
   @override

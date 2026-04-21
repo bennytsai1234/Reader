@@ -143,13 +143,16 @@ class ReaderChapter {
     int pageStartCharOffset,
     double pageStartLocalOffset,
     double intraPageOffset,
-  }) resolveLocalOffsetTarget(double localOffset) {
+  })
+  resolveLocalOffsetTarget(double localOffset) {
     final pageIndex = pageIndexAtLocalOffset(localOffset);
     final safePageIndex = pageIndex < 0 ? 0 : pageIndex;
     final pageStartCharOffset = charOffsetForPageIndex(safePageIndex);
     final pageStartLocalOffset = localOffsetFromCharOffset(pageStartCharOffset);
-    final intraPageOffset =
-        (localOffset - pageStartLocalOffset).clamp(0.0, double.infinity);
+    final intraPageOffset = (localOffset - pageStartLocalOffset).clamp(
+      0.0,
+      double.infinity,
+    );
     return (
       pageIndex: safePageIndex,
       pageStartCharOffset: pageStartCharOffset,
@@ -158,12 +161,7 @@ class ReaderChapter {
     );
   }
 
-  ({
-    int start,
-    int end,
-    int pageIndex,
-    int paragraphNum,
-  }) resolveHighlightRange(
+  ({int start, int end, int pageIndex, int paragraphNum}) resolveHighlightRange(
     int charOffset, {
     bool pageSplit = true,
   }) {
@@ -193,14 +191,10 @@ class ReaderChapter {
     double targetLocalOffset,
     double intraPageOffset,
     double alignment,
-  }) resolveRestoreTarget({
-    int? charOffset,
-    double? localOffset,
-  }) {
-    final targetLocalOffset = localOffset ??
-        localOffsetFromCharOffset(
-          charOffset ?? 0,
-        );
+  })
+  resolveRestoreTarget({int? charOffset, double? localOffset}) {
+    final targetLocalOffset =
+        localOffset ?? localOffsetFromCharOffset(charOffset ?? 0);
     final target = resolveLocalOffsetTarget(targetLocalOffset);
     return (
       pageIndex: target.pageIndex,
@@ -214,17 +208,15 @@ class ReaderChapter {
     );
   }
 
-  ({
-    int pageIndex,
-    double localOffset,
-    double alignment,
-  }) resolveScrollAnchor(
+  ({int pageIndex, double localOffset, double alignment}) resolveScrollAnchor(
     int charOffset, {
     double anchorPadding = 0.0,
   }) {
     final localOffset = localOffsetFromCharOffset(charOffset);
-    final targetLocalOffset =
-        (localOffset - anchorPadding).clamp(0.0, double.infinity);
+    final targetLocalOffset = (localOffset - anchorPadding).clamp(
+      0.0,
+      double.infinity,
+    );
     return (
       pageIndex: pageIndexAtLocalOffset(localOffset),
       localOffset: targetLocalOffset,
@@ -346,30 +338,61 @@ class ReaderChapter {
     return lines;
   }
 
-  ({String text, int baseOffset, List<({int ttsOffset, int chapterOffset})> offsetMap})?
-      buildReadAloudData({
-    required int startCharOffset,
-  }) {
-    final lines = visibleLinesFrom(startCharOffset);
-    if (lines.isEmpty) return null;
+  ({
+    String text,
+    int baseOffset,
+    List<({int ttsOffset, int chapterOffset})> offsetMap,
+  })?
+  buildReadAloudData({required int startCharOffset}) {
+    final visibleSegments = <({TextLine line, int startOffset})>[];
+    for (final page in pages) {
+      for (final line in page.lines) {
+        if (line.image != null) continue;
+        final lineStart = line.chapterPosition;
+        final lineEnd = lineStart + line.text.length;
+        if (startCharOffset <= lineStart) {
+          visibleSegments.add((line: line, startOffset: 0));
+          continue;
+        }
+        if (startCharOffset > lineStart && startCharOffset < lineEnd) {
+          visibleSegments.add((
+            line: line,
+            startOffset: startCharOffset - lineStart,
+          ));
+        }
+      }
+    }
+    if (visibleSegments.isEmpty) return null;
 
     final buffer = StringBuffer();
     final map = <({int ttsOffset, int chapterOffset})>[];
     var ttsPos = 0;
     var lastParagraphNum = -1;
-    for (final line in lines) {
+    for (final segment in visibleSegments) {
+      final line = segment.line;
+      final startOffset = segment.startOffset;
       if (lastParagraphNum != -1 && line.paragraphNum != lastParagraphNum) {
         buffer.write('\n');
         ttsPos += 1;
       }
-      map.add((ttsOffset: ttsPos, chapterOffset: line.chapterPosition));
-      buffer.write(line.text);
-      ttsPos += line.text.length;
+      final text =
+          startOffset <= 0 ? line.text : line.text.substring(startOffset);
+      if (text.isEmpty) {
+        lastParagraphNum = line.paragraphNum;
+        continue;
+      }
+      map.add((
+        ttsOffset: ttsPos,
+        chapterOffset: line.chapterPosition + startOffset,
+      ));
+      buffer.write(text);
+      ttsPos += text.length;
       lastParagraphNum = line.paragraphNum;
     }
+    if (map.isEmpty || buffer.isEmpty) return null;
     return (
       text: buffer.toString(),
-      baseOffset: lines.first.chapterPosition,
+      baseOffset: map.first.chapterOffset,
       offsetMap: map,
     );
   }
@@ -380,8 +403,8 @@ class ReaderChapter {
       if (line.image != null || line.paragraphNum <= 0) continue;
       grouped.putIfAbsent(line.paragraphNum, () => <TextLine>[]).add(line);
     }
-    final entries = grouped.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final entries =
+        grouped.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
     return entries
         .map((entry) => ReaderParagraph(num: entry.key, textLines: entry.value))
         .toList();
@@ -395,14 +418,11 @@ class ReaderChapter {
         if (line.image != null || line.paragraphNum <= 0) continue;
         grouped.putIfAbsent(line.paragraphNum, () => <TextLine>[]).add(line);
       }
-      final pageParagraphs = grouped.entries.toList()
-        ..sort((a, b) => a.key.compareTo(b.key));
+      final pageParagraphs =
+          grouped.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in pageParagraphs) {
         paragraphs.add(
-          ReaderParagraph(
-            num: paragraphs.length + 1,
-            textLines: entry.value,
-          ),
+          ReaderParagraph(num: paragraphs.length + 1, textLines: entry.value),
         );
       }
     }

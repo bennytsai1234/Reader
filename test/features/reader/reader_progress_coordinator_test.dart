@@ -6,13 +6,13 @@ import 'package:inkpage_reader/features/reader/runtime/reader_progress_coordinat
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 
 Book _makeBook() => Book(
-      bookUrl: 'http://test.com/book',
-      name: 'Test Book',
-      author: 'Author',
-      origin: 'local',
-      durChapterIndex: 0,
-      durChapterPos: 0,
-    );
+  bookUrl: 'http://test.com/book',
+  name: 'Test Book',
+  author: 'Author',
+  origin: 'local',
+  durChapterIndex: 0,
+  durChapterPos: 0,
+);
 
 ReaderProgressCoordinator _makeCoordinator({
   Book? book,
@@ -24,11 +24,13 @@ ReaderProgressCoordinator _makeCoordinator({
     chapterAt: (_) => null,
     pagesForChapter: (_) => const [],
     store: ReaderProgressStore(),
-    durableLocation: () => ReaderLocation(
-      chapterIndex: b.durChapterIndex,
-      charOffset: b.durChapterPos,
-    ),
+    durableLocation:
+        () => ReaderLocation(
+          chapterIndex: b.durChapterIndex,
+          charOffset: b.durChapterPos,
+        ),
     shouldPersistVisiblePosition: shouldPersist ?? () => true,
+    updateVisibleLocation: (_) {},
     updateSessionLocation: (_) {},
     persistLocation: onPersistLocation ?? (_) async {},
   );
@@ -36,41 +38,47 @@ ReaderProgressCoordinator _makeCoordinator({
 
 void main() {
   group('ReaderProgressCoordinator', () {
-    test('updateVisibleChapterPosition 會更新 session location，不直接依賴 book 作為暫時位置', () {
-      ReaderLocation? sessionLocation;
-      final book = _makeBook()
-        ..durChapterIndex = 0
-        ..durChapterPos = 0;
+    test(
+      'updateVisibleChapterPosition 會更新 session location，不直接依賴 book 作為暫時位置',
+      () {
+        ReaderLocation? sessionLocation;
+        final book =
+            _makeBook()
+              ..durChapterIndex = 0
+              ..durChapterPos = 0;
 
-      final coordinator = ReaderProgressCoordinator(
-        chapterAt: (_) => null,
-        pagesForChapter: (_) => const [],
-        store: ReaderProgressStore(),
-        durableLocation: () => ReaderLocation(
-          chapterIndex: book.durChapterIndex,
-          charOffset: book.durChapterPos,
-        ),
-        shouldPersistVisiblePosition: () => true,
-        updateSessionLocation: (location) => sessionLocation = location,
-        persistLocation: (_) async {},
-      );
+        final coordinator = ReaderProgressCoordinator(
+          chapterAt: (_) => null,
+          pagesForChapter: (_) => const [],
+          store: ReaderProgressStore(),
+          durableLocation:
+              () => ReaderLocation(
+                chapterIndex: book.durChapterIndex,
+                charOffset: book.durChapterPos,
+              ),
+          shouldPersistVisiblePosition: () => true,
+          updateVisibleLocation: (_) {},
+          updateSessionLocation: (location) => sessionLocation = location,
+          persistLocation: (_) async {},
+        );
 
-      coordinator.updateVisibleChapterPosition(
-        chapterIndex: 0,
-        localOffset: 120.0,
-        alignment: 0.0,
-        pageTurnMode: PageAnim.scroll,
-        isLoading: false,
-        currentPageIndex: 0,
-        updateVisible: (_, __, ___) {},
-        updateCurrentChapterIndex: (_) {},
-      );
+        coordinator.updateVisibleChapterPosition(
+          chapterIndex: 0,
+          localOffset: 120.0,
+          alignment: 0.0,
+          pageTurnMode: PageAnim.scroll,
+          isLoading: false,
+          currentPageIndex: 0,
+          updateVisible: (_, __, ___) {},
+          updateCurrentChapterIndex: (_) {},
+        );
 
-      expect(sessionLocation, isNotNull);
-      expect(sessionLocation!.chapterIndex, 0);
-      expect(book.durChapterPos, 0);
-      coordinator.dispose();
-    });
+        expect(sessionLocation, isNotNull);
+        expect(sessionLocation!.chapterIndex, 0);
+        expect(book.durChapterPos, 0);
+        coordinator.dispose();
+      },
+    );
 
     test('dispose 時取消 scrollSaveTimer，不會觸發 persist', () async {
       var persistCalled = false;
@@ -145,19 +153,22 @@ void main() {
 
     test('跨章節時立即持久化（不走 debounce）', () {
       var persistCalled = false;
-      final book = _makeBook()
-        ..durChapterIndex = 0
-        ..durChapterPos = 0;
+      final book =
+          _makeBook()
+            ..durChapterIndex = 0
+            ..durChapterPos = 0;
 
       final coordinator = ReaderProgressCoordinator(
         chapterAt: (_) => null,
         pagesForChapter: (_) => const [],
         store: ReaderProgressStore(),
-        durableLocation: () => ReaderLocation(
-          chapterIndex: book.durChapterIndex,
-          charOffset: book.durChapterPos,
-        ),
+        durableLocation:
+            () => ReaderLocation(
+              chapterIndex: book.durChapterIndex,
+              charOffset: book.durChapterPos,
+            ),
         shouldPersistVisiblePosition: () => true,
+        updateVisibleLocation: (_) {},
         updateSessionLocation: (_) {},
         persistLocation: (_) async {
           persistCalled = true;
@@ -180,28 +191,29 @@ void main() {
       coordinator.dispose();
     });
 
-    test('updateScrollPageIndex 正確設定 currentPageIndex 與 currentChapterIndex', () {
-      final coordinator = _makeCoordinator(
-        onPersistLocation: (_) async {},
-      );
+    test(
+      'updateScrollPageIndex 正確設定 currentPageIndex 與 currentChapterIndex',
+      () {
+        final coordinator = _makeCoordinator(onPersistLocation: (_) async {});
 
-      int setPage = -1;
-      int setVisible = -1;
-      int setCurrent = -1;
+        int setPage = -1;
+        int setVisible = -1;
+        int setCurrent = -1;
 
-      coordinator.updateScrollPageIndex(
-        chapterIndex: 2,
-        localOffset: 0.0,
-        setCurrentPageIndex: (i) => setPage = i,
-        setVisibleChapterIndex: (i) => setVisible = i,
-        setCurrentChapterIndex: (i) => setCurrent = i,
-      );
+        coordinator.updateScrollPageIndex(
+          chapterIndex: 2,
+          localOffset: 0.0,
+          setCurrentPageIndex: (i) => setPage = i,
+          setVisibleChapterIndex: (i) => setVisible = i,
+          setCurrentChapterIndex: (i) => setCurrent = i,
+        );
 
-      expect(setVisible, equals(2));
-      expect(setCurrent, equals(2));
-      // 空頁面 → pageIndex = 0
-      expect(setPage, equals(0));
-      coordinator.dispose();
-    });
+        expect(setVisible, equals(2));
+        expect(setCurrent, equals(2));
+        // 空頁面 → pageIndex = 0
+        expect(setPage, equals(0));
+        coordinator.dispose();
+      },
+    );
   });
 }

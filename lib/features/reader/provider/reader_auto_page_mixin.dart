@@ -7,12 +7,12 @@ import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_auto_page_coordinator.dart';
 import 'reader_provider_base.dart';
 import 'reader_settings_mixin.dart';
-import 'reader_content_mixin.dart';
+import 'reader_content_facade_mixin.dart';
 
 /// ReaderProvider 的自動翻頁擴展
 /// 對標 Android AutoPager：定時器驅動的自動翻頁 + 掃描線效果
 mixin ReaderAutoPageMixin
-    on ReaderProviderBase, ReaderSettingsMixin, ReaderContentMixin {
+    on ReaderProviderBase, ReaderSettingsMixin, ReaderContentFacadeMixin {
   // --- 自動翻頁穩定版 (對標 Android AutoPager) ---
   final ReaderAutoPageCoordinator _autoPageCoordinator =
       ReaderAutoPageCoordinator();

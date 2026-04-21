@@ -293,12 +293,15 @@ class BookDetailProvider extends ChangeNotifier {
       _book.originName = newSource.originName ?? '未知';
       _book.tocUrl = newSource.tocUrl ?? '';
       await _loadSource();
+      await _loadBookInfo();
       _allChapters = [];
       if (_currentSource != null) {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
       }
       if (_isInBookshelf) {
         await _bookDao.deleteByUrl(oldUrl);
+        await _chapterDao.deleteByBook(oldUrl);
+        await _chapterDao.deleteByBook(_book.bookUrl);
         await _bookDao.upsert(_book);
         await _chapterDao.insertChapters(_allChapters);
       }

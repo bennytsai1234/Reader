@@ -117,6 +117,22 @@ class ScrollModeDelegate extends PageModeDelegate {
                           provider.currentTheme.backgroundColor,
                     ),
                   ),
+                if (chapterIndex < provider.chapters.length - 1)
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      vertical: (provider.fontSize * provider.lineHeight * 0.5)
+                          .clamp(8.0, 24.0),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 1,
+                        color: provider.currentTheme.textColor.withValues(
+                          alpha: 0.16,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           );

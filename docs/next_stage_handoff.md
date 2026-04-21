@@ -46,7 +46,7 @@
 ### 第二輪
 
 1. [read_book_controller.dart](/home/benny/projects/reader/lib/features/reader/runtime/read_book_controller.dart:1)
-2. [reader_content_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_mixin.dart:1)
+2. [reader_content_facade_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_facade_mixin.dart:1)
 3. [chapter_content_manager.dart](/home/benny/projects/reader/lib/features/reader/engine/chapter_content_manager.dart:1)
 4. [js_engine.dart](/home/benny/projects/reader/lib/core/engine/js/js_engine.dart:1)
 5. [check_source_service.dart](/home/benny/projects/reader/lib/core/services/check_source_service.dart:1)

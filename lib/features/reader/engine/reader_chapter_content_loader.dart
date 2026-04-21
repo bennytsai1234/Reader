@@ -67,7 +67,8 @@ class ReaderChapterContentLoader {
         chapter: chapter,
         rawContent: rawContent,
         rulesJson: rulesJson,
-        reSegmentEnabled: true,
+        useReplaceRules: book.getUseReplaceRule(),
+        reSegmentEnabled: book.getReSegment(),
       ),
     );
     final convertedTitle = _getConvertedTitle(
@@ -193,6 +194,7 @@ class ReaderChapterContentLoader {
       () {
         final displayTitle = chapter.getDisplayTitle(
           replaceRules: titleRules,
+          useReplace: book.getUseReplaceRule(),
           chineseConvertType: 0,
         );
         return _textConverter.convert(

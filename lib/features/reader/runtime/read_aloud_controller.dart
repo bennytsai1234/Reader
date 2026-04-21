@@ -218,14 +218,17 @@ class ReadAloudController extends ChangeNotifier {
         isScrollMode() ? visibleChapterIndex() : currentChapterIndex();
     final targetChapter = chapterOf(targetChapterIndex);
     final startOffset =
-        targetChapter?.firstPage == null
-            ? 0
-            : targetChapter!.firstCharOffset(targetChapter.firstPage!);
+        isScrollMode() ? visibleCharOffset() : currentCharOffset();
     unawaited(
       _start(
         operationVersion: version,
         startChapterIndex: targetChapterIndex,
-        startCharOffset: startOffset,
+        startCharOffset:
+            startOffset >= 0
+                ? startOffset
+                : (targetChapter?.firstPage == null
+                    ? 0
+                    : targetChapter!.firstCharOffset(targetChapter.firstPage!)),
       ),
     );
     notifyController();

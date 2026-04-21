@@ -38,7 +38,7 @@
 ```text
 ReaderProviderBase
   -> ReaderSettingsMixin
-  -> ReaderContentMixin
+  -> ReaderContentFacadeMixin
   -> ReaderAutoPageMixin
   -> ReaderTtsMixin
   -> ReaderBatteryMixin
@@ -103,7 +103,7 @@ ReaderProviderBase
 
 內容生命週期主體在：
 
-- [reader_content_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_mixin.dart:1)
+- [reader_content_facade_mixin.dart](/home/benny/projects/reader/lib/features/reader/provider/reader_content_facade_mixin.dart:1)
 - [chapter_content_manager.dart](/home/benny/projects/reader/lib/features/reader/engine/chapter_content_manager.dart:1)
 
 `ChapterContentManager` 目前做的事情：
@@ -222,7 +222,7 @@ auto page 則是：
 ## 目前可以明說的限制
 
 1. `ReadBookController` 仍是大物件。
-2. `ReaderContentMixin` 仍承擔不少 runtime 接線。
+2. `ReaderContentFacadeMixin` 仍是 facade 入口，但主要 lifecycle 已下沉到 `ReaderContentRuntimeOwner`。
 3. 閱讀器頁面還有舊 API 與交互細節待收尾，例如返回處理仍用 `WillPopScope`。
 4. TTS / auto-page 雖已可用，但不是全產品層面完全收口。
 5. 部分殘留 widget 仍存在未接線或半成品狀態。

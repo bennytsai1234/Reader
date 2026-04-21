@@ -3,22 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/config/app_config.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
-import 'package:inkpage_reader/core/engine/app_event_bus.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
-import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/database/dao/read_record_dao.dart';
-import 'package:inkpage_reader/core/services/source_switch_service.dart';
+import 'package:inkpage_reader/core/services/source_switch_service.dart'
+    show SourceSwitchResolution;
 import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_auto_page_mixin.dart';
 import 'package:inkpage_reader/features/reader/provider/content_callbacks.dart';
-import 'package:inkpage_reader/features/reader/provider/reader_content_mixin.dart';
+import 'package:inkpage_reader/features/reader/provider/reader_content_facade_mixin.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_settings_mixin.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_coordinator.dart';
@@ -26,15 +25,21 @@ import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dar
 import 'package:inkpage_reader/features/reader/runtime/read_aloud_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_chapter_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_session_coordinator.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_bootstrap_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_navigation_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_page_factory.dart';
-import 'package:inkpage_reader/features/reader/runtime/reader_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_restore_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_scroll_visibility_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_display_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_session_state.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_command.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_runtime_controller.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_session_facade.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_session_runtime.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_source_switch_runtime.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_viewport_lifecycle_runtime.dart';
 import 'package:inkpage_reader/shared/theme/app_theme.dart';
 
 import 'package:inkpage_reader/features/reader/provider/reader_tts_mixin.dart';
@@ -44,7 +49,7 @@ import 'package:inkpage_reader/features/reader/provider/reader_battery_mixin.dar
 class ReadBookController extends ReaderProviderBase
     with
         ReaderSettingsMixin,
-        ReaderContentMixin,
+        ReaderContentFacadeMixin,
         ReaderAutoPageMixin,
         ReaderTtsMixin,
         ReaderBatteryMixin,
@@ -58,16 +63,16 @@ class ReadBookController extends ReaderProviderBase
       ReaderScrollVisibilityCoordinator();
   final ReaderDisplayCoordinator _displayCoordinator =
       const ReaderDisplayCoordinator();
-  final SourceSwitchService _sourceSwitchService = SourceSwitchService();
   late final ReaderProgressCoordinator _progressCoordinator;
   late final ReaderSessionState _sessionState;
   late final ReaderSessionCoordinator _sessionCoordinator;
-  final Completer<Size> _viewSizeCompleter = Completer<Size>();
-  bool _initialSessionPrimed = false;
-  DateTime? _ignoreViewportChangesUntil;
-  bool _pendingRepaginateForLatestViewport = false;
-  bool _isSwitchingSource = false;
-  String? _sourceSwitchMessage;
+  late final ReaderRuntimeController _runtimeController;
+  final ReaderSessionFacade _sessionFacade = const ReaderSessionFacade();
+  final ReaderSourceSwitchRuntime _sourceSwitch = ReaderSourceSwitchRuntime();
+  late final ReaderSessionRuntime _sessionRuntime;
+  final ReaderViewportLifecycleRuntime _viewportLifecycle =
+      ReaderViewportLifecycleRuntime();
+  late final ReaderBootstrapRuntime _bootstrapRuntime;
   int _lastReadRecordStamp = DateTime.now().millisecondsSinceEpoch;
 
   /// 初始章節字元偏移（由呼叫方傳入，用於還原閱讀位置）
@@ -104,6 +109,22 @@ class ReadBookController extends ReaderProviderBase
             charOffset,
           ),
     );
+    _runtimeController = ReaderRuntimeController(
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
+      slidePages: () => slidePages,
+    );
+    _sessionRuntime = ReaderSessionRuntime(
+      runtimeController: _runtimeController,
+      sessionLocation: () => sessionLocation,
+      updateSessionLocation: _sessionCoordinator.updateSessionLocation,
+      updateVisibleLocation: _sessionCoordinator.updateVisibleLocation,
+      persistLocation: _sessionCoordinator.persistLocation,
+      dispatchViewportCommand: _dispatchViewportCommand,
+    );
+    _bootstrapRuntime = ReaderBootstrapRuntime(
+      viewportLifecycle: _viewportLifecycle,
+    );
     initTts(_buildReadAloudController());
     _progressCoordinator = ReaderProgressCoordinator(
       chapterAt: chapterAt,
@@ -111,6 +132,7 @@ class ReadBookController extends ReaderProviderBase
       store: _progressStore,
       durableLocation: () => durableLocation,
       shouldPersistVisiblePosition: shouldPersistVisiblePosition,
+      updateVisibleLocation: _sessionCoordinator.updateVisibleLocation,
       updateSessionLocation: _updateSessionLocation,
       persistLocation: _persistSessionLocation,
     );
@@ -139,8 +161,8 @@ class ReadBookController extends ReaderProviderBase
   ReaderLocation get visibleLocation => _sessionCoordinator.visibleLocation;
   ReaderLocation get durableLocation => _sessionCoordinator.durableLocation;
   ReaderSessionPhase get sessionPhase => _sessionCoordinator.phase;
-  bool get isSwitchingSource => _isSwitchingSource;
-  String? get sourceSwitchMessage => _sourceSwitchMessage;
+  bool get isSwitchingSource => _sourceSwitch.isSwitching;
+  String? get sourceSwitchMessage => _sourceSwitch.message;
   String? get currentChapterFailureMessage =>
       chapterFailureMessage(currentChapterIndex);
 
@@ -257,6 +279,8 @@ class ReadBookController extends ReaderProviderBase
     required double alignment,
     required List<int> visibleChapterIndexes,
   }) {
+    final previousVisibleChapterIndex = visibleChapterIndex;
+    final previousPageIndex = currentPageIndex;
     _progressCoordinator.updateVisibleChapterPosition(
       chapterIndex: chapterIndex,
       localOffset: localOffset,
@@ -304,7 +328,16 @@ class ReadBookController extends ReaderProviderBase
       ReaderPerfTrace.mark(
         'visible chapter preload center $preloadCenterChapter',
       );
-      updateScrollPreloadForVisibleChapter(preloadCenterChapter);
+      updateScrollPreloadForVisibleChapter(
+        preloadCenterChapter,
+        localOffset: preloadCenterChapter == chapterIndex ? localOffset : null,
+      );
+    }
+
+    if ((previousVisibleChapterIndex != visibleChapterIndex ||
+            previousPageIndex != currentPageIndex) &&
+        !isDisposed) {
+      notifyListeners();
     }
   }
 
@@ -405,79 +438,61 @@ class ReadBookController extends ReaderProviderBase
   }
 
   Future<void> _init() async {
-    WidgetsBinding.instance.addObserver(this);
-    lifecycle = ReaderLifecycle.loading;
-    _sessionCoordinator.updatePhase(ReaderSessionPhase.bootstrapping);
-
-    _wireCallbacks();
-
-    // ── Phase 1: PREPARE (parallel data loading, no UI updates) ──
-    await Future.wait([
-      loadSettings(),
-      loadAutoPageSettings(),
-      loadTtsSettings(),
-      _loadChapters(),
-      _loadSource(),
-    ]);
-    if (isDisposed) return;
-
-    initContentManager();
-    onBeforeRepaginate = _prepareSettingsRepaginateAnchor;
-    onSettingsChangedRepaginate = () {
-      updatePaginationConfig();
-      doPaginate();
-    };
-
-    // ── Phase 2: RENDER (wait for viewSize, single UI update) ──
-    final size = viewSize ?? await _viewSizeCompleter.future;
-    if (isDisposed) return;
-
-    batchUpdate(() {
-      viewSize = size;
-      updatePaginationConfig();
-    });
-
-    // Load initial chapter content
-    if (!_initialSessionPrimed) {
-      _sessionCoordinator.updatePhase(ReaderSessionPhase.contentLoading);
-      _initialSessionPrimed = true;
-      final initialPreloadRadius =
-          pageTurnMode == PageAnim.scroll && book.origin == 'local' ? 1 : 0;
-      await loadChapterWithPreloadRadius(
-        currentChapterIndex,
-        preloadRadius:
-            // scroll mode: local=1, network=0 (controlled by window)
-            // slide mode: 2，讓啟動時立刻預載 N±1 和 N±2，
-            //             減少使用者在章節邊界等待的機率
-            pageTurnMode == PageAnim.scroll ? initialPreloadRadius : 2,
-      );
-      if (isDisposed) return;
-    }
-
-    // Apply restore position + transition to ready in ONE update
-    batchUpdate(() {
-      bootstrapChapterWindow(currentChapterIndex);
-      if (initialCharOffset > 0) {
+    await _bootstrapRuntime.bootstrap(
+      currentViewSize: viewSize,
+      pageTurnMode: pageTurnMode,
+      isLocalBook: book.origin == 'local',
+      currentChapterIndex: currentChapterIndex,
+      visibleChapterIndex: visibleChapterIndex,
+      initialCharOffset: initialCharOffset,
+      isDisposed: () => isDisposed,
+      addObserver: () => WidgetsBinding.instance.addObserver(this),
+      setLifecycle: (value) => lifecycle = value,
+      updatePhase: _sessionCoordinator.updatePhase,
+      wireCallbacks: _wireCallbacks,
+      prepareTasks: <ReaderBootstrapPrepareTask>[
+        loadSettings,
+        loadAutoPageSettings,
+        loadTtsSettings,
+        _loadChapters,
+        _loadSource,
+      ],
+      initContentManager: initContentManager,
+      configureRepaginateHooks: () {
+        onBeforeRepaginate = _prepareSettingsRepaginateAnchor;
+        onSettingsChangedRepaginate = () {
+          updatePaginationConfig();
+          doPaginate();
+        };
+      },
+      batchUpdate: batchUpdate,
+      applyViewSize: (size) {
+        viewSize = size;
+        updatePaginationConfig();
+      },
+      loadChapterWithPreloadRadius: (chapterIndex, preloadRadius) {
+        return loadChapterWithPreloadRadius(
+          chapterIndex,
+          preloadRadius: preloadRadius,
+        );
+      },
+      bootstrapChapterWindow: bootstrapChapterWindow,
+      restoreInitialCharOffset: (chapterIndex, charOffset) {
         jumpToChapterCharOffset(
-          chapterIndex: currentChapterIndex,
-          charOffset: initialCharOffset,
+          chapterIndex: chapterIndex,
+          charOffset: charOffset,
           reason: ReaderCommandReason.restore,
           isRestoringJump: false,
         );
-        initialCharOffset = 0; // clear after use
-      }
-      lifecycle = ReaderLifecycle.ready;
-      _sessionCoordinator.updatePhase(ReaderSessionPhase.ready);
-    });
-
-    // ── Phase 3: WARMUP (background, non-blocking) ──
-    startBatteryHeartbeat();
-    readAloudController.attach();
-    scheduleDeferredWindowWarmup(currentChapterIndex);
-    if (pageTurnMode == PageAnim.scroll) {
-      updateScrollPreloadForVisibleChapter(visibleChapterIndex);
-      triggerSilentPreload();
-    }
+      },
+      clearInitialCharOffset: () => initialCharOffset = 0,
+      startBatteryHeartbeat: startBatteryHeartbeat,
+      attachReadAloud: readAloudController.attach,
+      scheduleDeferredWindowWarmup: scheduleDeferredWindowWarmup,
+      updateScrollPreloadForVisibleChapter:
+          updateScrollPreloadForVisibleChapter,
+      triggerSilentPreload: triggerSilentPreload,
+    );
   }
 
   void _wireCallbacks() {
@@ -541,53 +556,45 @@ class ReadBookController extends ReaderProviderBase
   }
 
   Future<void> _loadChapters() async {
-    if (chapters.isNotEmpty) {
-      if (isDisposed) return;
-      await refreshChapterDisplayTitles(notify: false);
-      if (!isDisposed) notifyListeners();
-      return;
-    }
-    chapters = await chapterDao.getChapters(book.bookUrl);
+    chapters = await _sessionFacade.loadChapters(
+      book: book,
+      chapters: chapters,
+      chapterDao: chapterDao,
+    );
     if (isDisposed) return;
     await refreshChapterDisplayTitles(notify: false);
     if (!isDisposed) notifyListeners();
   }
 
   Future<void> _loadSource() async {
-    source = await sourceDao.getByUrl(book.origin);
+    source = await _sessionFacade.loadSource(book: book, sourceDao: sourceDao);
   }
 
   double textPadding = 16.0;
   double get autoPageProgress => autoPageProgressNotifier.value;
 
   void setViewSize(Size size) {
-    // During init: just complete the completer, don't paginate
-    if (!_viewSizeCompleter.isCompleted) {
-      _viewSizeCompleter.complete(size);
+    final update = _viewportLifecycle.handleViewSizeChange(
+      size: size,
+      currentViewSize: viewSize,
+      hasContentManager: hasContentManager,
+      hasCachedCurrentChapterContent: hasCachedChapterContent(
+        currentChapterIndex,
+      ),
+      hasCurrentChapterPages:
+          chapterPagesCache[currentChapterIndex]?.isNotEmpty ?? false,
+      isPaginatingContent: isPaginatingContent,
+    );
+    if (update.completedBootstrapSize) {
       return;
     }
-
-    // Post-init: handle viewport changes (orientation, keyboard, etc.)
-    if (viewSize == null) {
-      viewSize = size;
-      if (!hasContentManager) return;
-      updatePaginationConfig();
-      if (contentManager.getCachedContent(currentChapterIndex) != null &&
-          (chapterPagesCache[currentChapterIndex]?.isEmpty ?? true)) {
-        unawaited(doPaginate());
-      }
-      return;
-    }
-
-    if (_shouldIgnoreViewSizeChange(size)) return;
+    if (!update.shouldApplySize) return;
 
     viewSize = size;
-    if (hasContentManager &&
-        contentManager.getCachedContent(currentChapterIndex) != null) {
-      if (isPaginatingContent) {
-        _pendingRepaginateForLatestViewport = true;
-        return;
-      }
+    if (update.shouldRefreshPaginationConfig) {
+      updatePaginationConfig();
+    }
+    if (update.shouldRepaginate) {
       unawaited(doPaginate());
     }
   }
@@ -672,7 +679,7 @@ class ReadBookController extends ReaderProviderBase
       if (next < chapters.length &&
           !(chapterPagesCache[next]?.isNotEmpty ?? false) &&
           !loadingChapters.contains(next)) {
-        contentManager.prioritizeChapter(next, preloadRadius: 1);
+        prioritizeChapterContent(next, preloadRadius: 1);
       }
     }
 
@@ -682,7 +689,7 @@ class ReadBookController extends ReaderProviderBase
       if (prev >= 0 &&
           !(chapterPagesCache[prev]?.isNotEmpty ?? false) &&
           !loadingChapters.contains(prev)) {
-        contentManager.prioritizeChapter(prev, preloadRadius: 1);
+        prioritizeChapterContent(prev, preloadRadius: 1);
       }
     }
   }
@@ -750,13 +757,7 @@ class ReadBookController extends ReaderProviderBase
       chapters.isNotEmpty ? chapters[currentChapterIndex].url : '';
 
   ReaderLocation resolveExitLocation() {
-    if (pageTurnMode == PageAnim.scroll) {
-      return ReaderLocation(
-        chapterIndex: visibleChapterIndex,
-        charOffset: _resolveVisibleCharOffset(),
-      ).normalized();
-    }
-    return _resolveModeSwitchLocation().normalized();
+    return _sessionRuntime.resolveExitLocation(_currentSessionContext());
   }
 
   bool shouldPromptAddToBookshelfOnExit() {
@@ -768,21 +769,17 @@ class ReadBookController extends ReaderProviderBase
     final title =
         location.chapterIndex >= 0 && location.chapterIndex < chapters.length
             ? chapters[location.chapterIndex].title
-            : book.durChapterTitle;
-    _progressStore.updateBookProgress(
+            : (book.durChapterTitle ?? '');
+    await _sessionFacade.addCurrentBookToBookshelf(
       book: book,
-      chapterIndex: location.chapterIndex,
-      charOffset: location.charOffset,
-      title: title,
+      chapters: chapters,
+      location: location,
+      chapterTitle: title,
+      progressStore: _progressStore,
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      onCompleted: notifyListeners,
     );
-    book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
-    book.isInBookshelf = true;
-    await bookDao.upsert(book);
-    if (chapters.isNotEmpty) {
-      await chapterDao.insertChapters(chapters);
-    }
-    AppEventBus().fire(AppEventBus.upBookshelf, data: book.bookUrl);
-    notifyListeners();
   }
 
   String get displayChapterPercentLabel {
@@ -809,10 +806,12 @@ class ReadBookController extends ReaderProviderBase
       final runtimeChapter = chapterAt(chapterIndex);
       final localPageIndex =
           runtimeChapter != null
-              ? runtimeChapter.pageIndexAtLocalOffset(visibleChapterLocalOffset)
-              : ChapterPositionResolver.pageIndexAtLocalOffset(
+              ? runtimeChapter.getPageIndexByCharIndex(
+                visibleLocation.charOffset,
+              )
+              : ChapterPositionResolver.findPageIndexByCharOffset(
                 pagesForChapter(chapterIndex),
-                visibleChapterLocalOffset,
+                visibleLocation.charOffset,
               );
       return localPageIndex < 0 ? 0 : localPageIndex;
     }
@@ -910,26 +909,25 @@ class ReadBookController extends ReaderProviderBase
 
   void addBookmark({String? content}) {
     final chapterIndex = _displayPageChapterIndex;
-    final bookmark = Bookmark(
-      time: DateTime.now().millisecondsSinceEpoch,
-      bookName: book.name,
-      bookAuthor: book.author,
-      bookUrl: book.bookUrl,
+    final bookmark = _sessionFacade.buildBookmark(
+      book: book,
       chapterIndex: chapterIndex,
-      chapterName: displayChapterTitleAt(chapterIndex),
+      chapterTitle: displayChapterTitleAt(chapterIndex),
       chapterPos: _resolveCurrentCharOffset(),
-      bookText: content ?? '',
+      content: content,
     );
-    bookmarkDao.upsert(bookmark);
-    notifyListeners();
+    _sessionFacade.saveBookmark(
+      bookmarkDao: bookmarkDao,
+      bookmark: bookmark,
+      onCompleted: notifyListeners,
+    );
   }
 
   void replaceChapterSource(int index, BookSource source, String content) {
     if (index >= 0 && index < chapters.length) {
       chapters[index].content = content;
-      contentManager.putContent(index, content);
+      putChapterContent(index, content);
       clearChapterFailure(index);
-      chapterPagesCache.remove(index);
       _chapterRuntimeCache.remove(index);
       if (index == currentChapterIndex) {
         unawaited(loadChapter(index, reason: ReaderCommandReason.system));
@@ -939,113 +937,61 @@ class ReadBookController extends ReaderProviderBase
   }
 
   Future<bool> autoChangeSourceForCurrentChapter() async {
-    if (_isSwitchingSource) return false;
-    _isSwitchingSource = true;
-    _sourceSwitchMessage = '正在尋找可用來源...';
-    notifyListeners();
-
-    try {
-      final resolution = await _sourceSwitchService.autoResolveSwitch(
-        book,
-        targetChapterIndex: currentChapterIndex,
-        targetChapterTitle: currentChapterTitle,
-      );
-      if (resolution == null) {
-        _sourceSwitchMessage = '找不到可自動切換的可用來源';
-        notifyListeners();
-        return false;
-      }
-      await _applySourceSwitchResolution(resolution);
-      _sourceSwitchMessage = '已切換到 ${resolution.source.bookSourceName}';
-      notifyListeners();
-      return true;
-    } catch (error) {
-      _sourceSwitchMessage = '自動換源失敗: $error';
-      notifyListeners();
-      return false;
-    } finally {
-      _isSwitchingSource = false;
-      notifyListeners();
-    }
+    final result = await _sourceSwitch.autoChangeSourceForCurrentChapter(
+      book: book,
+      targetChapterIndex: currentChapterIndex,
+      targetChapterTitle: currentChapterTitle,
+      applyResolution: _applySourceSwitchResolution,
+      notifyListeners: notifyListeners,
+    );
+    return result?.changed ?? false;
   }
 
   Future<void> changeBookSourceTo(SearchBook searchBook) async {
-    if (_isSwitchingSource) return;
-    _isSwitchingSource = true;
-    _sourceSwitchMessage = '正在切換來源...';
-    notifyListeners();
-
-    try {
-      final resolution = await _sourceSwitchService.resolveSwitch(
-        book,
-        searchBook,
-        targetChapterIndex: currentChapterIndex,
-        targetChapterTitle: currentChapterTitle,
-        validateTargetContent: true,
+    final result = await _sourceSwitch.changeBookSource(
+      book: book,
+      searchBook: searchBook,
+      targetChapterIndex: currentChapterIndex,
+      targetChapterTitle: currentChapterTitle,
+      applyResolution: _applySourceSwitchResolution,
+      notifyListeners: notifyListeners,
+    );
+    if (result?.error != null) {
+      Error.throwWithStackTrace(
+        result!.error!,
+        result.stackTrace ?? StackTrace.current,
       );
-      await _applySourceSwitchResolution(resolution);
-      _sourceSwitchMessage = '已切換到 ${resolution.source.bookSourceName}';
-    } catch (error) {
-      _sourceSwitchMessage = '換源失敗: $error';
-      rethrow;
-    } finally {
-      _isSwitchingSource = false;
-      notifyListeners();
     }
   }
 
   Future<void> _applySourceSwitchResolution(
     SourceSwitchResolution resolution,
   ) async {
-    final oldBookUrl = book.bookUrl;
-    final newBook = resolution.migratedBook;
-    book.overwriteFrom(newBook);
-    source = resolution.source;
-    chapters = resolution.chapters;
-    clearChapterFailure(resolution.targetChapterIndex);
-
-    await refreshChapterDisplayTitles(notify: false);
-    disposeContentManager();
-    initContentManager();
-
-    if (resolution.validatedContent != null &&
-        resolution.targetChapterIndex >= 0 &&
-        resolution.targetChapterIndex < chapters.length) {
-      chapters[resolution.targetChapterIndex].content =
-          resolution.validatedContent;
-      contentManager.putContent(
-        resolution.targetChapterIndex,
-        resolution.validatedContent!,
-      );
-    }
-
-    if (book.isInBookshelf) {
-      if (oldBookUrl != book.bookUrl) {
-        await bookDao.deleteByUrl(oldBookUrl);
-        await chapterDao.deleteByBook(oldBookUrl);
-      }
-      await chapterDao.deleteByBook(book.bookUrl);
-      await bookDao.upsert(book);
-      await chapterDao.insertChapters(chapters);
-    }
-
-    _updateSessionLocation(
-      ReaderLocation(
-        chapterIndex: resolution.targetChapterIndex,
-        charOffset: book.durChapterPos,
-      ),
-    );
-    await loadChapter(
-      resolution.targetChapterIndex,
+    await _sessionFacade.applySourceSwitchResolution(
+      resolution: resolution,
+      book: book,
+      setSource: (value) => source = value,
+      setChapters: (value) => chapters = value,
+      clearChapterFailure: clearChapterFailure,
+      refreshChapterDisplayTitles: refreshChapterDisplayTitles,
+      resetContentLifecycle: resetContentLifecycle,
+      putChapterContent: putChapterContent,
+      bookDao: bookDao,
+      chapterDao: chapterDao,
+      updateSessionLocation: _updateSessionLocation,
+      loadChapter: loadChapter,
+      jumpToChapterCharOffset:
+          ({
+            required chapterIndex,
+            required charOffset,
+            required ReaderCommandReason reason,
+          }) => jumpToChapterCharOffset(
+            chapterIndex: chapterIndex,
+            charOffset: charOffset,
+            reason: reason,
+          ),
       reason: ReaderCommandReason.system,
     );
-    if (book.durChapterPos > 0) {
-      jumpToChapterCharOffset(
-        chapterIndex: resolution.targetChapterIndex,
-        charOffset: book.durChapterPos,
-        reason: ReaderCommandReason.system,
-      );
-    }
   }
 
   Future<void> jumpToChapter(int index) async {
@@ -1057,14 +1003,23 @@ class ReadBookController extends ReaderProviderBase
     }
   }
 
+  Future<void> refreshReplaceRules() async {
+    if (!hasContentManager || isDisposed) return;
+    _prepareSettingsRepaginateAnchor();
+    await refreshChapterDisplayTitles(notify: false);
+    resetContentLifecycle(refreshPaginationConfig: true);
+    await loadChapter(
+      currentChapterIndex,
+      reason: ReaderCommandReason.settingsRepaginate,
+    );
+  }
+
   void setChineseConvert(int val) {
     _prepareSettingsRepaginateAnchor();
     chineseConvert = val;
     _persistSetting('chinese_convert_v2', val);
     unawaited(refreshChapterDisplayTitles());
-    disposeContentManager();
-    initContentManager();
-    updatePaginationConfig();
+    resetContentLifecycle(refreshPaginationConfig: true);
     unawaited(
       loadChapter(
         currentChapterIndex,
@@ -1087,69 +1042,31 @@ class ReadBookController extends ReaderProviderBase
     var shouldRepaginate = true;
     var nextFromEnd = fromEnd;
     while (shouldRepaginate && !isDisposed) {
-      _pendingRepaginateForLatestViewport = false;
+      _viewportLifecycle.beginRepaginateIteration();
       _sessionCoordinator.updatePhase(ReaderSessionPhase.repaginating);
       await super.doPaginate(fromEnd: nextFromEnd);
       refreshAllChapterRuntime();
       if (isDisposed) return;
       _sessionCoordinator.updatePhase(ReaderSessionPhase.ready);
-      shouldRepaginate = _pendingRepaginateForLatestViewport;
+      shouldRepaginate =
+          _viewportLifecycle.hasPendingRepaginateForLatestViewport;
       nextFromEnd = false;
     }
   }
 
-  bool _shouldIgnoreViewSizeChange(Size size) {
-    final currentSize = viewSize;
-    if (currentSize == null) return false;
-    final dw = (currentSize.width - size.width).abs();
-    final dh = (currentSize.height - size.height).abs();
-    if (dw < 12 && dh < 24) return true;
-    if (dw < 1 && dh < 96) return true;
-    final guardUntil = _ignoreViewportChangesUntil;
-    if (guardUntil != null && DateTime.now().isBefore(guardUntil)) {
-      return dw < 64 && dh < 180;
-    }
-    return false;
-  }
-
   void _guardTransientViewportChanges() {
-    _ignoreViewportChangesUntil = DateTime.now().add(
-      const Duration(milliseconds: 500),
-    );
+    _viewportLifecycle.guardTransientViewportChanges();
   }
 
   int _resolveCurrentCharOffset() {
-    if (pageTurnMode == PageAnim.scroll) {
-      return _resolveVisibleCharOffset();
-    }
-    if (currentPageIndex >= 0 && currentPageIndex < slidePages.length) {
-      final page = slidePages[currentPageIndex];
-      final chapter = chapterAt(page.chapterIndex);
-      if (chapter != null) {
-        return chapter.charOffsetForPageIndex(page.index);
-      }
-      final chapterPages = pagesForChapter(page.chapterIndex);
-      return ChapterPositionResolver.getCharOffsetForPage(
-        chapterPages,
-        page.index,
-      );
-    }
-    return sessionLocation.charOffset;
+    return _sessionRuntime.resolveCurrentCharOffset(_currentSessionContext());
   }
 
   int _resolveVisibleCharOffset() {
-    final chapter = chapterAt(visibleChapterIndex);
-    final charOffset =
-        chapter != null
-            ? chapter.charOffsetFromLocalOffset(visibleChapterLocalOffset)
-            : ChapterPositionResolver.localOffsetToCharOffset(
-              pagesForChapter(visibleChapterIndex),
-              visibleChapterLocalOffset,
-            );
-    _sessionCoordinator.updateVisibleLocation(
-      ReaderLocation(chapterIndex: visibleChapterIndex, charOffset: charOffset),
+    return _sessionRuntime.resolveVisibleCharOffset(
+      visibleChapterIndex: visibleChapterIndex,
+      visibleChapterLocalOffset: visibleChapterLocalOffset,
     );
-    return charOffset;
   }
 
   void _persistSetting(String key, dynamic value) {
@@ -1178,43 +1095,14 @@ class ReadBookController extends ReaderProviderBase
     ReaderCommandReason reason = ReaderCommandReason.system,
     bool isRestoringJump = false,
   }) {
-    final targetChapter = chapterIndex ?? currentChapterIndex;
-    final location =
-        charOffset != null
-            ? ReaderLocation(
-              chapterIndex: targetChapter,
-              charOffset: charOffset,
-            )
-            : null;
-
-    if (pageTurnMode == PageAnim.scroll) {
-      final target = ReaderPositionResolver.resolveScrollTarget(
-        location:
-            location ??
-            ReaderLocation(chapterIndex: targetChapter, charOffset: 0),
-        runtimeChapter: chapterAt(targetChapter),
-        pages: pagesForChapter(targetChapter),
-      );
-      requestJumpToChapter(
-        chapterIndex: target.chapterIndex,
-        localOffset: target.localOffset,
-        alignment: target.alignment,
-        reason: reason,
-      );
-      notifyListeners();
-      return;
-    }
-
-    final target = ReaderPositionResolver.resolveSlideTarget(
-      location: location,
-      globalPageIndex: pageIndex,
-      runtimeChapter: chapterAt(targetChapter),
-      chapterPages: pagesForChapter(targetChapter),
-      slidePages: slidePages,
-      targetChapterIndex: targetChapter,
+    _sessionRuntime.jumpToPosition(
+      isScrollMode: pageTurnMode == PageAnim.scroll,
+      currentChapterIndex: currentChapterIndex,
+      chapterIndex: chapterIndex,
+      charOffset: charOffset,
+      pageIndex: pageIndex,
+      reason: reason,
     );
-    currentPageIndex = target.globalPageIndex;
-    requestJumpToPage(target.globalPageIndex, reason: reason);
     notifyListeners();
   }
 
@@ -1253,8 +1141,7 @@ class ReadBookController extends ReaderProviderBase
   }
 
   Future<void> persistExitProgress() async {
-    final location = resolveExitLocation();
-    await _persistSessionLocation(location);
+    await _sessionRuntime.persistExitProgress(_currentSessionContext());
     await _flushReadRecord();
   }
 
@@ -1267,46 +1154,42 @@ class ReadBookController extends ReaderProviderBase
   }
 
   void _prepareSettingsRepaginateAnchor() {
-    final location = _resolveModeSwitchLocation().normalized();
-    _updateSessionLocation(location);
-    _sessionCoordinator.updateVisibleLocation(location);
-    currentChapterIndex = location.chapterIndex;
-    visibleChapterIndex = location.chapterIndex;
-    final runtimeChapter = chapterAt(location.chapterIndex);
-    visibleChapterLocalOffset =
-        runtimeChapter != null
-            ? runtimeChapter.localOffsetFromCharOffset(location.charOffset)
-            : ChapterPositionResolver.charOffsetToLocalOffset(
-              pagesForChapter(location.chapterIndex),
-              location.charOffset,
-            );
+    final anchor = _sessionRuntime.prepareSettingsRepaginateAnchor(
+      _currentSessionContext(),
+    );
+    currentChapterIndex = anchor.location.chapterIndex;
+    visibleChapterIndex = anchor.location.chapterIndex;
+    visibleChapterLocalOffset = anchor.localOffset;
   }
 
   ReaderLocation _resolveModeSwitchLocation() {
-    if (pageTurnMode == PageAnim.scroll) {
-      return ReaderLocation(
-        chapterIndex: visibleChapterIndex,
-        charOffset: _resolveVisibleCharOffset(),
-      );
-    }
+    return _sessionRuntime.resolveModeSwitchLocation(_currentSessionContext());
+  }
 
-    if (currentPageIndex >= 0 && currentPageIndex < slidePages.length) {
-      final page = slidePages[currentPageIndex];
-      final runtimeChapter = chapterAt(page.chapterIndex);
-      final charOffset =
-          runtimeChapter != null
-              ? runtimeChapter.charOffsetForPageIndex(page.index)
-              : ChapterPositionResolver.getCharOffsetForPage(
-                pagesForChapter(page.chapterIndex),
-                page.index,
-              );
-      return ReaderLocation(
-        chapterIndex: page.chapterIndex,
-        charOffset: charOffset,
+  void _dispatchViewportCommand(ReaderViewportCommand command) {
+    if (command is ReaderScrollViewportCommand) {
+      requestJumpToChapter(
+        chapterIndex: command.target.chapterIndex,
+        localOffset: command.target.localOffset,
+        alignment: command.target.alignment,
+        reason: command.reason,
       );
+      return;
     }
+    if (command is ReaderSlideViewportCommand) {
+      currentPageIndex = command.target.globalPageIndex;
+      requestJumpToPage(command.target.globalPageIndex, reason: command.reason);
+    }
+  }
 
-    return sessionLocation;
+  ReaderSessionRuntimeContext _currentSessionContext() {
+    return ReaderSessionRuntimeContext(
+      isScrollMode: pageTurnMode == PageAnim.scroll,
+      currentChapterIndex: currentChapterIndex,
+      visibleChapterIndex: visibleChapterIndex,
+      visibleChapterLocalOffset: visibleChapterLocalOffset,
+      currentPageIndex: currentPageIndex,
+    );
   }
 
   Future<void> _flushReadRecord() async {

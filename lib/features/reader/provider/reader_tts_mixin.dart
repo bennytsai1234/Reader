@@ -8,14 +8,14 @@ import 'package:inkpage_reader/features/reader/runtime/models/reader_location.da
 
 import 'reader_provider_base.dart';
 import 'reader_settings_mixin.dart';
-import 'reader_content_mixin.dart';
+import 'reader_content_facade_mixin.dart';
 import 'reader_auto_page_mixin.dart';
 
 mixin ReaderTtsMixin
     on
         ReaderProviderBase,
         ReaderSettingsMixin,
-        ReaderContentMixin,
+        ReaderContentFacadeMixin,
         ReaderAutoPageMixin {
   late final ReadAloudController readAloudController;
   final ReaderTtsFollowCoordinator _ttsFollow =
