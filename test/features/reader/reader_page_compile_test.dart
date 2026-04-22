@@ -306,7 +306,7 @@ void main() {
 
     runtimeBeforeToggle.onContentTapUp!(
       TapUpDetails(
-        localPosition: Offset(10, 10),
+        localPosition: const Offset(10, 10),
         kind: PointerDeviceKind.touch,
       ),
     );
@@ -348,7 +348,7 @@ void main() {
 
     runtime.onContentTapUp!(
       TapUpDetails(
-        localPosition: Offset(10, 10),
+        localPosition: const Offset(10, 10),
         kind: PointerDeviceKind.touch,
       ),
     );
@@ -382,7 +382,7 @@ void main() {
 
     runtime.onContentTapUp!(
       TapUpDetails(
-        localPosition: Offset(10, 10),
+        localPosition: const Offset(10, 10),
         kind: PointerDeviceKind.touch,
       ),
     );

@@ -20,7 +20,6 @@ import 'package:inkpage_reader/features/reader/engine/page_view_widget.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
-import 'package:inkpage_reader/features/reader/runtime/read_book_controller.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader/reader_bottom_menu.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader/reader_top_menu.dart';
 import 'package:provider/provider.dart';
