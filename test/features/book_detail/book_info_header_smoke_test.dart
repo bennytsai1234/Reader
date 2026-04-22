@@ -11,6 +11,8 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/features/book_detail/book_detail_provider.dart';
 import 'package:inkpage_reader/features/book_detail/widgets/book_info_header.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   @override
@@ -116,5 +118,51 @@ void main() {
     await tester.pump();
 
     expect(find.text('離線快取'), findsNothing);
+  });
+
+  testWidgets('BookInfoHeader continue reading 會帶入 durChapterPos', (
+    tester,
+  ) async {
+    final provider = BookDetailProvider(
+      AggregatedSearchBook(
+        book: SearchBook(
+          bookUrl: 'https://example.com/book/2',
+          name: '續讀書',
+          author: '作者丙',
+          origin: 'https://example.com',
+          originName: '測試書源',
+        ),
+        sources: const <String>['測試書源'],
+      ),
+    );
+    provider.book.durChapterIndex = 3;
+    provider.book.durChapterPos = 1200;
+    ReaderOpenTarget? receivedTarget;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BookInfoHeader(
+            book: provider.book,
+            provider: provider,
+            showPhotoView: (_, __) {},
+            onEdit: () {},
+            onCacheOffline: () {},
+            showSourceOptions: (_, __) {},
+            navigateToReader: (_, __, target, ____) {
+              receivedTarget = target;
+            },
+            showChangeSource: (_, __) {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '繼續閱讀'));
+
+    expect(receivedTarget?.intent, ReaderOpenIntent.resume);
+    expect(
+      receivedTarget?.location,
+      const ReaderLocation(chapterIndex: 3, charOffset: 1200),
+    );
   });
 }

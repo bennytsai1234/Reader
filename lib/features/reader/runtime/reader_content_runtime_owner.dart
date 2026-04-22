@@ -33,6 +33,7 @@ class ReaderContentRuntimeOwner {
   bool get hasPendingSlideRecenter => _pipeline.hasPendingSlideRecenter;
   bool get hasContentManager => _lifecycle.hasContentManager;
   bool get isWholeBookPreloadEnabled => _lifecycle.isWholeBookPreloadEnabled;
+  bool get isScrollInteractionActive => _lifecycle.isUserInteractionActive;
 
   bool isKnownEmptyChapter(int index) => _lifecycle.isKnownEmptyChapter(index);
 
@@ -50,8 +51,16 @@ class ReaderContentRuntimeOwner {
     return _lifecycle.hasCachedContent(chapterIndex);
   }
 
-  void prioritizeChapterContent(int chapterIndex, {int preloadRadius = 1}) {
-    _lifecycle.prioritizeChapter(chapterIndex, preloadRadius: preloadRadius);
+  void prioritizeChapterContent(
+    int chapterIndex, {
+    int preloadRadius = 1,
+    Set<int> retainedChapterIndexes = const <int>{},
+  }) {
+    _lifecycle.prioritizeChapter(
+      chapterIndex,
+      preloadRadius: preloadRadius,
+      retainedChapterIndexes: retainedChapterIndexes,
+    );
   }
 
   void putChapterContent({
@@ -245,6 +254,7 @@ class ReaderContentRuntimeOwner {
     required void Function() notifyListeners,
     required bool isScrollMode,
     required bool isLocalScrollMode,
+    Set<int> retainedChapterIndexes = const <int>{},
     bool silent = true,
     bool prioritize = false,
     int preloadRadius = 1,
@@ -261,22 +271,10 @@ class ReaderContentRuntimeOwner {
       },
       isScrollMode: isScrollMode,
       isLocalScrollMode: isLocalScrollMode,
+      retainedChapterIndexes: retainedChapterIndexes,
       silent: silent,
       prioritize: prioritize,
       preloadRadius: preloadRadius,
-    );
-  }
-
-  Future<List<TextPage>?> trySyncPaginate({
-    required int chapterIndex,
-    required Map<int, List<TextPage>> chapterPagesCache,
-  }) {
-    return _lifecycle.trySyncPaginate(
-      chapterIndex: chapterIndex,
-      chapterPagesCache: chapterPagesCache,
-      refreshChapterRuntime: (targetChapterIndex) {
-        _callbacks.refreshChapterRuntime?.call(targetChapterIndex);
-      },
     );
   }
 
@@ -285,12 +283,14 @@ class ReaderContentRuntimeOwner {
     required bool isScrollMode,
     required bool isLocalScrollMode,
     required Map<int, List<TextPage>> chapterPagesCache,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     _lifecycle.bootstrapChapterWindow(
       centerIndex: centerIndex,
       isScrollMode: isScrollMode,
       isLocalScrollMode: isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
+      retainedChapterIndexes: retainedChapterIndexes,
       refreshChapterRuntime: (chapterIndex) {
         _callbacks.refreshChapterRuntime?.call(chapterIndex);
       },
@@ -356,6 +356,7 @@ class ReaderContentRuntimeOwner {
   void updateScrollPreloadForVisibleChapter({
     required int visibleChapter,
     required double? localOffset,
+    required double Function(int chapterIndex) chapterHeightFor,
     required List<BookChapter> chapters,
     required Map<int, List<TextPage>> chapterPagesCache,
     required Set<int> loadingChapters,
@@ -363,10 +364,12 @@ class ReaderContentRuntimeOwner {
     required void Function() notifyListeners,
     required bool isScrollMode,
     required bool isLocalScrollMode,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     _lifecycle.updateScrollPreloadForVisibleChapter(
       visibleChapter: visibleChapter,
       localOffset: localOffset,
+      chapterHeightFor: chapterHeightFor,
       chapters: chapters,
       chapterPagesCache: chapterPagesCache,
       loadingChapters: loadingChapters,
@@ -377,6 +380,7 @@ class ReaderContentRuntimeOwner {
       },
       isScrollMode: isScrollMode,
       isLocalScrollMode: isLocalScrollMode,
+      retainedChapterIndexes: retainedChapterIndexes,
     );
   }
 
@@ -417,6 +421,7 @@ class ReaderContentRuntimeOwner {
     required bool Function() isDisposed,
     required void Function() notifyListeners,
     required void Function() refreshSlidePages,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     _lifecycle.handleChapterReady(
       chapterIndex: chapterIndex,
@@ -432,6 +437,7 @@ class ReaderContentRuntimeOwner {
         _callbacks.refreshChapterRuntime?.call(targetChapterIndex);
       },
       refreshSlidePages: refreshSlidePages,
+      retainedChapterIndexes: retainedChapterIndexes,
     );
   }
 
@@ -453,6 +459,7 @@ class ReaderContentRuntimeOwner {
     required bool isScrollMode,
     required bool isLocalScrollMode,
     required Map<int, List<TextPage>> chapterPagesCache,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     _lifecycle.prepareChapterDisplayWindow(
       chapterIndex: chapterIndex,
@@ -460,6 +467,7 @@ class ReaderContentRuntimeOwner {
       isScrollMode: isScrollMode,
       isLocalScrollMode: isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
+      retainedChapterIndexes: retainedChapterIndexes,
       refreshChapterRuntime: (targetChapterIndex) {
         _callbacks.refreshChapterRuntime?.call(targetChapterIndex);
       },

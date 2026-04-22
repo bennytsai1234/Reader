@@ -12,14 +12,7 @@ import 'package:inkpage_reader/features/reader/widgets/reader_page_shell.dart';
 
 class ReaderPage extends StatefulWidget {
   final Book book;
-  final int chapterIndex;
-  final int chapterPos;
-  const ReaderPage({
-    super.key,
-    required this.book,
-    this.chapterIndex = 0,
-    this.chapterPos = 0,
-  });
+  const ReaderPage({super.key, required this.book});
   @override
   State<ReaderPage> createState() => _ReaderPageState();
 }

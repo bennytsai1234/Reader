@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 
 void main() {
@@ -45,6 +46,10 @@ void main() {
       expect(book.durChapterIndex, 1);
       expect(book.durChapterPos, 345);
       expect(book.durChapterTitle, 'c1');
+      expect(
+        store.lastSavedLocation,
+        const ReaderLocation(chapterIndex: 1, charOffset: 345),
+      );
       expect(savedChapter, 1);
       expect(savedTitle, 'c1');
       expect(savedOffset, 345);
@@ -73,6 +78,41 @@ void main() {
 
       // In-memory state should still be updated (only durable write failed)
       expect(book.durChapterPos, 100);
+      expect(
+        store.lastSavedLocation,
+        const ReaderLocation(chapterIndex: 0, charOffset: 100),
+      );
+    });
+
+    test('shouldSaveImmediately 會參考完整 lastSavedLocation', () async {
+      final store = ReaderProgressStore();
+      final book = Book(name: 'book', author: 'author', bookUrl: 'url');
+      final chapters = [BookChapter(title: 'c0', index: 0)];
+
+      await store.persistCharOffset(
+        write: (_, __, ___) async {},
+        book: book,
+        chapters: chapters,
+        chapterIndex: 2,
+        charOffset: 400,
+      );
+
+      expect(
+        store.shouldSaveImmediately(
+          currentCharOffset: 450,
+          currentChapterIndex: 2,
+          targetChapterIndex: 2,
+        ),
+        isFalse,
+      );
+      expect(
+        store.shouldSaveImmediately(
+          currentCharOffset: 450,
+          currentChapterIndex: 2,
+          targetChapterIndex: 3,
+        ),
+        isTrue,
+      );
     });
   });
 }

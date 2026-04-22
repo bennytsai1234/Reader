@@ -5,6 +5,7 @@ import 'bookmark_provider.dart';
 import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 
 class BookmarkPage extends StatefulWidget {
   const BookmarkPage({super.key});
@@ -137,7 +138,9 @@ class _BookmarkPageState extends State<BookmarkPage> {
   }
 
   Future<void> _jumpToBook(BuildContext context, Bookmark bookmark) async {
-    final book = await context.read<BookmarkProvider>().lookupBook(bookmark.bookUrl);
+    final book = await context.read<BookmarkProvider>().lookupBook(
+      bookmark.bookUrl,
+    );
     if (!context.mounted) return;
 
     if (book != null) {
@@ -149,14 +152,9 @@ class _BookmarkPageState extends State<BookmarkPage> {
                 create:
                     (_) => ReaderProvider(
                       book: book,
-                      chapterIndex: bookmark.chapterIndex,
-                      chapterPos: bookmark.chapterPos,
+                      openTarget: ReaderOpenTarget.bookmark(bookmark),
                     ),
-                child: ReaderPage(
-                  book: book,
-                  chapterIndex: bookmark.chapterIndex,
-                  chapterPos: bookmark.chapterPos,
-                ),
+                child: ReaderPage(book: book),
               ),
         ),
       );

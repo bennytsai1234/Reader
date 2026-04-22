@@ -29,6 +29,8 @@ class ReaderContentLifecycleRuntime {
   bool get hasContentManager => _contentManager != null;
   bool get isWholeBookPreloadEnabled =>
       hasContentManager && _contentManager!.wholeBookPreloadEnabled;
+  bool get isUserInteractionActive =>
+      hasContentManager && _contentManager!.userInteractionActive;
 
   bool isKnownEmptyChapter(int index) =>
       hasContentManager && _contentManager!.isKnownEmptyChapter(index);
@@ -66,16 +68,22 @@ class ReaderContentLifecycleRuntime {
 
   void syncPaginatedCacheTo(Map<int, List<TextPage>> chapterPagesCache) {
     if (!hasContentManager) return;
+    _contentManager!.commitPendingDisplayRepagination();
     chapterPagesCache
       ..clear()
       ..addAll(_contentManager!.paginatedCache);
   }
 
-  void prioritizeChapter(int chapterIndex, {int preloadRadius = 1}) {
+  void prioritizeChapter(
+    int chapterIndex, {
+    int preloadRadius = 1,
+    Set<int> retainedChapterIndexes = const <int>{},
+  }) {
     if (!hasContentManager) return;
     _contentManager!.prioritizeChapter(
       chapterIndex,
       preloadRadius: preloadRadius,
+      retainedIndexes: retainedChapterIndexes,
     );
   }
 
@@ -204,6 +212,7 @@ class ReaderContentLifecycleRuntime {
     required void Function(int chapterIndex) refreshChapterRuntime,
     required bool isScrollMode,
     required bool isLocalScrollMode,
+    Set<int> retainedChapterIndexes = const <int>{},
     bool silent = true,
     bool prioritize = false,
     int preloadRadius = 1,
@@ -215,6 +224,7 @@ class ReaderContentLifecycleRuntime {
         preload: !isLocalScrollMode,
         chapterPagesCache: chapterPagesCache,
         refreshChapterRuntime: refreshChapterRuntime,
+        retainedChapterIndexes: retainedChapterIndexes,
       );
       if (prioritize && !isLocalScrollMode) {
         _contentManager!.prioritize([index], centerIndex: index);
@@ -232,25 +242,13 @@ class ReaderContentLifecycleRuntime {
     );
   }
 
-  Future<List<TextPage>?> trySyncPaginate({
-    required int chapterIndex,
-    required Map<int, List<TextPage>> chapterPagesCache,
-    required void Function(int chapterIndex) refreshChapterRuntime,
-  }) async {
-    if (!hasContentManager) return null;
-    final pages = await _contentManager!.paginateIfCached(chapterIndex);
-    if (pages.isEmpty) return null;
-    chapterPagesCache[chapterIndex] = pages;
-    refreshChapterRuntime(chapterIndex);
-    return pages;
-  }
-
   void bootstrapChapterWindow({
     required int centerIndex,
     required bool isScrollMode,
     required bool isLocalScrollMode,
     required Map<int, List<TextPage>> chapterPagesCache,
     required void Function(int chapterIndex) refreshChapterRuntime,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     if (!hasContentManager) return;
     prepareChapterDisplayWindow(
@@ -260,6 +258,7 @@ class ReaderContentLifecycleRuntime {
       isLocalScrollMode: isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
       refreshChapterRuntime: refreshChapterRuntime,
+      retainedChapterIndexes: retainedChapterIndexes,
     );
   }
 
@@ -360,6 +359,7 @@ class ReaderContentLifecycleRuntime {
   void updateScrollPreloadForVisibleChapter({
     required int visibleChapter,
     required double? localOffset,
+    required double Function(int chapterIndex) chapterHeightFor,
     required List<BookChapter> chapters,
     required Map<int, List<TextPage>> chapterPagesCache,
     required Set<int> loadingChapters,
@@ -368,6 +368,7 @@ class ReaderContentLifecycleRuntime {
     required void Function(int chapterIndex) refreshChapterRuntime,
     required bool isScrollMode,
     required bool isLocalScrollMode,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     if (!hasContentManager || !isScrollMode) return;
     ReaderPerfTrace.mark(
@@ -381,6 +382,7 @@ class ReaderContentLifecycleRuntime {
       preload: !isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
       refreshChapterRuntime: refreshChapterRuntime,
+      retainedChapterIndexes: retainedChapterIndexes,
     );
     final visiblePages = chapterPagesCache[visibleChapter];
     if ((visiblePages == null || visiblePages.isEmpty) &&
@@ -396,6 +398,7 @@ class ReaderContentLifecycleRuntime {
           refreshChapterRuntime: refreshChapterRuntime,
           isScrollMode: isScrollMode,
           isLocalScrollMode: isLocalScrollMode,
+          retainedChapterIndexes: retainedChapterIndexes,
           silent: false,
           prioritize: true,
           preloadRadius: 1,
@@ -415,10 +418,11 @@ class ReaderContentLifecycleRuntime {
       );
     }
 
-    if (localOffset != null &&
-        visiblePages != null &&
-        visiblePages.isNotEmpty) {
-      final chapterHeight = ChapterPositionResolver.chapterHeight(visiblePages);
+    if (localOffset != null) {
+      final chapterHeight =
+          visiblePages != null && visiblePages.isNotEmpty
+              ? ChapterPositionResolver.chapterHeight(visiblePages)
+              : chapterHeightFor(visibleChapter);
       if (chapterHeight > 0) {
         final progress = localOffset / chapterHeight;
         if (progress > 0.8) {
@@ -437,6 +441,7 @@ class ReaderContentLifecycleRuntime {
                 refreshChapterRuntime: refreshChapterRuntime,
                 isScrollMode: isScrollMode,
                 isLocalScrollMode: isLocalScrollMode,
+                retainedChapterIndexes: retainedChapterIndexes,
                 prioritize: true,
               ),
             );
@@ -458,6 +463,7 @@ class ReaderContentLifecycleRuntime {
                 refreshChapterRuntime: refreshChapterRuntime,
                 isScrollMode: isScrollMode,
                 isLocalScrollMode: isLocalScrollMode,
+                retainedChapterIndexes: retainedChapterIndexes,
                 prioritize: true,
               ),
             );
@@ -517,6 +523,7 @@ class ReaderContentLifecycleRuntime {
     required void Function() notifyListeners,
     required void Function(int chapterIndex) refreshChapterRuntime,
     required void Function() refreshSlidePages,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     if (isDisposed()) return;
     final trace = Stopwatch()..start();
@@ -540,6 +547,7 @@ class ReaderContentLifecycleRuntime {
           preload: !isLocalScrollMode,
           chapterPagesCache: chapterPagesCache,
           refreshChapterRuntime: refreshChapterRuntime,
+          retainedChapterIndexes: retainedChapterIndexes,
         );
       }
     }
@@ -578,6 +586,7 @@ class ReaderContentLifecycleRuntime {
     required bool isLocalScrollMode,
     required Map<int, List<TextPage>> chapterPagesCache,
     required void Function(int chapterIndex) refreshChapterRuntime,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     if (!hasContentManager) return;
     if (isScrollMode) {
@@ -587,6 +596,7 @@ class ReaderContentLifecycleRuntime {
         preload: !isLocalScrollMode,
         chapterPagesCache: chapterPagesCache,
         refreshChapterRuntime: refreshChapterRuntime,
+        retainedChapterIndexes: retainedChapterIndexes,
       );
       return;
     }
@@ -704,6 +714,7 @@ class ReaderContentLifecycleRuntime {
     required bool preload,
     required Map<int, List<TextPage>> chapterPagesCache,
     required void Function(int chapterIndex) refreshChapterRuntime,
+    Set<int> retainedChapterIndexes = const <int>{},
   }) {
     if (!hasContentManager) return;
     final evicted = _contentManager!.activateWindow(
@@ -711,6 +722,7 @@ class ReaderContentLifecycleRuntime {
       preloadRadius: preloadRadius,
       preload: preload,
       evictOutsideWindow: true,
+      retainedIndexes: retainedChapterIndexes,
     );
     for (final index in chapterPagesCache.keys.toList()) {
       if (evicted.contains(index)) {

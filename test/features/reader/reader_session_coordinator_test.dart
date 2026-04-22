@@ -23,18 +23,17 @@ void main() {
         state: state,
         store: ReaderProgressStore(),
         book: () => book,
-        chapters: () => [
-          BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
-          BookChapter(title: 'c1', index: 1, bookUrl: 'book'),
-        ],
+        chapters:
+            () => [
+              BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
+              BookChapter(title: 'c1', index: 1, bookUrl: 'book'),
+            ],
         writeProgress: (chapterIndex, title, charOffset) async {
-          writes.add(
-            (
-              chapterIndex: chapterIndex,
-              title: title,
-              charOffset: charOffset,
-            ),
-          );
+          writes.add((
+            chapterIndex: chapterIndex,
+            title: title,
+            charOffset: charOffset,
+          ));
         },
       );
 
@@ -42,10 +41,14 @@ void main() {
         const ReaderLocation(chapterIndex: 1, charOffset: 24),
       );
 
-      expect(coordinator.sessionLocation,
-          const ReaderLocation(chapterIndex: 1, charOffset: 24));
-      expect(coordinator.durableLocation,
-          const ReaderLocation(chapterIndex: 1, charOffset: 24));
+      expect(
+        coordinator.committedLocation,
+        const ReaderLocation(chapterIndex: 1, charOffset: 24),
+      );
+      expect(
+        coordinator.durableLocation,
+        const ReaderLocation(chapterIndex: 1, charOffset: 24),
+      );
       expect(book.durChapterIndex, 1);
       expect(book.durChapterPos, 24);
       expect(writes.single.chapterIndex, 1);
@@ -65,6 +68,9 @@ void main() {
 
       coordinator.updatePhase(ReaderSessionPhase.contentLoading);
       expect(coordinator.phase, ReaderSessionPhase.contentLoading);
+
+      coordinator.updatePhase(ReaderSessionPhase.restoring);
+      expect(coordinator.phase, ReaderSessionPhase.restoring);
 
       coordinator.updatePhase(ReaderSessionPhase.ready);
       expect(coordinator.phase, ReaderSessionPhase.ready);

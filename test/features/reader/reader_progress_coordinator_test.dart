@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
@@ -18,11 +20,12 @@ ReaderProgressCoordinator _makeCoordinator({
   Book? book,
   Future<void> Function(ReaderLocation location)? onPersistLocation,
   bool Function()? shouldPersist,
+  List<TextPage> Function(int chapterIndex)? pagesForChapter,
 }) {
   final b = book ?? _makeBook();
   return ReaderProgressCoordinator(
     chapterAt: (_) => null,
-    pagesForChapter: (_) => const [],
+    pagesForChapter: pagesForChapter ?? (_) => const [],
     store: ReaderProgressStore(),
     durableLocation:
         () => ReaderLocation(
@@ -31,17 +34,38 @@ ReaderProgressCoordinator _makeCoordinator({
         ),
     shouldPersistVisiblePosition: shouldPersist ?? () => true,
     updateVisibleLocation: (_) {},
-    updateSessionLocation: (_) {},
+    updateCommittedLocation: (_) {},
     persistLocation: onPersistLocation ?? (_) async {},
   );
 }
+
+List<TextPage> _buildScrollPages() => [
+  TextPage(
+    index: 0,
+    title: 'c0',
+    chapterIndex: 0,
+    pageSize: 1,
+    lines: [
+      TextLine(
+        text: 'line',
+        width: 200,
+        height: 20,
+        chapterPosition: 48,
+        lineTop: 0,
+        lineBottom: 24,
+        paragraphNum: 0,
+        isParagraphEnd: true,
+      ),
+    ],
+  ),
+];
 
 void main() {
   group('ReaderProgressCoordinator', () {
     test(
       'updateVisibleChapterPosition 會更新 session location，不直接依賴 book 作為暫時位置',
       () {
-        ReaderLocation? sessionLocation;
+        ReaderLocation? committedLocation;
         final book =
             _makeBook()
               ..durChapterIndex = 0
@@ -58,7 +82,7 @@ void main() {
               ),
           shouldPersistVisiblePosition: () => true,
           updateVisibleLocation: (_) {},
-          updateSessionLocation: (location) => sessionLocation = location,
+          updateCommittedLocation: (location) => committedLocation = location,
           persistLocation: (_) async {},
         );
 
@@ -68,13 +92,14 @@ void main() {
           alignment: 0.0,
           pageTurnMode: PageAnim.scroll,
           isLoading: false,
+          isAnchorConfirmed: true,
           currentPageIndex: 0,
           updateVisible: (_, __, ___) {},
           updateCurrentChapterIndex: (_) {},
         );
 
-        expect(sessionLocation, isNotNull);
-        expect(sessionLocation!.chapterIndex, 0);
+        expect(committedLocation, isNotNull);
+        expect(committedLocation!.chapterIndex, 0);
         expect(book.durChapterPos, 0);
         coordinator.dispose();
       },
@@ -94,6 +119,7 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
+        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
@@ -102,6 +128,61 @@ void main() {
       coordinator.dispose();
       await Future.delayed(const Duration(milliseconds: 600));
       expect(persistCalled, isFalse);
+    });
+
+    test('flushPendingProgress 會寫出 debounce 中的最後位置', () async {
+      final book =
+          _makeBook()
+            ..durChapterIndex = 0
+            ..durChapterPos = 20;
+      final store = ReaderProgressStore();
+      await store.persistCharOffset(
+        write: (_, __, ___) async {},
+        book: book,
+        chapters: [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        ],
+        chapterIndex: 0,
+        charOffset: 20,
+      );
+
+      ReaderLocation? persistedLocation;
+      final coordinator = ReaderProgressCoordinator(
+        chapterAt: (_) => null,
+        pagesForChapter: (_) => _buildScrollPages(),
+        store: store,
+        durableLocation:
+            () => ReaderLocation(
+              chapterIndex: book.durChapterIndex,
+              charOffset: book.durChapterPos,
+            ),
+        shouldPersistVisiblePosition: () => true,
+        updateVisibleLocation: (_) {},
+        updateCommittedLocation: (_) {},
+        persistLocation: (location) async {
+          persistedLocation = location;
+        },
+      );
+
+      coordinator.updateVisibleChapterPosition(
+        chapterIndex: 0,
+        localOffset: 100.0,
+        alignment: 0.0,
+        pageTurnMode: PageAnim.scroll,
+        isLoading: false,
+        isAnchorConfirmed: true,
+        currentPageIndex: 0,
+        updateVisible: (_, __, ___) {},
+        updateCurrentChapterIndex: (_) {},
+      );
+
+      final flushed = await coordinator.flushPendingProgress();
+
+      expect(flushed, isNotNull);
+      expect(flushed!.chapterIndex, 0);
+      expect(flushed.charOffset, 52);
+      expect(persistedLocation, flushed);
+      coordinator.dispose();
     });
 
     test('isLoading 時不觸發持久化', () {
@@ -118,6 +199,7 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: true,
+        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
@@ -142,11 +224,51 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
+        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
       );
 
+      expect(persistCalled, isFalse);
+      coordinator.dispose();
+    });
+
+    test('沒有 anchor confirmation 時不更新語義位置也不持久化', () async {
+      ReaderLocation? visibleLocation;
+      ReaderLocation? committedLocation;
+      var persistCalled = false;
+
+      final coordinator = ReaderProgressCoordinator(
+        chapterAt: (_) => null,
+        pagesForChapter: (_) => _buildScrollPages(),
+        store: ReaderProgressStore(),
+        durableLocation:
+            () => const ReaderLocation(chapterIndex: 0, charOffset: 0),
+        shouldPersistVisiblePosition: () => true,
+        updateVisibleLocation: (location) => visibleLocation = location,
+        updateCommittedLocation: (location) => committedLocation = location,
+        persistLocation: (_) async {
+          persistCalled = true;
+        },
+      );
+
+      coordinator.updateVisibleChapterPosition(
+        chapterIndex: 0,
+        localOffset: 50.0,
+        alignment: 0.0,
+        pageTurnMode: PageAnim.scroll,
+        isLoading: false,
+        isAnchorConfirmed: false,
+        currentPageIndex: 0,
+        updateVisible: (_, __, ___) {},
+        updateCurrentChapterIndex: (_) {},
+      );
+
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      expect(visibleLocation, isNull);
+      expect(committedLocation, isNull);
       expect(persistCalled, isFalse);
       coordinator.dispose();
     });
@@ -169,7 +291,7 @@ void main() {
             ),
         shouldPersistVisiblePosition: () => true,
         updateVisibleLocation: (_) {},
-        updateSessionLocation: (_) {},
+        updateCommittedLocation: (_) {},
         persistLocation: (_) async {
           persistCalled = true;
         },
@@ -182,6 +304,7 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
+        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},

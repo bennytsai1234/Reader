@@ -1,6 +1,7 @@
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter_metrics.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_paragraph.dart';
 
 class ReaderChapter {
@@ -8,13 +9,38 @@ class ReaderChapter {
   final int index;
   final String title;
   final List<TextPage> pages;
+  final int contentLength;
+  final List<int> pageStartOffsets;
+  final List<int> pageEndOffsets;
+  final ReaderChapterMetrics metrics;
 
   ReaderChapter({
     required this.chapter,
     required this.index,
     required this.title,
     required this.pages,
-  });
+    int? contentLength,
+    List<int>? pageStartOffsets,
+    List<int>? pageEndOffsets,
+    ReaderChapterMetrics? metrics,
+  }) : pageStartOffsets = List<int>.unmodifiable(
+         pageStartOffsets ??
+             pages
+                 .map(ChapterPositionResolver.firstCharOffset)
+                 .toList(growable: false),
+       ),
+       pageEndOffsets = List<int>.unmodifiable(
+         pageEndOffsets ??
+             pages
+                 .map(ChapterPositionResolver.pageEndCharOffset)
+                 .toList(growable: false),
+       ),
+       contentLength =
+           contentLength ??
+           (pages.isEmpty
+               ? 0
+               : ChapterPositionResolver.pageEndCharOffset(pages.last)),
+       metrics = metrics ?? ReaderChapterMetrics.fromPages(pages);
 
   int get pageCount => pages.length;
   int get lastIndex => pages.isEmpty ? -1 : pages.length - 1;
@@ -22,8 +48,7 @@ class ReaderChapter {
   TextPage? get firstPage => pages.isEmpty ? null : pages.first;
   TextPage? get lastPage => pages.isEmpty ? null : pages.last;
   int get lastReadLength => getReadLength(lastIndex);
-  double get chapterHeight =>
-      pages.isEmpty ? 0.0 : ChapterPositionResolver.chapterHeight(pages);
+  double get chapterHeight => metrics.contentHeight;
   late final List<TextLine> _allTextLines = allLines();
 
   late final List<ReaderParagraph> paragraphs = _buildParagraphs();
@@ -49,12 +74,20 @@ class ReaderChapter {
   int getReadLength(int pageIndex) {
     if (pages.isEmpty || pageIndex < 0) return 0;
     final safeIndex = pageIndex.clamp(0, pages.length - 1);
-    return firstCharOffset(pages[safeIndex]);
+    return pageStartOffsets[safeIndex];
   }
 
   int getPageIndexByCharIndex(int charIndex) {
     if (pages.isEmpty) return -1;
-    return ChapterPositionResolver.findPageIndexByCharOffset(pages, charIndex);
+    var best = 0;
+    for (var i = 0; i < pageStartOffsets.length; i++) {
+      if (pageStartOffsets[i] <= charIndex) {
+        best = i;
+      } else {
+        break;
+      }
+    }
+    return best;
   }
 
   TextLine? lineAtCharOffset(int charOffset) {
@@ -82,28 +115,57 @@ class ReaderChapter {
 
   int charOffsetFromLocalOffset(double localOffset) {
     if (pages.isEmpty) return 0;
-    return ChapterPositionResolver.localOffsetToCharOffset(pages, localOffset);
+    final safeLocalOffset = localOffset.clamp(0.0, chapterHeight).toDouble();
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final pageTop = metrics.pageTopOffsets[i];
+      for (final line in page.lines) {
+        if (line.image != null) continue;
+        if (pageTop + line.lineBottom > safeLocalOffset) {
+          return line.chapterPosition;
+        }
+      }
+    }
+    return contentLength;
   }
 
   double localOffsetFromCharOffset(int charOffset) {
     if (pages.isEmpty) return 0.0;
-    return ChapterPositionResolver.charOffsetToLocalOffset(pages, charOffset);
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final pageTop = metrics.pageTopOffsets[i];
+      for (final line in page.lines) {
+        if (line.image != null) continue;
+        if (line.chapterPosition >= charOffset) {
+          return pageTop + line.lineTop;
+        }
+      }
+    }
+    return chapterHeight;
   }
 
   double alignmentForCharOffset(int charOffset) {
-    if (pages.isEmpty) return 0.0;
-    return ChapterPositionResolver.charOffsetToAlignment(pages, charOffset);
+    final total = chapterHeight;
+    if (total <= 0) return 0.0;
+    return (localOffsetFromCharOffset(charOffset) / total).clamp(0.0, 1.0);
   }
 
   int pageIndexAtLocalOffset(double localOffset) {
     if (pages.isEmpty) return -1;
-    return ChapterPositionResolver.pageIndexAtLocalOffset(pages, localOffset);
+    final safeLocalOffset = localOffset.clamp(0.0, chapterHeight).toDouble();
+    for (var i = 0; i < pages.length; i++) {
+      final pageHeight = pageHeightAt(i);
+      if (metrics.pageTopOffsets[i] + pageHeight > safeLocalOffset) {
+        return i;
+      }
+    }
+    return pages.length - 1;
   }
 
   int charOffsetForPageIndex(int pageIndex) {
     if (pages.isEmpty) return 0;
     final safeIndex = pageIndex.clamp(0, pages.length - 1);
-    return ChapterPositionResolver.getCharOffsetForPage(pages, safeIndex);
+    return pageStartOffsets[safeIndex];
   }
 
   int nextPageStartCharOffset(int charOffset) {
@@ -317,12 +379,7 @@ class ReaderChapter {
   }
 
   int pageEndCharOffset(TextPage page) {
-    for (final line in page.lines.reversed) {
-      if (line.image == null) {
-        return line.chapterPosition + line.text.length;
-      }
-    }
-    return firstCharOffset(page);
+    return ChapterPositionResolver.pageEndCharOffset(page);
   }
 
   List<TextLine> visibleLinesFrom(int startCharOffset) {

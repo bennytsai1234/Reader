@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 
 class ReaderProgressStore {
-  int _lastSavedCharOffset = -1;
+  ReaderLocation? _lastSavedLocation;
 
-  int get lastSavedCharOffset => _lastSavedCharOffset;
+  ReaderLocation? get lastSavedLocation => _lastSavedLocation;
+  int get lastSavedCharOffset => _lastSavedLocation?.charOffset ?? -1;
 
   void updateBookProgress({
     required Book book,
@@ -27,29 +29,40 @@ class ReaderProgressStore {
     required int currentChapterIndex,
     required int targetChapterIndex,
   }) {
-    return _lastSavedCharOffset == -1 ||
-        (currentCharOffset - _lastSavedCharOffset).abs() > 600 ||
-        currentChapterIndex != targetChapterIndex;
+    final lastSavedLocation = _lastSavedLocation;
+    return lastSavedLocation == null ||
+        (currentCharOffset - lastSavedLocation.charOffset).abs() > 600 ||
+        currentChapterIndex != targetChapterIndex ||
+        lastSavedLocation.chapterIndex != targetChapterIndex;
   }
 
   Future<void> persistCharOffset({
-    required Future<void> Function(int chapterIndex, String title, int charOffset)
-        write,
+    required Future<void> Function(
+      int chapterIndex,
+      String title,
+      int charOffset,
+    )
+    write,
     required Book book,
     required List<BookChapter> chapters,
     required int chapterIndex,
     required int charOffset,
   }) async {
-    final title = chapters.isNotEmpty && chapterIndex < chapters.length
-        ? chapters[chapterIndex].title
-        : '';
+    final title =
+        chapters.isNotEmpty && chapterIndex < chapters.length
+            ? chapters[chapterIndex].title
+            : '';
     updateBookProgress(
       book: book,
       chapterIndex: chapterIndex,
       charOffset: charOffset,
       title: title,
     );
-    _lastSavedCharOffset = charOffset;
+    _lastSavedLocation =
+        ReaderLocation(
+          chapterIndex: chapterIndex,
+          charOffset: charOffset,
+        ).normalized();
     try {
       await write(chapterIndex, title, charOffset);
     } catch (e, stack) {

@@ -303,7 +303,7 @@ void main() {
         },
         bookDao: bookDao,
         chapterDao: chapterDao,
-        updateSessionLocation: updatedLocations.add,
+        updateCommittedLocation: updatedLocations.add,
         loadChapter: (
           chapterIndex, {
           reason = ReaderCommandReason.system,

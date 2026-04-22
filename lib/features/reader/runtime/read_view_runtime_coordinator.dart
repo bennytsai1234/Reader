@@ -7,13 +7,18 @@ typedef PendingScrollAction =
     ({
       int chapterIndex,
       double localOffset,
-      int token,
+      int navigationToken,
+      int restoreToken,
       bool isRestore,
       ReaderCommandReason reason,
     });
 
 class ReadViewRuntimeCoordinator {
   const ReadViewRuntimeCoordinator();
+
+  ReaderViewportState? resolveBlockingViewportState(ReaderProvider provider) {
+    return provider.transientViewportState;
+  }
 
   bool shouldRunScrollAutoPage(ReaderProvider provider) {
     return provider.pageTurnMode == PageAnim.scroll &&
@@ -29,18 +34,20 @@ class ReadViewRuntimeCoordinator {
       return (
         chapterIndex: pendingChapterJump.chapterIndex,
         localOffset: pendingChapterJump.localOffset,
-        token: -1,
+        navigationToken: provider.activeNavigationToken ?? -1,
+        restoreToken: -1,
         isRestore: false,
         reason: pendingChapterJump.reason,
       );
     }
 
-    final pendingRestore = provider.consumePendingScrollRestore();
+    final pendingRestore = provider.dispatchPendingScrollRestore();
     if (pendingRestore == null) return null;
     return (
       chapterIndex: pendingRestore.chapterIndex,
       localOffset: pendingRestore.localOffset,
-      token: provider.pendingScrollRestoreToken,
+      navigationToken: provider.activeNavigationToken ?? -1,
+      restoreToken: pendingRestore.token,
       isRestore: true,
       reason: ReaderCommandReason.restore,
     );
@@ -84,6 +91,10 @@ class ReadViewRuntimeCoordinator {
     ReaderProvider provider, {
     required bool hasVisibleData,
   }) {
+    final blockingState = resolveBlockingViewportState(provider);
+    if (blockingState != null) {
+      return blockingState;
+    }
     if (hasVisibleData) {
       return ReaderViewportState.ready;
     }
@@ -99,9 +110,14 @@ class ReadViewRuntimeCoordinator {
     }
 
     final targetChapterIndex =
-        provider.pageTurnMode == PageAnim.scroll
+        provider.transientViewportChapterIndex ??
+        (provider.pageTurnMode == PageAnim.scroll
             ? provider.visibleChapterIndex
-            : provider.currentChapterIndex;
+            : provider.currentChapterIndex);
+    final failureMessage = provider.chapterFailureMessage(targetChapterIndex);
+    if (failureMessage != null && failureMessage.trim().isNotEmpty) {
+      return ReaderViewportState.message(failureMessage);
+    }
     if (provider.isKnownEmptyChapter(targetChapterIndex)) {
       return const ReaderViewportState.message('本章暫無內容');
     }

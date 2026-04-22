@@ -7,6 +7,7 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_provider.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter_metrics.dart';
 
 class ReaderChapterProvider {
   const ReaderChapterProvider();
@@ -16,12 +17,17 @@ class ReaderChapterProvider {
     required int chapterIndex,
     required String title,
     required List<TextPage> pages,
+    double separatorExtent = 0.0,
   }) {
     return ReaderChapter(
       chapter: chapter,
       index: chapterIndex,
       title: title,
       pages: pages,
+      metrics: ReaderChapterMetrics.fromPages(
+        pages,
+        separatorExtent: separatorExtent,
+      ),
     );
   }
 
@@ -67,6 +73,7 @@ class ReaderChapterProvider {
       index: chapterIndex,
       title: chapter.title,
       pages: pages,
+      metrics: ReaderChapterMetrics.fromPages(pages, separatorExtent: 0.0),
     );
   }
 }

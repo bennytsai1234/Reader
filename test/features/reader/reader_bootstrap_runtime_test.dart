@@ -21,7 +21,7 @@ void main() {
 
       await runtime.bootstrap(
         currentViewSize: const Size(360, 720),
-        pageTurnMode: PageAnim.slide,
+        pageTurnMode: () => PageAnim.slide,
         isLocalBook: false,
         currentChapterIndex: 2,
         visibleChapterIndex: 2,
@@ -66,6 +66,7 @@ void main() {
         restoreInitialCharOffset: (chapterIndex, charOffset) {
           restoreRequest = (chapterIndex: chapterIndex, charOffset: charOffset);
           logs.add('restore:$chapterIndex:$charOffset');
+          return false;
         },
         clearInitialCharOffset: () {
           clearedInitialCharOffset = true;
@@ -128,7 +129,7 @@ void main() {
 
       await runtime.bootstrap(
         currentViewSize: const Size(320, 640),
-        pageTurnMode: PageAnim.scroll,
+        pageTurnMode: () => PageAnim.scroll,
         isLocalBook: true,
         currentChapterIndex: 1,
         visibleChapterIndex: 3,
@@ -150,7 +151,10 @@ void main() {
           );
         },
         bootstrapChapterWindow: (_) {},
-        restoreInitialCharOffset: (_, __) => logs.add('restore'),
+        restoreInitialCharOffset: (_, __) {
+          logs.add('restore');
+          return false;
+        },
         clearInitialCharOffset: () => logs.add('clear'),
         startBatteryHeartbeat: () => logs.add('battery'),
         attachReadAloud: () => logs.add('aloud'),
@@ -170,6 +174,97 @@ void main() {
       ]);
     });
 
+    test('bootstrap 會讀取 prepare 後更新的 pageTurnMode', () async {
+      final runtime = ReaderBootstrapRuntime();
+      var mode = PageAnim.slide;
+      ({int chapterIndex, int preloadRadius})? loadRequest;
+      final logs = <String>[];
+
+      await runtime.bootstrap(
+        currentViewSize: const Size(320, 640),
+        pageTurnMode: () => mode,
+        isLocalBook: true,
+        currentChapterIndex: 1,
+        visibleChapterIndex: 2,
+        initialCharOffset: 0,
+        isDisposed: () => false,
+        addObserver: () {},
+        setLifecycle: (_) {},
+        updatePhase: (_) {},
+        wireCallbacks: () {},
+        prepareTasks: <ReaderBootstrapPrepareTask>[
+          () async => mode = PageAnim.scroll,
+        ],
+        initContentManager: () {},
+        configureRepaginateHooks: () {},
+        batchUpdate: (fn) => fn(),
+        applyViewSize: (_) {},
+        loadChapterWithPreloadRadius: (chapterIndex, preloadRadius) async {
+          loadRequest = (
+            chapterIndex: chapterIndex,
+            preloadRadius: preloadRadius,
+          );
+        },
+        bootstrapChapterWindow: (_) {},
+        restoreInitialCharOffset: (_, __) => false,
+        clearInitialCharOffset: () {},
+        startBatteryHeartbeat: () => logs.add('battery'),
+        attachReadAloud: () => logs.add('aloud'),
+        scheduleDeferredWindowWarmup: (index) => logs.add('warmup:$index'),
+        updateScrollPreloadForVisibleChapter:
+            (index) => logs.add('scrollPreload:$index'),
+        triggerSilentPreload: () => logs.add('silentPreload'),
+      );
+
+      expect(loadRequest, (chapterIndex: 1, preloadRadius: 1));
+      expect(logs, <String>[
+        'battery',
+        'aloud',
+        'warmup:1',
+        'scrollPreload:2',
+        'silentPreload',
+      ]);
+    });
+
+    test('scroll restore bootstrap 會把 phase 標為 restoring', () async {
+      final runtime = ReaderBootstrapRuntime();
+      final phases = <ReaderSessionPhase>[];
+
+      await runtime.bootstrap(
+        currentViewSize: const Size(320, 640),
+        pageTurnMode: () => PageAnim.scroll,
+        isLocalBook: false,
+        currentChapterIndex: 1,
+        visibleChapterIndex: 1,
+        initialCharOffset: 96,
+        isDisposed: () => false,
+        addObserver: () {},
+        setLifecycle: (_) {},
+        updatePhase: phases.add,
+        wireCallbacks: () {},
+        prepareTasks: const <ReaderBootstrapPrepareTask>[],
+        initContentManager: () {},
+        configureRepaginateHooks: () {},
+        batchUpdate: (fn) => fn(),
+        applyViewSize: (_) {},
+        loadChapterWithPreloadRadius: (_, __) async {},
+        bootstrapChapterWindow: (_) {},
+        restoreInitialCharOffset: (_, __) => true,
+        clearInitialCharOffset: () {},
+        startBatteryHeartbeat: () {},
+        attachReadAloud: () {},
+        scheduleDeferredWindowWarmup: (_) {},
+        updateScrollPreloadForVisibleChapter: (_) {},
+        triggerSilentPreload: () {},
+      );
+
+      expect(phases, <ReaderSessionPhase>[
+        ReaderSessionPhase.bootstrapping,
+        ReaderSessionPhase.contentLoading,
+        ReaderSessionPhase.restoring,
+      ]);
+    });
+
     test('prepare 後若已 disposed 會中止後續 bootstrap', () async {
       final runtime = ReaderBootstrapRuntime();
       final logs = <String>[];
@@ -177,7 +272,7 @@ void main() {
 
       await runtime.bootstrap(
         currentViewSize: const Size(320, 640),
-        pageTurnMode: PageAnim.slide,
+        pageTurnMode: () => PageAnim.slide,
         isLocalBook: false,
         currentChapterIndex: 0,
         visibleChapterIndex: 0,
@@ -199,7 +294,10 @@ void main() {
         applyViewSize: (_) => logs.add('applyViewSize'),
         loadChapterWithPreloadRadius: (_, __) async => logs.add('loadChapter'),
         bootstrapChapterWindow: (_) => logs.add('bootstrapWindow'),
-        restoreInitialCharOffset: (_, __) => logs.add('restore'),
+        restoreInitialCharOffset: (_, __) {
+          logs.add('restore');
+          return false;
+        },
         clearInitialCharOffset: () => logs.add('clear'),
         startBatteryHeartbeat: () => logs.add('battery'),
         attachReadAloud: () => logs.add('aloud'),

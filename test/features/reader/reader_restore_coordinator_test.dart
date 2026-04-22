@@ -22,6 +22,33 @@ void main() {
       expect(coordinator.pendingScrollRestoreLocalOffset, 256);
     });
 
+    test('dispatch 只會派發一次，直到 defer 或 complete', () {
+      final coordinator = ReaderRestoreCoordinator();
+
+      final token = coordinator.registerPendingScrollRestore(
+        chapterIndex: 1,
+        localOffset: 64,
+      );
+
+      final first = coordinator.dispatchPendingScrollRestore();
+      final second = coordinator.dispatchPendingScrollRestore();
+
+      expect(first, isNotNull);
+      expect(first!.token, token);
+      expect(first.chapterIndex, 1);
+      expect(first.localOffset, 64);
+      expect(second, isNull);
+      expect(coordinator.pendingScrollRestoreChapterIndex, 1);
+      expect(coordinator.pendingScrollRestoreLocalOffset, 64);
+
+      coordinator.deferPendingScrollRestore(token);
+      expect(coordinator.dispatchPendingScrollRestore(), isNotNull);
+
+      expect(coordinator.completePendingScrollRestore(token), isTrue);
+      expect(coordinator.pendingScrollRestoreChapterIndex, isNull);
+      expect(coordinator.pendingScrollRestoreLocalOffset, isNull);
+    });
+
     test('clear 會清空 target 但保留 token 序列', () {
       final coordinator = ReaderRestoreCoordinator();
 
@@ -31,7 +58,7 @@ void main() {
       );
       coordinator.clear();
 
-      expect(coordinator.consumePendingScrollRestore(), isNull);
+      expect(coordinator.dispatchPendingScrollRestore(), isNull);
       expect(coordinator.pendingScrollRestoreToken, 1);
     });
   });

@@ -13,6 +13,7 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_view_runtime_coordinator.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBookDao implements BookDao {
@@ -58,6 +59,7 @@ class _FakeReaderProvider extends ReaderProvider {
   bool knownEmpty = false;
   int fakeTtsStart = -1;
   int fakeTtsWordStart = -1;
+  String? fakeFailureMessage;
 
   _FakeReaderProvider()
     : super(book: Book(bookUrl: 'book', name: 'Book', origin: 'local'));
@@ -71,6 +73,14 @@ class _FakeReaderProvider extends ReaderProvider {
 
   @override
   int get ttsWordStart => fakeTtsWordStart;
+
+  @override
+  String? chapterFailureMessage(int chapterIndex) {
+    if (fakeFailureMessage != null && chapterIndex == currentChapterIndex) {
+      return fakeFailureMessage;
+    }
+    return super.chapterFailureMessage(chapterIndex);
+  }
 }
 
 void _setupDi() {
@@ -161,6 +171,48 @@ void main() {
       provider.dispose();
     });
 
+    test('transient viewport state 會優先回傳', () {
+      final provider =
+          _FakeReaderProvider()
+            ..lifecycle = ReaderLifecycle.ready
+            ..pageTurnMode = PageAnim.slide
+            ..viewSize = const Size(300, 500)
+            ..chapters = [BookChapter(title: 'c0', index: 0, bookUrl: 'book')];
+      provider.showTransientViewportStateForChapter(
+        0,
+        const ReaderViewportState.message('加載章節失敗: 測試錯誤'),
+        notify: false,
+      );
+
+      final state = coordinator.resolveViewportState(
+        provider,
+        hasVisibleData: true,
+      );
+
+      expect(state.showLoading, isFalse);
+      expect(state.message, '加載章節失敗: 測試錯誤');
+      provider.dispose();
+    });
+
+    test('失敗章節時回傳 failure message', () {
+      final provider =
+          _FakeReaderProvider()
+            ..lifecycle = ReaderLifecycle.ready
+            ..pageTurnMode = PageAnim.slide
+            ..viewSize = const Size(300, 500)
+            ..chapters = [BookChapter(title: 'c0', index: 0, bookUrl: 'book')]
+            ..fakeFailureMessage = '加載章節失敗: 找不到書源';
+
+      final state = coordinator.resolveViewportState(
+        provider,
+        hasVisibleData: false,
+      );
+
+      expect(state.showLoading, isFalse);
+      expect(state.message, '加載章節失敗: 找不到書源');
+      provider.dispose();
+    });
+
     test('非 loading 且無可見資料時回傳暫無可顯示頁面', () {
       final provider =
           _FakeReaderProvider()
@@ -194,6 +246,32 @@ void main() {
       expect(action.localOffset, 48);
       expect(action.isRestore, isFalse);
       expect(action.reason, ReaderCommandReason.settingsRepaginate);
+      provider.dispose();
+    });
+
+    test('scroll restore action 只會 dispatch 一次，直到 defer 後才可重試', () {
+      final provider = _FakeReaderProvider()..pageTurnMode = PageAnim.scroll;
+
+      final token = provider.registerPendingScrollRestore(
+        chapterIndex: 2,
+        localOffset: 48,
+      );
+      final first = coordinator.consumePendingScrollAction(provider);
+      final second = coordinator.consumePendingScrollAction(provider);
+
+      expect(first, isNotNull);
+      expect(first!.isRestore, isTrue);
+      expect(first.restoreToken, token);
+      expect(first.chapterIndex, 2);
+      expect(first.localOffset, 48);
+      expect(second, isNull);
+      expect(provider.pendingScrollRestoreChapterIndex, 2);
+      expect(provider.pendingScrollRestoreLocalOffset, 48);
+
+      provider.deferPendingScrollRestore(token);
+      final retried = coordinator.consumePendingScrollAction(provider);
+      expect(retried, isNotNull);
+      expect(retried!.restoreToken, token);
       provider.dispose();
     });
 

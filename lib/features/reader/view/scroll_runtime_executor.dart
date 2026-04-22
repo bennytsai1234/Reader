@@ -13,7 +13,6 @@ class ScrollRuntimeExecutor {
     required this.scrollExecution,
     required this.scrollRestoreRunner,
     required this.isMounted,
-    required this.onRestoreCompleted,
     required this.viewportHeight,
   });
 
@@ -23,8 +22,8 @@ class ScrollRuntimeExecutor {
   final ScrollExecutionAdapter scrollExecution;
   final ScrollRestoreRunner scrollRestoreRunner;
   final bool Function() isMounted;
-  final VoidCallback onRestoreCompleted;
   final double Function() viewportHeight;
+  int _jumpGeneration = 0;
 
   void scrollToChapterLocalOffset({
     required int chapterIndex,
@@ -47,26 +46,22 @@ class ScrollRuntimeExecutor {
     required int chapterIndex,
     required double localOffset,
     VoidCallback? onCompleted,
+    int retries = 20,
   }) {
-    if (!itemScrollController.isAttached) return;
-    itemScrollController.jumpTo(index: chapterIndex, alignment: 0);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!isMounted()) return;
-      scrollToChapterLocalOffset(
-        chapterIndex: chapterIndex,
-        localOffset: localOffset,
-        animate: false,
-        topPadding: 0.0,
-      );
-      onCompleted?.call();
-    });
+    final generation = ++_jumpGeneration;
+    _runScrollJump(
+      generation: generation,
+      chapterIndex: chapterIndex,
+      localOffset: localOffset,
+      retries: retries,
+      onCompleted: onCompleted,
+    );
   }
 
   void restoreScrollPosition({
     required int chapterIndex,
     required double localOffset,
     required int token,
-    VoidCallback? onCompleted,
     int retries = 20,
   }) {
     scrollRestoreRunner.run(
@@ -80,10 +75,7 @@ class ScrollRuntimeExecutor {
       ensureChapterVisible: () {
         itemScrollController.jumpTo(index: chapterIndex, alignment: 0);
       },
-      completeRestore: () {
-        completeScrollRestore(token);
-        onCompleted?.call();
-      },
+      deferRestore: () => provider.deferPendingScrollRestore(token),
       scrollToChapterLocalOffset: ({
         required int chapterIndex,
         required double localOffset,
@@ -120,9 +112,98 @@ class ScrollRuntimeExecutor {
     );
   }
 
-  void completeScrollRestore(int token) {
-    if (!isMounted() || !provider.matchesPendingScrollRestore(token)) return;
-    onRestoreCompleted();
+  void _runScrollJump({
+    required int generation,
+    required int chapterIndex,
+    required double localOffset,
+    required int retries,
+    VoidCallback? onCompleted,
+  }) {
+    if (!isMounted() || generation != _jumpGeneration) return;
+    if (!itemScrollController.isAttached) {
+      if (retries <= 0) {
+        onCompleted?.call();
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _runScrollJump(
+          generation: generation,
+          chapterIndex: chapterIndex,
+          localOffset: localOffset,
+          retries: retries - 1,
+          onCompleted: onCompleted,
+        );
+      });
+      return;
+    }
+
+    final runtimeChapter = provider.chapterAt(chapterIndex);
+    final pages = provider.pagesForChapter(chapterIndex);
+    if ((runtimeChapter == null && pages.isEmpty) ||
+        (runtimeChapter != null && runtimeChapter.isEmpty)) {
+      if (retries <= 0) {
+        onCompleted?.call();
+        return;
+      }
+      provider.ensureChapterCached(
+        chapterIndex,
+        silent: false,
+        prioritize: true,
+        preloadRadius: 1,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _runScrollJump(
+          generation: generation,
+          chapterIndex: chapterIndex,
+          localOffset: localOffset,
+          retries: retries - 1,
+          onCompleted: onCompleted,
+        );
+      });
+      return;
+    }
+
+    itemScrollController.jumpTo(index: chapterIndex, alignment: 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!isMounted() || generation != _jumpGeneration) return;
+      if (!_hasTargetPageContext(chapterIndex, localOffset)) {
+        if (retries <= 0) {
+          onCompleted?.call();
+          return;
+        }
+        _runScrollJump(
+          generation: generation,
+          chapterIndex: chapterIndex,
+          localOffset: localOffset,
+          retries: retries - 1,
+          onCompleted: onCompleted,
+        );
+        return;
+      }
+      scrollToChapterLocalOffset(
+        chapterIndex: chapterIndex,
+        localOffset: localOffset,
+        animate: false,
+        topPadding: 0.0,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!isMounted() || generation != _jumpGeneration) return;
+        onCompleted?.call();
+      });
+    });
+  }
+
+  bool _hasTargetPageContext(int chapterIndex, double localOffset) {
+    final runtimeChapter = provider.chapterAt(chapterIndex);
+    final pages = provider.pagesForChapter(chapterIndex);
+    final pageIndex =
+        runtimeChapter != null
+            ? runtimeChapter.pageIndexAtLocalOffset(localOffset)
+            : ChapterPositionResolver.pageIndexAtLocalOffset(
+              pages,
+              localOffset,
+            );
+    return pageKeys['$chapterIndex:$pageIndex']?.currentContext != null;
   }
 
   void scrollToTtsHighlight() {

@@ -77,6 +77,7 @@ class _DrawerReaderProvider extends ReaderProvider {
     int index, {
     bool fromEnd = false,
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
   }) async {
     loadRequests.add(index);
     final completer = loadCompleter ??= Completer<void>();

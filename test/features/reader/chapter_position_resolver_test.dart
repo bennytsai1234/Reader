@@ -65,6 +65,7 @@ void main() {
       expect(ChapterPositionResolver.localOffsetToCharOffset(pages, 10), 0);
       expect(ChapterPositionResolver.localOffsetToCharOffset(pages, 45), 4);
       expect(ChapterPositionResolver.localOffsetToCharOffset(pages, 100), 8);
+      expect(ChapterPositionResolver.localOffsetToCharOffset(pages, 200), 12);
     });
 
     test('頁面索引與頁面首字元定位正確', () {

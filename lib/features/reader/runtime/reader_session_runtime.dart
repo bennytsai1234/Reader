@@ -32,22 +32,22 @@ class ReaderPreparedSessionAnchor {
 
 class ReaderSessionRuntime {
   final ReaderRuntimeController _runtimeController;
-  final ReaderLocation Function() _sessionLocation;
-  final void Function(ReaderLocation) _updateSessionLocation;
+  final ReaderLocation Function() _committedLocation;
+  final void Function(ReaderLocation) _updateCommittedLocation;
   final void Function(ReaderLocation) _updateVisibleLocation;
   final Future<void> Function(ReaderLocation) _persistLocation;
   final void Function(ReaderViewportCommand) _dispatchViewportCommand;
 
   ReaderSessionRuntime({
     required ReaderRuntimeController runtimeController,
-    required ReaderLocation Function() sessionLocation,
-    required void Function(ReaderLocation) updateSessionLocation,
+    required ReaderLocation Function() committedLocation,
+    required void Function(ReaderLocation) updateCommittedLocation,
     required void Function(ReaderLocation) updateVisibleLocation,
     required Future<void> Function(ReaderLocation) persistLocation,
     required void Function(ReaderViewportCommand) dispatchViewportCommand,
   }) : _runtimeController = runtimeController,
-       _sessionLocation = sessionLocation,
-       _updateSessionLocation = updateSessionLocation,
+       _committedLocation = committedLocation,
+       _updateCommittedLocation = updateCommittedLocation,
        _updateVisibleLocation = updateVisibleLocation,
        _persistLocation = persistLocation,
        _dispatchViewportCommand = dispatchViewportCommand;
@@ -62,7 +62,7 @@ class ReaderSessionRuntime {
       visibleChapterIndex: context.visibleChapterIndex,
       visibleChapterLocalOffset: context.visibleChapterLocalOffset,
       currentPageIndex: context.currentPageIndex,
-      fallbackLocation: _sessionLocation(),
+      fallbackLocation: _committedLocation(),
       fromEnd: fromEnd,
     );
   }
@@ -89,7 +89,7 @@ class ReaderSessionRuntime {
     ReaderSessionRuntimeContext context,
   ) {
     final location = captureReadingAnchor(context).location;
-    _updateSessionLocation(location);
+    _updateCommittedLocation(location);
     _updateVisibleLocation(location);
     return ReaderPreparedSessionAnchor(
       location: location,

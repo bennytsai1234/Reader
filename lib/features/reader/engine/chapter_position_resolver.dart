@@ -55,7 +55,7 @@ class ChapterPositionResolver {
         }
       }
     }
-    return firstCharOffset(pages.last);
+    return pageEndCharOffset(pages.last);
   }
 
   static int findPageIndexByCharOffset(List<TextPage> pages, int charOffset) {
@@ -86,6 +86,15 @@ class ChapterPositionResolver {
   static int getCharOffsetForPage(List<TextPage> pages, int pageIndex) {
     if (pages.isEmpty || pageIndex < 0 || pageIndex >= pages.length) return 0;
     return firstCharOffset(pages[pageIndex]);
+  }
+
+  static int pageEndCharOffset(TextPage page) {
+    for (final line in page.lines.reversed) {
+      if (line.image == null) {
+        return line.chapterPosition + line.text.length;
+      }
+    }
+    return firstCharOffset(page);
   }
 
   static int firstCharOffset(TextPage page) {

@@ -79,6 +79,7 @@ class _ReaderPageShellProbe extends ReaderProvider {
     int index, {
     bool fromEnd = false,
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
   }) async {}
 
   void primeVisibleContent() {

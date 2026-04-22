@@ -61,7 +61,7 @@ void main() {
     late List<ReaderLocation> persistedLocations;
     late List<ReaderViewportCommand> dispatchedCommands;
     late ReaderSessionRuntime runtime;
-    late ReaderLocation sessionLocation;
+    late ReaderLocation committedLocation;
 
     ReaderChapter? chapterAt(int chapterIndex) {
       switch (chapterIndex) {
@@ -87,16 +87,16 @@ void main() {
         pagesForChapter: pagesForChapter,
         slidePages: () => slidePages,
       );
-      sessionLocation = const ReaderLocation(chapterIndex: 0, charOffset: 0);
+      committedLocation = const ReaderLocation(chapterIndex: 0, charOffset: 0);
       sessionUpdates = <ReaderLocation>[];
       visibleUpdates = <ReaderLocation>[];
       persistedLocations = <ReaderLocation>[];
       dispatchedCommands = <ReaderViewportCommand>[];
       runtime = ReaderSessionRuntime(
         runtimeController: controller,
-        sessionLocation: () => sessionLocation,
-        updateSessionLocation: (location) {
-          sessionLocation = location;
+        committedLocation: () => committedLocation,
+        updateCommittedLocation: (location) {
+          committedLocation = location;
           sessionUpdates.add(location);
         },
         updateVisibleLocation: visibleUpdates.add,

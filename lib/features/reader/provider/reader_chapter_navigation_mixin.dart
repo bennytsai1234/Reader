@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
-
 import 'reader_content_facade_mixin.dart';
 import 'reader_provider_base.dart';
 
@@ -12,7 +10,11 @@ mixin ReaderChapterNavigationMixin
   int scrubIndex = 0;
 
   int resolveScrubChapterIndexForNavigation(dynamic value);
-  void updateSessionLocationForChapterNavigation(ReaderLocation location);
+  Future<void> performChapterNavigation({
+    required int targetIndex,
+    required ReaderCommandReason reason,
+    bool fromEnd = false,
+  });
 
   int? get pendingChapterNavigationIndex => _pendingChapterNavigationIndex;
   bool get hasPendingChapterNavigation =>
@@ -68,20 +70,20 @@ mixin ReaderChapterNavigationMixin
     bool fromEnd = false,
   }) async {
     if (targetIndex < 0 || targetIndex >= chapters.length) return;
-    if (hasPendingChapterNavigation || loadingChapters.contains(targetIndex)) {
+    if (_pendingChapterNavigationIndex == targetIndex ||
+        loadingChapters.contains(targetIndex)) {
       return;
     }
     if (targetIndex == currentChapterIndex && !fromEnd) return;
 
     isScrubbing = false;
     _setPendingChapterNavigation(targetIndex);
-    if (!fromEnd) {
-      updateSessionLocationForChapterNavigation(
-        ReaderLocation(chapterIndex: targetIndex, charOffset: 0),
-      );
-    }
     try {
-      await loadChapter(targetIndex, fromEnd: fromEnd, reason: reason);
+      await performChapterNavigation(
+        targetIndex: targetIndex,
+        reason: reason,
+        fromEnd: fromEnd,
+      );
     } finally {
       _clearPendingChapterNavigation(targetIndex: targetIndex);
     }

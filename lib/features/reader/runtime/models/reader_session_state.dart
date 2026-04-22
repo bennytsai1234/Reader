@@ -3,31 +3,37 @@ import 'package:inkpage_reader/features/reader/runtime/models/reader_location.da
 enum ReaderSessionPhase {
   bootstrapping,
   contentLoading,
+  restoring,
   ready,
   repaginating,
   disposed,
 }
 
 class ReaderSessionState {
-  ReaderLocation _sessionLocation;
+  ReaderLocation _committedLocation;
   ReaderLocation _visibleLocation;
   ReaderLocation _durableLocation;
+  bool _visibleConfirmed;
+  int _generation;
   ReaderSessionPhase _phase;
 
-  ReaderSessionState({
-    required ReaderLocation initialLocation,
-  })  : _sessionLocation = initialLocation.normalized(),
-        _visibleLocation = initialLocation.normalized(),
-        _durableLocation = initialLocation.normalized(),
-        _phase = ReaderSessionPhase.bootstrapping;
+  ReaderSessionState({required ReaderLocation initialLocation})
+    : _committedLocation = initialLocation.normalized(),
+      _visibleLocation = initialLocation.normalized(),
+      _durableLocation = initialLocation.normalized(),
+      _visibleConfirmed = false,
+      _generation = 0,
+      _phase = ReaderSessionPhase.bootstrapping;
 
-  ReaderLocation get sessionLocation => _sessionLocation;
+  ReaderLocation get committedLocation => _committedLocation;
   ReaderLocation get visibleLocation => _visibleLocation;
   ReaderLocation get durableLocation => _durableLocation;
+  bool get visibleConfirmed => _visibleConfirmed;
+  int get generation => _generation;
   ReaderSessionPhase get phase => _phase;
 
-  void updateSessionLocation(ReaderLocation location) {
-    _sessionLocation = location.normalized();
+  void updateCommittedLocation(ReaderLocation location) {
+    _committedLocation = location.normalized();
   }
 
   void updateVisibleLocation(ReaderLocation location) {
@@ -36,6 +42,15 @@ class ReaderSessionState {
 
   void updateDurableLocation(ReaderLocation location) {
     _durableLocation = location.normalized();
+  }
+
+  void updateVisibleConfirmed(bool confirmed) {
+    _visibleConfirmed = confirmed;
+  }
+
+  int bumpGeneration() {
+    _generation += 1;
+    return _generation;
   }
 
   void updatePhase(ReaderSessionPhase phase) {

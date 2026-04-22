@@ -8,13 +8,18 @@ class ContentCallbacks {
   final void Function(int chapterIndex)? refreshChapterRuntime;
   final void Function()? refreshAllChapterRuntime;
   final List<dynamic> Function()? buildSlideRuntimePages;
-  final void Function(int pageIndex, {required dynamic reason})?
+  final void Function(
+    int pageIndex, {
+    required dynamic reason,
+    bool reuseActiveNavigation,
+  })?
   jumpToSlidePage;
   final void Function({
     required int chapterIndex,
     required double localOffset,
     required double alignment,
     required dynamic reason,
+    bool reuseActiveNavigation,
   })?
   jumpToChapterLocalOffset;
   final void Function({
@@ -22,6 +27,7 @@ class ContentCallbacks {
     required int charOffset,
     required dynamic reason,
     bool isRestoringJump,
+    bool reuseActiveNavigation,
   })?
   jumpToChapterCharOffset;
 
@@ -30,6 +36,8 @@ class ContentCallbacks {
   final int? Function({required int chapterIndex, required int localPageIndex})?
   globalPageIndexFor;
   final void Function(dynamic reason)? clearNavigationReason;
+  final void Function({required int token, required dynamic reason})?
+  abortNavigation;
 
   // ── Progress-related callbacks (used by ReaderProgressMixin) ──────────────
 
@@ -59,8 +67,8 @@ class ContentCallbacks {
     required dynamic reason,
   })?
   persistCurrentProgress;
-  final ReaderLocation Function()? currentSessionLocation;
-  final void Function(ReaderLocation location)? updateSessionLocation;
+  final ReaderLocation Function()? currentCommittedLocation;
+  final void Function(ReaderLocation location)? updateCommittedLocation;
 
   const ContentCallbacks({
     this.refreshChapterRuntime,
@@ -73,14 +81,15 @@ class ContentCallbacks {
     this.canMoveToPrevSlidePage,
     this.globalPageIndexFor,
     this.clearNavigationReason,
+    this.abortNavigation,
     this.chapterAt,
     this.pagesForChapter,
     this.progressStore,
     this.shouldPersistVisiblePosition,
     this.evaluateScrollAutoPageStep,
     this.persistCurrentProgress,
-    this.currentSessionLocation,
-    this.updateSessionLocation,
+    this.currentCommittedLocation,
+    this.updateCommittedLocation,
   });
 
   static const empty = ContentCallbacks();
@@ -128,6 +137,10 @@ class ContentCallbacks {
       clearNavigationReason != null,
       'ContentCallbacks.clearNavigationReason is required',
     );
+    assert(
+      abortNavigation != null,
+      'ContentCallbacks.abortNavigation is required',
+    );
     assert(chapterAt != null, 'ContentCallbacks.chapterAt is required');
     assert(
       pagesForChapter != null,
@@ -147,12 +160,12 @@ class ContentCallbacks {
       'ContentCallbacks.persistCurrentProgress is required',
     );
     assert(
-      currentSessionLocation != null,
-      'ContentCallbacks.currentSessionLocation is required',
+      currentCommittedLocation != null,
+      'ContentCallbacks.currentCommittedLocation is required',
     );
     assert(
-      updateSessionLocation != null,
-      'ContentCallbacks.updateSessionLocation is required',
+      updateCommittedLocation != null,
+      'ContentCallbacks.updateCommittedLocation is required',
     );
   }
 }

@@ -112,7 +112,7 @@ class ReaderSessionFacade {
     required ReaderChapterContentSeeder putChapterContent,
     required BookDao bookDao,
     required ChapterDao chapterDao,
-    required void Function(ReaderLocation location) updateSessionLocation,
+    required void Function(ReaderLocation location) updateCommittedLocation,
     required ReaderChapterLoader loadChapter,
     required ReaderCharOffsetJump jumpToChapterCharOffset,
     ReaderCommandReason reason = ReaderCommandReason.system,
@@ -145,7 +145,7 @@ class ReaderSessionFacade {
       await chapterDao.insertChapters(nextChapters);
     }
 
-    updateSessionLocation(
+    updateCommittedLocation(
       ReaderLocation(
         chapterIndex: resolution.targetChapterIndex,
         charOffset: book.durChapterPos,

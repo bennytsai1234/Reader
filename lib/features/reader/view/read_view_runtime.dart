@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
-import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/reader_layout.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_view_runtime_coordinator.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_session_state.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_scroll_layout.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_viewport_execution_bridge.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_viewport_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
@@ -38,6 +39,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   late final AnimationController _fadeCtrl;
   late final Animation<double> _fadeAnimation;
   bool _contentRevealed = false;
+  bool _holdContentUntilScrollRestore = false;
 
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
@@ -73,11 +75,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       scrollExecution: _scrollExecution,
       scrollRestoreRunner: _scrollRestoreRunner,
       isMounted: () => mounted,
-      onRestoreCompleted: () {
-        if (mounted) {
-          setState(() {});
-        }
-      },
       viewportHeight: () => context.size?.height ?? 0.0,
     );
     widget.provider.attachAutoPageTicker(createTicker);
@@ -95,7 +92,9 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
     // If the provider is already ready (e.g., ReadViewRuntime was recreated
     // due to a controller reset), skip the fade-in reveal to avoid a flash
     // on the next notifyListeners call.
-    if (widget.provider.isReady) {
+    if (widget.provider.isReady &&
+        widget.provider.sessionPhase != ReaderSessionPhase.restoring &&
+        widget.provider.pendingScrollRestoreChapterIndex == null) {
       _contentRevealed = true;
       _fadeCtrl.value = 1.0;
     }
@@ -122,14 +121,20 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   void _onProviderStateChanged() {
     if (!mounted) return;
 
-    // Reveal content with fade when ready
-    if (!_contentRevealed && widget.provider.isReady) {
+    final p = widget.provider;
+    final runtimeUpdate = _viewportRuntime.handleProviderStateChanged(p);
+    if (runtimeUpdate.pendingScrollAction?.isRestore == true ||
+        (p.sessionPhase == ReaderSessionPhase.restoring &&
+            !p.visibleConfirmed)) {
+      _holdContentUntilScrollRestore = true;
+    } else if (_holdContentUntilScrollRestore &&
+        p.sessionPhase != ReaderSessionPhase.restoring) {
+      _holdContentUntilScrollRestore = false;
+    }
+    if (!_holdContentUntilScrollRestore && !_contentRevealed && p.isReady) {
       _contentRevealed = true;
       _fadeCtrl.forward();
     }
-
-    final p = widget.provider;
-    final runtimeUpdate = _viewportRuntime.handleProviderStateChanged(p);
     if (runtimeUpdate.didModeChange) {
       _pageKeys.clear();
       _userScrollResetTimer?.cancel();
@@ -143,11 +148,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           _scrollRuntimeExecutor.restoreScrollPosition(
             chapterIndex: pendingScrollAction.chapterIndex,
             localOffset: pendingScrollAction.localOffset,
-            token: pendingScrollAction.token,
-            onCompleted:
-                () => widget.provider.clearNavigationReason(
-                  pendingScrollAction.reason,
-                ),
+            token: pendingScrollAction.restoreToken,
           );
           return;
         }
@@ -155,7 +156,8 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           chapterIndex: pendingScrollAction.chapterIndex,
           localOffset: pendingScrollAction.localOffset,
           onCompleted:
-              () => widget.provider.clearNavigationReason(
+              () => widget.provider.completeNavigation(
+                pendingScrollAction.navigationToken,
                 pendingScrollAction.reason,
               ),
         );
@@ -174,23 +176,25 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   void _handleItemPositionsChanged() {
     final p = widget.provider;
     if (p.pageTurnMode != PageAnim.scroll) return;
+    final viewportHeight = context.size?.height ?? 1.0;
     final update = _executionBridge.resolveVisibleScrollUpdate(
       positions: _itemPositionsListener.itemPositions.value,
-      viewportHeight: context.size?.height ?? 1.0,
-      chapterHeightFor: (chapterIndex) {
-        final runtimeChapter = p.chapterAt(chapterIndex);
-        return runtimeChapter?.chapterHeight ??
-            ChapterPositionResolver.chapterHeight(
-              p.pagesForChapter(chapterIndex),
-            );
-      },
+      viewportHeight: viewportHeight,
+      chapterHeightFor: p.estimatedChapterContentHeight,
+      chapterItemExtentFor: p.estimatedChapterItemExtent,
     );
     if (update == null) return;
+    final pageAnchor = _scrollExecution.resolveAnchorLocation(provider: p);
     p.handleVisibleScrollState(
-      chapterIndex: update.chapterIndex,
-      localOffset: update.localOffset,
+      chapterIndex: pageAnchor?.chapterIndex ?? update.chapterIndex,
+      localOffset: pageAnchor?.localOffset ?? update.localOffset,
       alignment: update.alignment,
       visibleChapterIndexes: update.visibleChapterIndexes,
+      isAnchorConfirmed: pageAnchor != null,
+      anchorPadding: ReaderScrollLayout.anchorPadding(
+        viewportHeight: viewportHeight,
+        topInset: p.scrollViewportTopInset,
+      ),
     );
   }
 
@@ -234,9 +238,18 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
         }
 
         // Show theme-colored placeholder during init
-        if (provider.lifecycle == ReaderLifecycle.loading &&
-            !_contentRevealed) {
+        if (!_contentRevealed &&
+            (provider.lifecycle == ReaderLifecycle.loading ||
+                provider.sessionPhase == ReaderSessionPhase.restoring ||
+                _holdContentUntilScrollRestore)) {
           return Container(color: provider.currentTheme.backgroundColor);
+        }
+
+        final blockingViewportState = _coordinator.resolveBlockingViewportState(
+          provider,
+        );
+        if (blockingViewportState != null) {
+          return _buildViewportState(provider, blockingViewportState);
         }
 
         final hasVisibleData =

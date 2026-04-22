@@ -12,6 +12,7 @@ import 'package:inkpage_reader/features/source_manager/source_debug_page.dart';
 import 'package:inkpage_reader/features/cache_manager/download_manager_page.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 
 import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
@@ -112,7 +113,9 @@ class BookDetailPage extends StatelessWidget {
                                   () => _navigateToReader(
                                     context,
                                     currentBook,
-                                    chapter.index,
+                                    ReaderOpenTarget.chapterStart(
+                                      chapter.index,
+                                    ),
                                     provider.allChapters,
                                   ),
                             );
@@ -244,23 +247,25 @@ class BookDetailPage extends StatelessWidget {
   void _navigateToReader(
     BuildContext context,
     Book b,
-    int index,
+    ReaderOpenTarget openTarget,
     List<BookChapter> initialChapters,
-  ) => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder:
-          (ctx) => ChangeNotifierProvider(
-            create:
-                (_) => ReaderProvider(
-                  book: b,
-                  chapterIndex: index,
-                  initialChapters: initialChapters,
-                ),
-            child: ReaderPage(book: b, chapterIndex: index),
-          ),
-    ),
-  );
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (ctx) => ChangeNotifierProvider(
+              create:
+                  (_) => ReaderProvider(
+                    book: b,
+                    openTarget: openTarget,
+                    initialChapters: initialChapters,
+                  ),
+              child: ReaderPage(book: b),
+            ),
+      ),
+    );
+  }
 
   void _showChangeSourceDialog(BuildContext context, BookDetailProvider p) =>
       showModalBottomSheet(

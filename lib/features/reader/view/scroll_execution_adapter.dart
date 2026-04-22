@@ -1,6 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_scroll_layout.dart';
+
+class ReaderScrollAnchorLocation {
+  final int chapterIndex;
+  final int pageIndex;
+  final double localOffset;
+
+  const ReaderScrollAnchorLocation({
+    required this.chapterIndex,
+    required this.pageIndex,
+    required this.localOffset,
+  });
+}
 
 class ScrollExecutionAdapter {
   final Map<String, GlobalKey> pageKeys;
@@ -155,6 +168,89 @@ class ScrollExecutionAdapter {
     WidgetsBinding.instance.addPostFrameCallback((_) => applyScrollOffset());
   }
 
+  ReaderScrollAnchorLocation? resolveAnchorLocation({
+    required ReaderProvider provider,
+    double anchorRatio = ReaderScrollLayout.anchorRatio,
+  }) {
+    final visiblePages = <_VisiblePageGeometry>[];
+    for (final entry in pageKeys.entries) {
+      final pageAddress = _parsePageAddress(entry.key);
+      if (pageAddress == null) continue;
+
+      final pageContext = entry.value.currentContext;
+      final renderObject = pageContext?.findRenderObject();
+      final viewportObject =
+          pageContext == null
+              ? null
+              : Scrollable.maybeOf(pageContext)?.context.findRenderObject();
+      if (renderObject is! RenderBox || viewportObject is! RenderBox) {
+        continue;
+      }
+
+      final pageTop =
+          renderObject.localToGlobal(Offset.zero, ancestor: viewportObject).dy;
+      final pageHeight = renderObject.size.height;
+      final pageBottom = pageTop + pageHeight;
+      final viewportHeight = viewportObject.size.height;
+      if (pageBottom <= 0 || pageTop >= viewportHeight || pageHeight <= 0) {
+        continue;
+      }
+
+      final pageStartLocalOffset = _pageStartLocalOffset(
+        provider: provider,
+        chapterIndex: pageAddress.chapterIndex,
+        pageIndex: pageAddress.pageIndex,
+      );
+      if (pageStartLocalOffset == null) continue;
+
+      visiblePages.add(
+        _VisiblePageGeometry(
+          chapterIndex: pageAddress.chapterIndex,
+          pageIndex: pageAddress.pageIndex,
+          pageTop: pageTop,
+          pageHeight: pageHeight,
+          pageStartLocalOffset: pageStartLocalOffset,
+          viewportHeight: viewportHeight,
+        ),
+      );
+    }
+
+    if (visiblePages.isEmpty) return null;
+
+    visiblePages.sort((a, b) => a.pageTop.compareTo(b.pageTop));
+    final viewportHeight = visiblePages.first.viewportHeight;
+    final anchorY = viewportHeight * anchorRatio.clamp(0.0, 1.0);
+
+    _VisiblePageGeometry focusPage = visiblePages.first;
+    var minDistance = double.infinity;
+    for (final page in visiblePages) {
+      if (page.pageTop <= anchorY && page.pageBottom > anchorY) {
+        focusPage = page;
+        minDistance = 0;
+        break;
+      }
+      final distance =
+          anchorY < page.pageTop
+              ? page.pageTop - anchorY
+              : anchorY - page.pageBottom;
+      if (distance < minDistance) {
+        minDistance = distance;
+        focusPage = page;
+      }
+    }
+
+    final localOffset =
+        (focusPage.pageStartLocalOffset +
+                (anchorY - focusPage.pageTop).clamp(0.0, focusPage.pageHeight))
+            .clamp(0.0, _chapterHeight(provider, focusPage.chapterIndex))
+            .toDouble();
+    return ReaderScrollAnchorLocation(
+      chapterIndex: focusPage.chapterIndex,
+      pageIndex: focusPage.pageIndex,
+      localOffset: localOffset,
+    );
+  }
+
   ScrollPosition? _resolveActiveScrollPosition(ReaderProvider provider) {
     final chapterIndex = provider.visibleChapterIndex;
     final runtimeChapter = provider.chapterAt(chapterIndex);
@@ -186,4 +282,60 @@ class ScrollExecutionAdapter {
     if (context == null) return null;
     return Scrollable.maybeOf(context)?.position;
   }
+
+  ({int chapterIndex, int pageIndex})? _parsePageAddress(String value) {
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+    final chapterIndex = int.tryParse(parts[0]);
+    final pageIndex = int.tryParse(parts[1]);
+    if (chapterIndex == null || pageIndex == null) return null;
+    return (chapterIndex: chapterIndex, pageIndex: pageIndex);
+  }
+
+  double? _pageStartLocalOffset({
+    required ReaderProvider provider,
+    required int chapterIndex,
+    required int pageIndex,
+  }) {
+    final runtimeChapter = provider.chapterAt(chapterIndex);
+    if (runtimeChapter != null) {
+      if (pageIndex < 0 || pageIndex >= runtimeChapter.pageCount) return null;
+      return runtimeChapter.localOffsetForPageIndex(pageIndex);
+    }
+
+    final pages = provider.pagesForChapter(chapterIndex);
+    if (pageIndex < 0 || pageIndex >= pages.length) return null;
+    final pageStartCharOffset = ChapterPositionResolver.getCharOffsetForPage(
+      pages,
+      pageIndex,
+    );
+    return ChapterPositionResolver.charOffsetToLocalOffset(
+      pages,
+      pageStartCharOffset,
+    );
+  }
+
+  double _chapterHeight(ReaderProvider provider, int chapterIndex) {
+    return provider.estimatedChapterContentHeight(chapterIndex);
+  }
+}
+
+class _VisiblePageGeometry {
+  final int chapterIndex;
+  final int pageIndex;
+  final double pageTop;
+  final double pageHeight;
+  final double pageStartLocalOffset;
+  final double viewportHeight;
+
+  const _VisiblePageGeometry({
+    required this.chapterIndex,
+    required this.pageIndex,
+    required this.pageTop,
+    required this.pageHeight,
+    required this.pageStartLocalOffset,
+    required this.viewportHeight,
+  });
+
+  double get pageBottom => pageTop + pageHeight;
 }

@@ -9,6 +9,7 @@ import 'package:inkpage_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_content_facade_mixin.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
@@ -120,8 +121,8 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       shouldPersistVisiblePosition: () => persistVisiblePosition,
       updateVisibleLocation:
           (location) => _sessionState.updateVisibleLocation(location),
-      updateSessionLocation:
-          (location) => _sessionState.updateSessionLocation(location),
+      updateCommittedLocation:
+          (location) => _sessionState.updateCommittedLocation(location),
       persistLocation: (location) async => persistLocation(location),
     );
     contentCallbacks = ContentCallbacks(
@@ -129,7 +130,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       buildSlideRuntimePages:
           () => buildSlideRuntimePages() as List<dynamic>? ?? [],
       jumpToSlidePage:
-          (pageIndex, {required reason}) =>
+          (pageIndex, {required reason, bool reuseActiveNavigation = false}) =>
               jumpToSlidePage(pageIndex, reason: reason as ReaderCommandReason),
       jumpToChapterLocalOffset:
           ({
@@ -137,6 +138,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
             required localOffset,
             required alignment,
             required reason,
+            bool reuseActiveNavigation = false,
           }) => jumpToChapterLocalOffset(
             chapterIndex: chapterIndex,
             localOffset: localOffset,
@@ -149,6 +151,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
             required charOffset,
             required reason,
             bool isRestoringJump = false,
+            bool reuseActiveNavigation = false,
           }) => jumpToChapterCharOffset(
             chapterIndex: chapterIndex,
             charOffset: charOffset,
@@ -159,9 +162,9 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       pagesForChapter: (index) => pagesForChapter(index),
       progressStore: _store,
       shouldPersistVisiblePosition: () => persistVisiblePosition,
-      currentSessionLocation: () => _sessionState.sessionLocation,
-      updateSessionLocation:
-          (location) => _sessionState.updateSessionLocation(location),
+      currentCommittedLocation: () => _sessionState.committedLocation,
+      updateCommittedLocation:
+          (location) => _sessionState.updateCommittedLocation(location),
       persistCurrentProgress:
           ({required chapterIndex, int? pageIndex, required reason}) =>
               persistCurrentProgress(
@@ -173,7 +176,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
   }
 
   ReaderProgressStore get progressStore => _store;
-  ReaderLocation get sessionLocation => _sessionState.sessionLocation;
+  ReaderLocation get committedLocation => _sessionState.committedLocation;
   ReaderLocation get durableLocation => _sessionState.durableLocation;
 
   ReaderChapter? chapterAt(int index) => _runtimeChapters[index];
@@ -182,6 +185,20 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       _runtimeChapters[index]?.pages ??
       chapterPagesCache[index] ??
       const <TextPage>[];
+
+  @override
+  double estimatedChapterContentHeight(
+    int chapterIndex, {
+    double fallback = 0.0,
+  }) {
+    final runtimeChapter = chapterAt(chapterIndex);
+    if (runtimeChapter != null) {
+      return runtimeChapter.chapterHeight;
+    }
+    final pages = pagesForChapter(chapterIndex);
+    if (pages.isEmpty) return fallback;
+    return ChapterPositionResolver.chapterHeight(pages);
+  }
 
   void setChapterPages(int index, List<TextPage> pages) {
     chapterPagesCache[index] = pages;
@@ -256,7 +273,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
   }
 
   Future<void> persistLocation(ReaderLocation location) async {
-    _sessionState.updateSessionLocation(location);
+    _sessionState.updateCommittedLocation(location);
     _sessionState.updateDurableLocation(location);
     book.durChapterIndex = location.chapterIndex;
     book.durChapterPos = location.charOffset;
@@ -319,6 +336,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     required int chapterIndex,
     required double localOffset,
     double alignment = 0.0,
+    bool isAnchorConfirmed = true,
   }) {
     _progressCoordinator.updateVisibleChapterPosition(
       chapterIndex: chapterIndex,
@@ -326,6 +344,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       alignment: alignment,
       pageTurnMode: pageTurnMode,
       isLoading: isLoading,
+      isAnchorConfirmed: isAnchorConfirmed,
       currentPageIndex: currentPageIndex,
       updateVisible: (ci, lo, al) {
         visibleChapterIndex = ci;
@@ -424,13 +443,14 @@ void main() {
       );
 
       expect(restore.matchesPendingScrollRestore(token), isTrue);
-      final target = restore.consumePendingScrollRestore();
+      final target = restore.dispatchPendingScrollRestore();
       expect(target, isNotNull);
+      expect(target!.token, token);
       expect(target!.chapterIndex, 2);
       expect(target.localOffset, 88);
     });
 
-    test('auto page step 與 visible preload 會共享同一個 top chapter', () {
+    test('auto page step 與 visible preload 會共享同一個 focus chapter', () {
       final navigation = ReaderNavigationController();
       final visibility = ReaderScrollVisibilityCoordinator();
       final chapter = makeChapter();
@@ -450,7 +470,7 @@ void main() {
       );
       final update = visibility.evaluate(
         visibleChapterIndexes: const [1, 2],
-        currentChapterIndex: 1,
+        focusChapterIndex: 1,
         hasRuntimeChapter: (_) => false,
         isLoadingChapter: (_) => false,
       );
@@ -505,17 +525,27 @@ void main() {
       expect(harness.lastChapterJump!.reason, ReaderCommandReason.restore);
     });
 
-    test('scroll restore pending 狀態只會被消費一次', () {
+    test('scroll restore pending 狀態在 complete 前只會派發一次', () {
       final restore = ReaderRestoreCoordinator();
-      restore.registerPendingScrollRestore(chapterIndex: 1, localOffset: 42);
+      final token = restore.registerPendingScrollRestore(
+        chapterIndex: 1,
+        localOffset: 42,
+      );
 
-      final first = restore.consumePendingScrollRestore();
-      final second = restore.consumePendingScrollRestore();
+      final first = restore.dispatchPendingScrollRestore();
+      final second = restore.dispatchPendingScrollRestore();
 
       expect(first, isNotNull);
       expect(first!.chapterIndex, 1);
       expect(first.localOffset, 42);
       expect(second, isNull);
+      expect(restore.pendingScrollRestoreChapterIndex, 1);
+      expect(restore.pendingScrollRestoreLocalOffset, 42);
+
+      restore.deferPendingScrollRestore(token);
+      expect(restore.dispatchPendingScrollRestore(), isNotNull);
+
+      expect(restore.completePendingScrollRestore(token), isTrue);
       expect(restore.pendingScrollRestoreChapterIndex, isNull);
       expect(restore.pendingScrollRestoreLocalOffset, isNull);
     });
@@ -571,13 +601,13 @@ void main() {
 
       harness.book.durChapterPos = 0;
       harness.jumpToPosition(
-        chapterIndex: harness.sessionLocation.chapterIndex,
-        charOffset: harness.sessionLocation.charOffset,
+        chapterIndex: harness.committedLocation.chapterIndex,
+        charOffset: harness.committedLocation.charOffset,
         isRestoringJump: true,
       );
 
       expect(
-        harness.sessionLocation,
+        harness.committedLocation,
         const ReaderLocation(chapterIndex: 1, charOffset: 12),
       );
       expect(harness.lastSlideJump, 2);

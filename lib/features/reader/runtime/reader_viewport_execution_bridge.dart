@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_scroll_layout.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 typedef ReaderVisibleScrollUpdate =
@@ -42,6 +43,7 @@ class ReaderViewportExecutionBridge {
     required Iterable<ItemPosition> positions,
     required double viewportHeight,
     required double Function(int chapterIndex) chapterHeightFor,
+    required double Function(int chapterIndex) chapterItemExtentFor,
   }) {
     final sorted =
         positions.toList()
@@ -56,12 +58,26 @@ class ReaderViewportExecutionBridge {
             .toList();
     if (visible.isEmpty) return null;
 
-    final focusItem = visible.first;
     final normalizedViewportHeight = viewportHeight <= 0 ? 1.0 : viewportHeight;
+    final anchorY = normalizedViewportHeight * ReaderScrollLayout.anchorRatio;
+    ItemPosition focusItem = visible.first;
+    for (final item in visible) {
+      final leading = item.itemLeadingEdge * normalizedViewportHeight;
+      final trailing = item.itemTrailingEdge * normalizedViewportHeight;
+      if (leading <= anchorY && trailing > anchorY) {
+        focusItem = item;
+        break;
+      }
+    }
+    final focusItemLeading =
+        focusItem.itemLeadingEdge * normalizedViewportHeight;
+    final rawAnchorOffset =
+        (anchorY - focusItemLeading).clamp(0.0, double.infinity).toDouble();
+    final chapterItemExtent = chapterItemExtentFor(focusItem.index);
     final rawLocalOffset =
-        (-focusItem.itemLeadingEdge * normalizedViewportHeight)
-            .clamp(0.0, double.infinity)
-            .toDouble();
+        chapterItemExtent > 0
+            ? rawAnchorOffset.clamp(0.0, chapterItemExtent).toDouble()
+            : rawAnchorOffset;
     final chapterHeight = chapterHeightFor(focusItem.index);
     final localOffset =
         chapterHeight > 0

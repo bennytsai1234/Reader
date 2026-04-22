@@ -8,7 +8,7 @@ void main() {
 
       final update = coordinator.evaluate(
         visibleChapterIndexes: const [2, 3],
-        currentChapterIndex: 2,
+        focusChapterIndex: 2,
         hasRuntimeChapter: (_) => false,
         isLoadingChapter: (_) => false,
       );
@@ -22,14 +22,14 @@ void main() {
 
       coordinator.evaluate(
         visibleChapterIndexes: const [2, 3],
-        currentChapterIndex: 2,
+        focusChapterIndex: 2,
         hasRuntimeChapter: (_) => false,
         isLoadingChapter: (_) => false,
       );
 
       final second = coordinator.evaluate(
         visibleChapterIndexes: const [2, 3],
-        currentChapterIndex: 2,
+        focusChapterIndex: 2,
         hasRuntimeChapter: (chapterIndex) => chapterIndex == 2,
         isLoadingChapter: (_) => false,
       );
@@ -43,7 +43,7 @@ void main() {
 
       coordinator.evaluate(
         visibleChapterIndexes: const [1],
-        currentChapterIndex: 1,
+        focusChapterIndex: 1,
         hasRuntimeChapter: (_) => false,
         isLoadingChapter: (_) => false,
       );
@@ -51,13 +51,27 @@ void main() {
 
       final update = coordinator.evaluate(
         visibleChapterIndexes: const [1, 2],
-        currentChapterIndex: 1,
+        focusChapterIndex: 1,
         hasRuntimeChapter: (chapterIndex) => chapterIndex == 1,
         isLoadingChapter: (_) => false,
       );
 
       expect(update.chaptersToEnsure, [2]);
       expect(update.preloadCenterChapter, 1);
+    });
+
+    test('preload center 會跟 focus chapter 走，不跟 visible 第一個 sliver 走', () {
+      final coordinator = ReaderScrollVisibilityCoordinator();
+
+      final update = coordinator.evaluate(
+        visibleChapterIndexes: const [1, 2],
+        focusChapterIndex: 2,
+        hasRuntimeChapter: (_) => false,
+        isLoadingChapter: (_) => false,
+      );
+
+      expect(update.preloadCenterChapter, 2);
+      expect(update.chaptersToEnsure, [1, 2]);
     });
   });
 }

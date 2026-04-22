@@ -9,6 +9,7 @@ import 'widgets/change_source_filter_bar.dart';
 import 'widgets/change_source_item.dart';
 import 'reader_provider.dart';
 import 'reader_page.dart';
+import 'runtime/models/reader_open_target.dart';
 
 class ChangeChapterSourceSheet extends StatefulWidget {
   final Book book;
@@ -328,7 +329,15 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
                   nav.pop();
                   nav.pushReplacement(
                     MaterialPageRoute(
-                      builder: (_) => ReaderPage(book: newBook),
+                      builder:
+                          (_) => ChangeNotifierProvider(
+                            create:
+                                (_) => ReaderProvider(
+                                  book: newBook,
+                                  openTarget: ReaderOpenTarget.resume(newBook),
+                                ),
+                            child: ReaderPage(book: newBook),
+                          ),
                     ),
                   );
                 },

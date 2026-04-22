@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
+import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -70,6 +71,27 @@ void main() {
       expect(evicted, {6});
       expect(manager.getCachedPages(6), isNull);
       expect(manager.getCachedPages(0), isNotNull);
+
+      manager.dispose();
+    });
+
+    test('evictOutsideWindow 會保留 retained chapter cache', () async {
+      final manager = ChapterContentManager(
+        fetchFn: (index) async => FetchResult(content: 'content-$index'),
+        chapters: makeChapters(8),
+      );
+      manager.updateConfig(makeConfig());
+      manager.seedPages(1, _fakePages(1));
+      manager.seedPages(6, _fakePages(6));
+      manager.seedPages(7, _fakePages(7));
+
+      manager.updateWindow(1, preload: false);
+      final evicted = manager.evictOutsideWindow(retainedIndexes: {6});
+
+      expect(evicted, {7});
+      expect(manager.getCachedPages(1), isNotNull);
+      expect(manager.getCachedPages(6), isNotNull);
+      expect(manager.getCachedPages(7), isNull);
 
       manager.dispose();
     });
@@ -158,29 +180,79 @@ void main() {
 
     test('repaginateAll 會使用新設定重建已快取章節', () async {
       final manager = ChapterContentManager(
-        fetchFn: (index) async => FetchResult(
-          content: List.filled(120, 'chapter-$index').join(),
-        ),
+        fetchFn:
+            (index) async =>
+                FetchResult(content: List.filled(120, 'chapter-$index').join()),
         chapters: makeChapters(3),
       );
 
-      manager.updateConfig(const PaginationConfig(
-        viewSize: Size(1000, 1200),
-        titleStyle: TextStyle(fontSize: 16, height: 1.5),
-        contentStyle: TextStyle(fontSize: 16, height: 1.5),
-      ));
+      manager.updateConfig(
+        const PaginationConfig(
+          viewSize: Size(1000, 1200),
+          titleStyle: TextStyle(fontSize: 16, height: 1.5),
+          contentStyle: TextStyle(fontSize: 16, height: 1.5),
+        ),
+      );
       final firstPages = await manager.getChapterPages(1);
 
-      manager.updateConfig(const PaginationConfig(
-        viewSize: Size(220, 260),
-        titleStyle: TextStyle(fontSize: 16, height: 1.5),
-        contentStyle: TextStyle(fontSize: 16, height: 1.5),
-      ));
+      manager.updateConfig(
+        const PaginationConfig(
+          viewSize: Size(220, 260),
+          titleStyle: TextStyle(fontSize: 16, height: 1.5),
+          contentStyle: TextStyle(fontSize: 16, height: 1.5),
+        ),
+      );
       await manager.repaginateAll();
 
       final repaginatedPages = manager.getCachedPages(1)!;
       expect(repaginatedPages.length, greaterThan(firstPages.length));
 
+      manager.dispose();
+    });
+
+    test('repaginateForDisplay 會先保留舊 cache，commit 後才原子切換', () async {
+      final manager = ChapterContentManager(
+        fetchFn:
+            (index) async =>
+                FetchResult(content: List.filled(120, 'chapter-$index').join()),
+        chapters: makeChapters(3),
+      );
+
+      manager.updateConfig(
+        const PaginationConfig(
+          viewSize: Size(1000, 1200),
+          titleStyle: TextStyle(fontSize: 16, height: 1.5),
+          contentStyle: TextStyle(fontSize: 16, height: 1.5),
+        ),
+      );
+      final firstPages = await manager.getChapterPages(1);
+      manager.updateWindow(1, preload: false);
+
+      manager.updateConfig(
+        const PaginationConfig(
+          viewSize: Size(220, 260),
+          titleStyle: TextStyle(fontSize: 16, height: 1.5),
+          contentStyle: TextStyle(fontSize: 16, height: 1.5),
+        ),
+      );
+
+      final ready = <int>[];
+      final sub = manager.onChapterReady.listen(ready.add);
+      await manager.repaginateForDisplay(
+        centerChapterIndex: 1,
+        isScrollMode: false,
+      );
+
+      expect(manager.hasPendingDisplayRepagination, isTrue);
+      expect(identical(manager.getCachedPages(1), firstPages), isTrue);
+      expect(ready, isEmpty);
+
+      manager.commitPendingDisplayRepagination();
+      final repaginatedPages = manager.getCachedPages(1)!;
+      expect(repaginatedPages.length, greaterThan(firstPages.length));
+      expect(identical(repaginatedPages, firstPages), isFalse);
+
+      await sub.cancel();
       manager.dispose();
     });
 
@@ -265,8 +337,11 @@ void main() {
       await fetchFuture;
 
       // Result from old config should NOT be in cache after updateConfig cleared it
-      expect(manager.getCachedPages(0), isNull,
-          reason: 'updateConfig 後快取應被清除，進行中的舊分頁結果不應寫回');
+      expect(
+        manager.getCachedPages(0),
+        isNull,
+        reason: 'updateConfig 後快取應被清除，進行中的舊分頁結果不應寫回',
+      );
 
       manager.dispose();
     });
@@ -305,5 +380,40 @@ void main() {
 
       manager.dispose();
     });
+
+    test(
+      'prioritizeChapter 會保留 retained chapter，不驅逐 current neighborhood',
+      () async {
+        final manager = ChapterContentManager(
+          fetchFn: (index) async => FetchResult(content: 'content-$index'),
+          chapters: makeChapters(8),
+        );
+        manager.updateConfig(makeConfig());
+        manager.seedPages(1, _fakePages(1));
+        manager.seedPages(2, _fakePages(2));
+        manager.seedPages(3, _fakePages(3));
+        manager.seedPages(6, _fakePages(6));
+
+        manager.prioritizeChapter(6, retainedIndexes: {0, 1, 2});
+
+        expect(manager.getCachedPages(1), isNotNull);
+        expect(manager.getCachedPages(2), isNotNull);
+        expect(manager.getCachedPages(3), isNull);
+        expect(manager.getCachedPages(6), isNotNull);
+
+        manager.dispose();
+      },
+    );
   });
+}
+
+List<TextPage> _fakePages(int chapterIndex) {
+  return <TextPage>[
+    TextPage(
+      index: 0,
+      lines: const <TextLine>[],
+      title: 'chapter-$chapterIndex',
+      chapterIndex: chapterIndex,
+    ),
+  ];
 }

@@ -11,6 +11,7 @@ import 'package:inkpage_reader/features/bookshelf/bookshelf_provider.dart';
 import 'package:inkpage_reader/features/bookshelf/group_manage_page.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 import 'package:inkpage_reader/features/search/search_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'widgets/group_select_dialog.dart';
@@ -592,14 +593,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
               create:
                   (ctx) => ReaderProvider(
                     book: book,
-                    chapterIndex: book.durChapterIndex,
-                    chapterPos: book.durChapterPos,
+                    openTarget: ReaderOpenTarget.resume(book),
                   ),
-              child: ReaderPage(
-                book: book,
-                chapterIndex: book.durChapterIndex,
-                chapterPos: book.durChapterPos,
-              ),
+              child: ReaderPage(book: book),
             ),
       ),
     );

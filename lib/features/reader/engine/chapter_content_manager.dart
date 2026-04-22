@@ -65,6 +65,8 @@ class ChapterContentManager {
 
   /// 分頁結果快取
   final Map<int, List<TextPage>> _paginatedCache = {};
+  final Map<int, List<TextPage>> _pendingDisplayRepaginatedPages = {};
+  final Set<int> _pendingDisplayRepaginatedIndexes = <int>{};
   final Map<int, String> _displayTitleCache = {};
 
   /// 目標預載視窗
@@ -199,6 +201,9 @@ class ChapterContentManager {
   Map<int, List<TextPage>> get paginatedCache =>
       Map.unmodifiable(_paginatedCache);
 
+  bool get hasPendingDisplayRepagination =>
+      _pendingDisplayRepaginatedIndexes.isNotEmpty;
+
   void seedPages(int index, List<TextPage> pages) {
     if (_disposed || index < 0 || index >= _chapters.length || pages.isEmpty) {
       return;
@@ -227,17 +232,18 @@ class ChapterContentManager {
     return pages;
   }
 
-  /// 更新分頁設定並清除分頁快取（保留內容快取）
+  /// 更新分頁設定；active paginated cache 會保留到 staged repaginate commit。
   void updateConfig(PaginationConfig config) {
     _config = config;
     _configVersion++; // invalidate in-flight paginations
-    _paginatedCache.clear();
+    _clearPendingDisplayRepagination();
   }
 
   /// 更新章節列表
   void updateChapters(List<BookChapter> chapters) {
     _chapters = chapters;
     _displayTitleCache.clear();
+    _clearPendingDisplayRepagination();
   }
 
   void setUserInteractionActive(bool active) {
@@ -325,6 +331,7 @@ class ChapterContentManager {
     int preloadRadius = 2,
     bool preload = true,
     bool evictOutsideWindow = false,
+    Set<int> retainedIndexes = const <int>{},
   }) {
     updateWindow(
       centerChapterIndex,
@@ -332,7 +339,7 @@ class ChapterContentManager {
       preload: preload,
     );
     if (!evictOutsideWindow) return {};
-    return evictOutsideActiveWindow();
+    return evictOutsideActiveWindow(retainedIndexes: retainedIndexes);
   }
 
   void warmChaptersAround(int centerChapterIndex, {int radius = 2}) {
@@ -359,14 +366,18 @@ class ChapterContentManager {
     );
   }
 
-  void prioritizeChapter(int index, {int preloadRadius = 1}) {
+  void prioritizeChapter(
+    int index, {
+    int preloadRadius = 1,
+    Set<int> retainedIndexes = const <int>{},
+  }) {
     if (_disposed || index < 0 || index >= _chapters.length) return;
     if (!_wholeBookPreloadEnabled) {
       _targetWindow = _buildWindow(
         index,
         radius: preloadRadius.clamp(0, _chapters.length).toInt(),
       );
-      evictOutsideWindow();
+      evictOutsideWindow(retainedIndexes: retainedIndexes);
     }
     _priorityChapters
       ..clear()
@@ -410,28 +421,20 @@ class ChapterContentManager {
   }
 
   /// 驅逐視窗外的分頁快取，回傳被驅逐的章節索引
-  Set<int> evictOutsideWindow() {
-    if (_targetWindow.isEmpty || _wholeBookPreloadEnabled) return {};
-
-    final toEvict = <int>{};
-    for (final idx in _paginatedCache.keys.toList()) {
-      if (!_targetWindow.contains(idx)) {
-        toEvict.add(idx);
-      }
-    }
-
-    for (final idx in toEvict) {
-      _paginatedCache.remove(idx);
-    }
-
-    return toEvict;
+  Set<int> evictOutsideWindow({Set<int> retainedIndexes = const <int>{}}) {
+    return evictOutside(_targetWindow, retainedIndexes: retainedIndexes);
   }
 
-  Set<int> evictOutside(Set<int> indexesToKeep) {
-    if (indexesToKeep.isEmpty || _wholeBookPreloadEnabled) return {};
+  Set<int> evictOutside(
+    Set<int> indexesToKeep, {
+    Set<int> retainedIndexes = const <int>{},
+  }) {
+    if (_wholeBookPreloadEnabled) return {};
+    final effectiveKeep = <int>{...indexesToKeep, ...retainedIndexes};
+    if (effectiveKeep.isEmpty) return {};
     final toEvict = <int>{};
     for (final idx in _paginatedCache.keys.toList()) {
-      if (!indexesToKeep.contains(idx)) {
+      if (!effectiveKeep.contains(idx)) {
         toEvict.add(idx);
       }
     }
@@ -443,6 +446,7 @@ class ChapterContentManager {
 
   /// 使用目前設定重新分頁指定章節（如果有內容快取）
   Future<List<TextPage>> repaginate(int index) async {
+    _clearPendingDisplayRepagination();
     final content = _contentCache[index];
     if (content == null || _config == null || _disposed) return [];
     if (index < 0 || index >= _chapters.length) return [];
@@ -455,6 +459,7 @@ class ChapterContentManager {
 
   /// 重新分頁所有有內容快取的章節
   Future<void> repaginateAll() async {
+    _clearPendingDisplayRepagination();
     if (_config == null || _disposed) return;
 
     final indices = _contentCache.keys.toList();
@@ -472,6 +477,8 @@ class ChapterContentManager {
   void putContent(int index, String content) {
     _saveContentCache(index, content);
     _paginatedCache.remove(index); // 內容變更，分頁作廢
+    _pendingDisplayRepaginatedPages.remove(index);
+    _pendingDisplayRepaginatedIndexes.remove(index);
   }
 
   void dispose() {
@@ -480,6 +487,16 @@ class ChapterContentManager {
     _preloadQueue.clear();
     _loadCompleters.clear();
     _emptyContentChapters.clear();
+    _clearPendingDisplayRepagination();
+  }
+
+  void commitPendingDisplayRepagination() {
+    if (_pendingDisplayRepaginatedIndexes.isEmpty) return;
+    for (final index in _pendingDisplayRepaginatedIndexes) {
+      _paginatedCache.remove(index);
+    }
+    _paginatedCache.addAll(_pendingDisplayRepaginatedPages);
+    _clearPendingDisplayRepagination();
   }
 
   // --- 內部邏輯 ---
@@ -574,6 +591,7 @@ class ChapterContentManager {
   }
 
   Future<void> repaginateWindow(Iterable<int> chapterIndexes) async {
+    _clearPendingDisplayRepagination();
     if (_config == null || _disposed) return;
 
     final ordered =
@@ -606,20 +624,37 @@ class ChapterContentManager {
     required bool isScrollMode,
     int scrollRadius = 1,
   }) async {
+    _clearPendingDisplayRepagination();
+    final capturedConfigVersion = _configVersion;
     final scope =
         isScrollMode
             ? _buildWindow(centerChapterIndex, radius: scrollRadius)
-            : Set<int>.from(_targetWindow);
-    if (isScrollMode) {
-      await repaginateWindow(scope);
-    } else {
-      await repaginateAll();
+            : Set<int>.from(
+              _targetWindow.isNotEmpty ? _targetWindow : _paginatedCache.keys,
+            );
+    final repaginatedIndexes =
+        isScrollMode ? scope : Set<int>.from(_contentCache.keys);
+    final stagedPages = await _repaginateIntoMap(
+      repaginatedIndexes,
+      capturedConfigVersion: capturedConfigVersion,
+    );
+    if (_disposed || _configVersion != capturedConfigVersion) {
+      _clearPendingDisplayRepagination();
+      return scope;
     }
+    _pendingDisplayRepaginatedIndexes
+      ..clear()
+      ..addAll(repaginatedIndexes);
+    _pendingDisplayRepaginatedPages
+      ..clear()
+      ..addAll(stagedPages);
     return scope;
   }
 
-  Set<int> evictOutsideActiveWindow() {
-    return evictOutside(_targetWindow);
+  Set<int> evictOutsideActiveWindow({
+    Set<int> retainedIndexes = const <int>{},
+  }) {
+    return evictOutside(_targetWindow, retainedIndexes: retainedIndexes);
   }
 
   void _saveContentCache(int index, String content) {
@@ -641,6 +676,35 @@ class ChapterContentManager {
         _contentCache.remove(farthest);
       }
     }
+  }
+
+  void _clearPendingDisplayRepagination() {
+    _pendingDisplayRepaginatedPages.clear();
+    _pendingDisplayRepaginatedIndexes.clear();
+  }
+
+  Future<Map<int, List<TextPage>>> _repaginateIntoMap(
+    Iterable<int> chapterIndexes, {
+    required int capturedConfigVersion,
+  }) async {
+    final stagedPages = <int, List<TextPage>>{};
+    final ordered =
+        chapterIndexes
+            .where((idx) => idx >= 0 && idx < _chapters.length)
+            .toSet()
+            .toList()
+          ..sort();
+    for (final idx in ordered) {
+      if (_disposed || _configVersion != capturedConfigVersion) break;
+      final content = _contentCache[idx];
+      if (content == null) continue;
+      final pages = await _doPaginate(idx, content);
+      if (_disposed || _configVersion != capturedConfigVersion) break;
+      if (pages.isNotEmpty) {
+        stagedPages[idx] = pages;
+      }
+    }
+    return stagedPages;
   }
 
   void _startPreloading(

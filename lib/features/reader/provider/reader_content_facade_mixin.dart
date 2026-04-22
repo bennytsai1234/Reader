@@ -8,6 +8,7 @@ import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/provider/content_callbacks.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_presentation_contract.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_content_lifecycle_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_content_runtime_owner.dart';
 import 'package:inkpage_reader/features/reader/provider/slide_window.dart';
@@ -21,13 +22,28 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
   static const int _scrollPreloadRadius =
       ReaderContentLifecycleRuntime.scrollPreloadRadius;
   final ReaderContentRuntimeOwner _contentOwner = ReaderContentRuntimeOwner();
+  int get currentNavigationGeneration => 0;
+  double estimatedChapterContentHeight(
+    int chapterIndex, {
+    double fallback = 0.0,
+  });
   bool get hasContentManager => _contentOwner.hasContentManager;
   bool get isWholeBookPreloadEnabled => _contentOwner.isWholeBookPreloadEnabled;
+  bool get isScrollInteractionActive => _contentOwner.isScrollInteractionActive;
   bool isKnownEmptyChapter(int index) =>
       _contentOwner.isKnownEmptyChapter(index);
+  @protected
+  Set<int> retainedChapterIndexes({int? focusChapterIndex}) => const <int>{};
+
+  void onScrollChapterReadyApplied(
+    int chapterIndex, {
+    required bool hasPages,
+  }) {}
 
   bool _isPaginating = false;
   ContentCallbacks _contentCallbacks = ContentCallbacks.empty;
+  ReaderViewportState? _transientViewportState;
+  int? _transientViewportChapterIndex;
 
   List<String> _chapterDisplayTitles = const [];
 
@@ -37,8 +53,50 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
   bool hasChapterFailure(int chapterIndex) =>
       _contentOwner.hasChapterFailure(chapterIndex);
 
+  ReaderViewportState? get transientViewportState => _transientViewportState;
+  int? get transientViewportChapterIndex => _transientViewportChapterIndex;
+
   void clearChapterFailure(int chapterIndex) {
     _contentOwner.clearChapterFailure(chapterIndex);
+  }
+
+  ReaderViewportState? chapterViewportStateFor(int chapterIndex) {
+    final failureMessage = chapterFailureMessage(chapterIndex);
+    if (failureMessage != null && failureMessage.trim().isNotEmpty) {
+      return ReaderViewportState.message(failureMessage);
+    }
+    if (isKnownEmptyChapter(chapterIndex)) {
+      return const ReaderViewportState.message('本章暫無內容');
+    }
+    return null;
+  }
+
+  void showTransientViewportStateForChapter(
+    int chapterIndex,
+    ReaderViewportState state, {
+    bool notify = true,
+  }) {
+    final didChange =
+        _transientViewportChapterIndex != chapterIndex ||
+        _transientViewportState?.showLoading != state.showLoading ||
+        _transientViewportState?.message != state.message;
+    _transientViewportChapterIndex = chapterIndex;
+    _transientViewportState = state;
+    if (didChange && notify && !isDisposed) {
+      notifyListeners();
+    }
+  }
+
+  void clearTransientViewportState({bool notify = true}) {
+    if (_transientViewportState == null &&
+        _transientViewportChapterIndex == null) {
+      return;
+    }
+    _transientViewportState = null;
+    _transientViewportChapterIndex = null;
+    if (notify && !isDisposed) {
+      notifyListeners();
+    }
   }
 
   /// Inject typed callbacks from ReadBookController.
@@ -118,6 +176,9 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     _contentOwner.prioritizeChapterContent(
       chapterIndex,
       preloadRadius: preloadRadius,
+      retainedChapterIndexes: retainedChapterIndexes(
+        focusChapterIndex: chapterIndex,
+      ),
     );
   }
 
@@ -148,7 +209,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
 
   void initContentManager() {
     _contentOwner.initLifecycle(
-      onChapterReady: _handleChapterReady,
+      onChapterReady: handleChapterReadyEvent,
       resetPresentationState: _contentOwner.resetPresentationState,
       setSlidePages: (pages) => slidePages = pages,
       chapterPagesCache: chapterPagesCache,
@@ -214,8 +275,6 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     notifyListeners();
     try {
       updatePaginationConfig();
-      chapterPagesCache.clear();
-      slidePages = [];
       await _contentOwner.repaginateForDisplay(
         centerChapterIndex: targetChapter,
         isScrollMode: _isScrollMode,
@@ -238,11 +297,13 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     int index, {
     bool fromEnd = false,
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
   }) async {
     return loadChapterWithPreloadRadius(
       index,
       fromEnd: fromEnd,
       reason: reason,
+      navigationToken: navigationToken,
     );
   }
 
@@ -251,18 +312,42 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     bool fromEnd = false,
     int preloadRadius = 2,
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
   }) async {
     if (index < 0 || index >= chapters.length || !hasContentManager) return;
+    final navigationGeneration = currentNavigationGeneration;
     // An explicit chapter navigation supersedes any pending recenter.
     _contentOwner.clearPendingSlideRecenter();
     updatePaginationConfig();
-    currentChapterIndex = index;
-    visibleChapterIndex = index;
     final effectivePreloadRadius = _effectivePreloadRadius(preloadRadius);
     _prepareChapterDisplayWindow(index, preloadRadius: effectivePreloadRadius);
 
     final pages = await _loadAndCacheChapter(index);
-    if (pages.isEmpty || isDisposed) return;
+    if (isDisposed || navigationGeneration != currentNavigationGeneration) {
+      if (navigationToken != null) {
+        _contentCallbacks.abortNavigation?.call(
+          token: navigationToken,
+          reason: reason,
+        );
+      }
+      return;
+    }
+    final chapterViewportState =
+        chapterViewportStateFor(index) ??
+        (pages.isEmpty ? const ReaderViewportState.message('本章暫無內容') : null);
+    if (chapterViewportState != null) {
+      if (navigationToken != null) {
+        _contentCallbacks.abortNavigation?.call(
+          token: navigationToken,
+          reason: reason,
+        );
+      }
+      showTransientViewportStateForChapter(index, chapterViewportState);
+      return;
+    }
+    clearTransientViewportState(notify: false);
+    currentChapterIndex = index;
+    visibleChapterIndex = index;
     _warmupAfterChapterLoad(index, preloadRadius: effectivePreloadRadius);
     _presentLoadedChapter(
       index,
@@ -303,6 +388,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       notifyListeners: notifyListeners,
       isScrollMode: _isScrollMode,
       isLocalScrollMode: _isLocalScrollMode,
+      retainedChapterIndexes: retainedChapterIndexes(focusChapterIndex: index),
       silent: silent,
       prioritize: prioritize,
       preloadRadius: preloadRadius,
@@ -323,7 +409,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       totalChapters: chapters.length,
       durableAnchor: ReaderPresentationAnchor(
         location:
-            _contentCallbacks.currentSessionLocation?.call() ??
+            _contentCallbacks.currentCommittedLocation?.call() ??
             ReaderLocation(chapterIndex: currentChapterIndex, charOffset: 0),
       ),
       chapterAt:
@@ -348,6 +434,9 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       isScrollMode: _isScrollMode,
       isLocalScrollMode: _isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
+      retainedChapterIndexes: retainedChapterIndexes(
+        focusChapterIndex: centerIndex,
+      ),
     );
   }
 
@@ -390,6 +479,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     _contentOwner.updateScrollPreloadForVisibleChapter(
       visibleChapter: visibleChapter,
       localOffset: localOffset,
+      chapterHeightFor: estimatedChapterContentHeight,
       chapters: chapters,
       chapterPagesCache: chapterPagesCache,
       loadingChapters: loadingChapters,
@@ -397,15 +487,9 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       notifyListeners: notifyListeners,
       isScrollMode: _isScrollMode,
       isLocalScrollMode: _isLocalScrollMode,
-    );
-  }
-
-  /// Async fast path: if raw content is cached, paginate without fetch.
-  /// Used by ScrollModeDelegate to reduce placeholder display time for local books.
-  Future<List<TextPage>?> trySyncPaginate(int chapterIndex) async {
-    return _contentOwner.trySyncPaginate(
-      chapterIndex: chapterIndex,
-      chapterPagesCache: chapterPagesCache,
+      retainedChapterIndexes: retainedChapterIndexes(
+        focusChapterIndex: visibleChapter,
+      ),
     );
   }
 
@@ -503,7 +587,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
   }) async {
     final target = currentChapterIndex + 1;
     if (target < chapters.length) {
-      _contentCallbacks.updateSessionLocation?.call(
+      _contentCallbacks.updateCommittedLocation?.call(
         ReaderLocation(chapterIndex: target, charOffset: 0),
       );
       await loadChapter(target, reason: reason);
@@ -517,7 +601,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     final target = currentChapterIndex - 1;
     if (target >= 0) {
       if (!fromEnd) {
-        _contentCallbacks.updateSessionLocation?.call(
+        _contentCallbacks.updateCommittedLocation?.call(
           ReaderLocation(chapterIndex: target, charOffset: 0),
         );
       }
@@ -543,7 +627,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     );
   }
 
-  void _handleChapterReady(int chapterIndex) {
+  void handleChapterReadyEvent(int chapterIndex) {
     _contentOwner.handleChapterReady(
       chapterIndex: chapterIndex,
       visibleChapterIndex: visibleChapterIndex,
@@ -554,7 +638,16 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       isDisposed: () => isDisposed,
       notifyListeners: notifyListeners,
       refreshSlidePages: _refreshSlidePages,
+      retainedChapterIndexes: retainedChapterIndexes(
+        focusChapterIndex: chapterIndex,
+      ),
     );
+    if (_isScrollMode) {
+      onScrollChapterReadyApplied(
+        chapterIndex,
+        hasPages: chapterPagesCache[chapterIndex]?.isNotEmpty ?? false,
+      );
+    }
   }
 
   int _effectivePreloadRadius(int requestedRadius) {
@@ -575,6 +668,9 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       isScrollMode: _isScrollMode,
       isLocalScrollMode: _isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
+      retainedChapterIndexes: retainedChapterIndexes(
+        focusChapterIndex: chapterIndex,
+      ),
     );
   }
 
@@ -606,26 +702,37 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     );
   }
 
+  ReaderPresentationAnchor _presentationAnchorForChapter(
+    int chapterIndex, {
+    required bool fromEnd,
+  }) {
+    final committedLocation =
+        _contentCallbacks.currentCommittedLocation?.call();
+    final anchorLocation =
+        committedLocation != null &&
+                committedLocation.chapterIndex == chapterIndex
+            ? committedLocation
+            : ReaderLocation(chapterIndex: chapterIndex, charOffset: 0);
+    return ReaderPresentationAnchor(location: anchorLocation, fromEnd: fromEnd);
+  }
+
   void _presentLoadedChapter(
     int chapterIndex, {
     required List<TextPage> pages,
     required bool fromEnd,
     required ReaderCommandReason reason,
   }) {
+    clearTransientViewportState(notify: false);
     final presentation = _contentOwner.resolvePresentation(
       ReaderPresentationRequest(
-        anchor: ReaderPresentationAnchor(
-          location:
-              _contentCallbacks.currentSessionLocation?.call() ??
-              ReaderLocation(chapterIndex: chapterIndex, charOffset: 0),
-          fromEnd: fromEnd,
-        ),
+        anchor: _presentationAnchorForChapter(chapterIndex, fromEnd: fromEnd),
         isScrollMode: _isScrollMode,
         chapterPages: pages,
         slidePages: slidePages,
         runtimeChapter: _contentCallbacks.chapterAt?.call(chapterIndex),
       ),
     );
+    _contentCallbacks.updateCommittedLocation?.call(presentation.location);
     if (_isScrollMode) {
       final target = presentation.scrollTarget!;
       _contentCallbacks.jumpToChapterLocalOffset?.call(
@@ -633,6 +740,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
         localOffset: target.localOffset,
         alignment: target.alignment,
         reason: reason,
+        reuseActiveNavigation: true,
       );
       return;
     }
@@ -643,7 +751,11 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     );
     _refreshSlidePages();
     currentPageIndex = presentation.slidePageIndex ?? 0;
-    _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
+    _contentCallbacks.jumpToSlidePage?.call(
+      currentPageIndex,
+      reason: reason,
+      reuseActiveNavigation: true,
+    );
   }
 
   void _restoreDisplayPositionAfterRepaginate({
@@ -654,18 +766,14 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     final pages = chapterPagesCache[targetChapter] ?? const <TextPage>[];
     final presentation = _contentOwner.resolvePresentation(
       ReaderPresentationRequest(
-        anchor: ReaderPresentationAnchor(
-          location:
-              _contentCallbacks.currentSessionLocation?.call() ??
-              ReaderLocation(chapterIndex: targetChapter, charOffset: 0),
-          fromEnd: fromEnd,
-        ),
+        anchor: _presentationAnchorForChapter(targetChapter, fromEnd: fromEnd),
         isScrollMode: _isScrollMode,
         chapterPages: pages,
         slidePages: slidePages,
         runtimeChapter: _contentCallbacks.chapterAt?.call(targetChapter),
       ),
     );
+    _contentCallbacks.updateCommittedLocation?.call(presentation.location);
     if (_isScrollMode) {
       _contentCallbacks.jumpToChapterCharOffset?.call(
         chapterIndex: targetChapter,

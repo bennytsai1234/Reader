@@ -15,10 +15,12 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/replace_rule.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
+import 'package:inkpage_reader/features/reader/engine/page_view_widget.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/view/read_view_runtime.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader_page_shell.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -73,6 +75,8 @@ class _ReaderPageActionProbe extends ReaderProvider {
 
   int nextPageCalls = 0;
   int toggleControlsCalls = 0;
+  final List<({int token, ReaderCommandReason reason})> completedNavigations =
+      [];
 
   void primeVisibleContent() {
     lifecycle = ReaderLifecycle.ready;
@@ -145,6 +149,12 @@ class _ReaderPageActionProbe extends ReaderProvider {
     toggleControlsCalls++;
     super.toggleControls();
   }
+
+  @override
+  void completeNavigation(int token, ReaderCommandReason reason) {
+    completedNavigations.add((token: token, reason: reason));
+    super.completeNavigation(token, reason);
+  }
 }
 
 class _ReaderPageFlowProbe extends _ReaderPageActionProbe {
@@ -152,6 +162,8 @@ class _ReaderPageFlowProbe extends _ReaderPageActionProbe {
 
   final List<({int chapterIndex, bool fromEnd, ReaderCommandReason reason})>
   loadRequests = [];
+  final List<Set<int>> retainedSnapshots = [];
+  final List<Set<int>> focusedRetainedSnapshots = [];
   bool interceptChapterLoads = false;
   Completer<void>? loadCompleter;
 
@@ -160,6 +172,7 @@ class _ReaderPageFlowProbe extends _ReaderPageActionProbe {
     int index, {
     bool fromEnd = false,
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
   }) async {
     if (!interceptChapterLoads) {
       currentChapterIndex = index;
@@ -168,6 +181,10 @@ class _ReaderPageFlowProbe extends _ReaderPageActionProbe {
     }
 
     loadRequests.add((chapterIndex: index, fromEnd: fromEnd, reason: reason));
+    retainedSnapshots.add(retainedChapterIndexes());
+    focusedRetainedSnapshots.add(
+      retainedChapterIndexes(focusChapterIndex: index),
+    );
     final completer = loadCompleter ??= Completer<void>();
     await completer.future;
     currentChapterIndex = index;
@@ -466,7 +483,31 @@ void main() {
     expect(provider.currentPageIndex, 1);
   });
 
-  testWidgets('ReaderPage scroll restore 會在頁面層完成並對齊目標章節', (tester) async {
+  testWidgets('ReaderPage transient viewport state 會覆蓋既有內容', (tester) async {
+    final provider = _ReaderPageActionProbe(
+      book: _makeBook(),
+      initialChapters: [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'https://example.com/book'),
+      ],
+    );
+
+    addTearDown(provider.dispose);
+    await _pumpReaderPage(tester, provider);
+    provider.primeVisibleContent();
+    provider.showTransientViewportStateForChapter(
+      0,
+      const ReaderViewportState.message('加載章節失敗: 測試錯誤'),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('加載章節失敗: 測試錯誤'), findsOneWidget);
+    expect(find.byType(PageViewWidget), findsNothing);
+  });
+
+  testWidgets('ReaderPage scroll restore target 在 controller 完成前不會被頁面層提前清掉', (
+    tester,
+  ) async {
     final provider = _ReaderPageActionProbe(
       book: _makeBook(),
       initialChapters: [
@@ -488,13 +529,61 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(provider.pendingScrollRestoreChapterIndex, isNull);
-    expect(provider.pendingScrollRestoreLocalOffset, isNull);
+    expect(provider.pendingScrollRestoreChapterIndex, 1);
+    expect(provider.pendingScrollRestoreLocalOffset, 0);
     expect(provider.pageTurnMode, PageAnim.scroll);
     provider.pageTurnMode = PageAnim.slide;
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
+
+  testWidgets(
+    'ReaderPage 一般 scroll jump 不會在第一個 post-frame 就清掉 navigation reason',
+    (tester) async {
+      final provider = _ReaderPageActionProbe(
+        book: _makeBook(),
+        initialChapters: [
+          BookChapter(
+            title: 'c0',
+            index: 0,
+            bookUrl: 'https://example.com/book',
+          ),
+          BookChapter(
+            title: 'c1',
+            index: 1,
+            bookUrl: 'https://example.com/book',
+          ),
+        ],
+      );
+
+      addTearDown(provider.dispose);
+      await _pumpReaderPage(tester, provider);
+      provider.primeScrollContent();
+      provider.notifyListeners();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      provider.jumpToChapterLocalOffset(
+        chapterIndex: 1,
+        localOffset: 0,
+        reason: ReaderCommandReason.settingsRepaginate,
+      );
+      provider.notifyListeners();
+
+      await tester.pump();
+      await tester.pump();
+      expect(provider.completedNavigations, isEmpty);
+
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(
+        provider.completedNavigations.map((item) => item.reason),
+        contains(ReaderCommandReason.settingsRepaginate),
+      );
+    },
+  );
 
   testWidgets('ReaderPage 底部 slider 拖動會走真實切章流程並在 pending 期間鎖定重入', (
     tester,
@@ -530,6 +619,11 @@ void main() {
 
     expect(provider.loadRequests, hasLength(1));
     expect(provider.loadRequests.single.chapterIndex, 2);
+    expect(provider.retainedSnapshots.single, containsAll(<int>{0, 1, 2}));
+    expect(
+      provider.focusedRetainedSnapshots.single,
+      containsAll(<int>{0, 1, 2}),
+    );
     expect(provider.pendingChapterNavigationIndex, 2);
     expect(find.text('第三章'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -588,6 +682,11 @@ void main() {
 
     expect(provider.loadRequests, hasLength(1));
     expect(provider.loadRequests.single.chapterIndex, 2);
+    expect(provider.retainedSnapshots.single, containsAll(<int>{0, 1, 2}));
+    expect(
+      provider.focusedRetainedSnapshots.single,
+      containsAll(<int>{0, 1, 2}),
+    );
     expect(provider.pendingChapterNavigationIndex, 2);
     expect(scaffoldState.isDrawerOpen, isTrue);
     expect(

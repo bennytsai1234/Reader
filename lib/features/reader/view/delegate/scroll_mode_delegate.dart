@@ -1,9 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/page_view_widget.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_scroll_layout.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import 'page_mode_delegate.dart';
@@ -63,16 +61,8 @@ class ScrollModeDelegate extends PageModeDelegate {
           final runtimeChapter = provider.chapterAt(chapterIndex);
           var pages = runtimeChapter?.pages;
 
-          // Fast path: eagerly paginate for local books to avoid placeholder flash
-          if ((pages == null || pages.isEmpty) &&
-              provider.book.origin == 'local') {
-            // trySyncPaginate is actually async, but we fire-and-forget here
-            // and rely on the notifyListeners callback to rebuild with real pages
-            unawaited(provider.trySyncPaginate(chapterIndex));
-          }
-
           if (pages == null || pages.isEmpty) {
-            final estimatedHeight = _estimateChapterHeight(
+            final estimatedHeight = _estimateChapterItemHeight(
               provider,
               chapterIndex,
             );
@@ -122,8 +112,10 @@ class ScrollModeDelegate extends PageModeDelegate {
                 if (chapterIndex < provider.chapters.length - 1)
                   Padding(
                     padding: EdgeInsets.symmetric(
-                      vertical: (provider.fontSize * provider.lineHeight * 0.5)
-                          .clamp(8.0, 24.0),
+                      vertical: ReaderScrollLayout.chapterSeparatorPadding(
+                        fontSize: provider.fontSize,
+                        lineHeight: provider.lineHeight,
+                      ),
                     ),
                     child: Center(
                       child: Container(
@@ -143,13 +135,24 @@ class ScrollModeDelegate extends PageModeDelegate {
     );
   }
 
-  double _estimateChapterHeight(ReaderProvider provider, int chapterIndex) {
+  double _estimateChapterItemHeight(ReaderProvider provider, int chapterIndex) {
+    final knownHeight = provider.estimatedChapterContentHeight(chapterIndex);
+    if (knownHeight > 0) {
+      return ReaderScrollLayout.chapterItemExtent(
+        contentHeight: knownHeight,
+        hasSeparator: chapterIndex < provider.chapters.length - 1,
+        fontSize: provider.fontSize,
+        lineHeight: provider.lineHeight,
+      );
+    }
+
     final heights = <double>[];
     for (final offset in [-1, 1]) {
       final neighbor = chapterIndex + offset;
-      final neighborPages = provider.chapterPagesCache[neighbor];
-      if (neighborPages != null && neighborPages.isNotEmpty) {
-        heights.add(ChapterPositionResolver.chapterHeight(neighborPages));
+      if (neighbor < 0 || neighbor >= provider.chapters.length) continue;
+      final neighborHeight = provider.estimatedChapterContentHeight(neighbor);
+      if (neighborHeight > 0) {
+        heights.add(neighborHeight);
       }
     }
     final viewportHeight =
@@ -158,9 +161,19 @@ class ScrollModeDelegate extends PageModeDelegate {
                 provider.contentBottomInset)
             .clamp(1.0, double.infinity)
             .toDouble();
-    if (heights.isEmpty) {
-      return viewportHeight;
-    }
-    return heights.reduce((double a, double b) => a + b) / heights.length;
+    final estimatedContentHeight =
+        heights.isEmpty
+            ? viewportHeight
+            : heights.reduce((double a, double b) => a + b) / heights.length;
+    provider.recordEstimatedPlaceholderChapterContentHeight(
+      chapterIndex,
+      contentHeight: estimatedContentHeight,
+    );
+    return ReaderScrollLayout.chapterItemExtent(
+      contentHeight: estimatedContentHeight,
+      hasSeparator: chapterIndex < provider.chapters.length - 1,
+      fontSize: provider.fontSize,
+      lineHeight: provider.lineHeight,
+    );
   }
 }

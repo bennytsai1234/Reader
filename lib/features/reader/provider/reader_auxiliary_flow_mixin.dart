@@ -26,7 +26,7 @@ mixin ReaderAuxiliaryFlowMixin
   ReaderLocation resolveExitLocation();
   ReaderProgressStore get progressStore;
   void clearChapterRuntimeCacheEntry(int index);
-  void updateSessionLocationForAuxiliary(ReaderLocation location);
+  void updateCommittedLocationForAuxiliary(ReaderLocation location);
   void jumpToChapterCharOffset({
     required int chapterIndex,
     required int charOffset,
@@ -134,7 +134,7 @@ mixin ReaderAuxiliaryFlowMixin
       putChapterContent: putChapterContent,
       bookDao: bookDao,
       chapterDao: chapterDao,
-      updateSessionLocation: updateSessionLocationForAuxiliary,
+      updateCommittedLocation: updateCommittedLocationForAuxiliary,
       loadChapter: loadChapter,
       jumpToChapterCharOffset:
           ({

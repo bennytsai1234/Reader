@@ -18,10 +18,11 @@ class ReaderProgressCoordinator {
   final ReaderLocation Function() _durableLocation;
   final bool Function() _shouldPersistVisiblePosition;
   final void Function(ReaderLocation location) _updateVisibleLocation;
-  final void Function(ReaderLocation location) _updateSessionLocation;
+  final void Function(ReaderLocation location) _updateCommittedLocation;
   final Future<void> Function(ReaderLocation location) _persistLocation;
 
   Timer? scrollSaveTimer;
+  ReaderLocation? _pendingDebouncedLocation;
 
   ReaderProgressCoordinator({
     required ReaderChapter? Function(int) chapterAt,
@@ -30,7 +31,7 @@ class ReaderProgressCoordinator {
     required ReaderLocation Function() durableLocation,
     required bool Function() shouldPersistVisiblePosition,
     required void Function(ReaderLocation location) updateVisibleLocation,
-    required void Function(ReaderLocation location) updateSessionLocation,
+    required void Function(ReaderLocation location) updateCommittedLocation,
     required Future<void> Function(ReaderLocation location) persistLocation,
   }) : _chapterAt = chapterAt,
        _pagesForChapter = pagesForChapter,
@@ -38,7 +39,7 @@ class ReaderProgressCoordinator {
        _durableLocation = durableLocation,
        _shouldPersistVisiblePosition = shouldPersistVisiblePosition,
        _updateVisibleLocation = updateVisibleLocation,
-       _updateSessionLocation = updateSessionLocation,
+       _updateCommittedLocation = updateCommittedLocation,
        _persistLocation = persistLocation;
 
   /// 更新可見章節位置，並在需要時觸發進度持久化（含 debounce）。
@@ -51,27 +52,29 @@ class ReaderProgressCoordinator {
     required double alignment,
     required int pageTurnMode,
     required bool isLoading,
+    required bool isAnchorConfirmed,
     required int currentPageIndex,
     required void Function(int ci, double lo, double al) updateVisible,
     required void Function(int ci) updateCurrentChapterIndex,
   }) {
     updateVisible(chapterIndex, localOffset, alignment);
 
-    if (pageTurnMode != PageAnim.scroll || isLoading) return;
-    if (!_shouldPersistVisiblePosition()) return;
-
+    if (pageTurnMode != PageAnim.scroll || isLoading || !isAnchorConfirmed) {
+      return;
+    }
     final currentLocation = _resolveScrollLocation(
       chapterIndex: chapterIndex,
       localOffset: localOffset,
     );
     _updateVisibleLocation(currentLocation);
+    if (!_shouldPersistVisiblePosition()) return;
     final durableLocation = _durableLocation();
 
     if (durableLocation == currentLocation) {
-      _updateSessionLocation(currentLocation);
+      _updateCommittedLocation(currentLocation);
       return;
     }
-    _updateSessionLocation(currentLocation);
+    _updateCommittedLocation(currentLocation);
 
     final crossThreshold = _store.shouldSaveImmediately(
       currentCharOffset: currentLocation.charOffset,
@@ -82,11 +85,18 @@ class ReaderProgressCoordinator {
 
     if (crossThreshold) {
       scrollSaveTimer?.cancel();
+      scrollSaveTimer = null;
+      _pendingDebouncedLocation = null;
       unawaited(_persistLocation(currentLocation));
     } else {
       scrollSaveTimer?.cancel();
+      _pendingDebouncedLocation = currentLocation;
       scrollSaveTimer = Timer(const Duration(milliseconds: 500), () {
-        unawaited(_persistLocation(currentLocation));
+        scrollSaveTimer = null;
+        final pendingLocation = _pendingDebouncedLocation;
+        _pendingDebouncedLocation = null;
+        if (pendingLocation == null) return;
+        unawaited(_persistLocation(pendingLocation));
       });
     }
   }
@@ -111,7 +121,7 @@ class ReaderProgressCoordinator {
               slidePages: slidePages,
             );
 
-    _updateSessionLocation(location);
+    _updateCommittedLocation(location);
 
     unawaited(_persistLocation(location));
   }
@@ -141,6 +151,19 @@ class ReaderProgressCoordinator {
   void dispose() {
     scrollSaveTimer?.cancel();
     scrollSaveTimer = null;
+    _pendingDebouncedLocation = null;
+  }
+
+  Future<ReaderLocation?> flushPendingProgress() async {
+    scrollSaveTimer?.cancel();
+    scrollSaveTimer = null;
+
+    final pendingLocation = _pendingDebouncedLocation;
+    _pendingDebouncedLocation = null;
+    if (pendingLocation == null) return null;
+
+    await _persistLocation(pendingLocation);
+    return pendingLocation;
   }
 
   ReaderLocation _resolveScrollLocation({

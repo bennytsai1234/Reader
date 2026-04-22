@@ -10,10 +10,11 @@ typedef ReaderBootstrapBatchUpdate = void Function(VoidCallback fn);
 typedef ReaderBootstrapLifecycleSetter =
     void Function(ReaderLifecycle lifecycle);
 typedef ReaderBootstrapPhaseSetter = void Function(ReaderSessionPhase phase);
+typedef ReaderBootstrapPageTurnModeGetter = int Function();
 typedef ReaderBootstrapChapterLoader =
     Future<void> Function(int chapterIndex, int preloadRadius);
 typedef ReaderBootstrapRestoreCallback =
-    void Function(int chapterIndex, int charOffset);
+    bool Function(int chapterIndex, int charOffset);
 typedef ReaderBootstrapIndexCallback = void Function(int index);
 
 class ReaderBootstrapRuntime {
@@ -25,7 +26,7 @@ class ReaderBootstrapRuntime {
 
   Future<void> bootstrap({
     required Size? currentViewSize,
-    required int pageTurnMode,
+    required ReaderBootstrapPageTurnModeGetter pageTurnMode,
     required bool isLocalBook,
     required int currentChapterIndex,
     required int visibleChapterIndex,
@@ -75,7 +76,7 @@ class ReaderBootstrapRuntime {
       await loadChapterWithPreloadRadius(
         currentChapterIndex,
         _viewportLifecycle.resolveInitialChapterPreloadRadius(
-          pageTurnMode: pageTurnMode,
+          pageTurnMode: pageTurnMode(),
           isLocalBook: isLocalBook,
         ),
       );
@@ -83,19 +84,25 @@ class ReaderBootstrapRuntime {
     }
 
     batchUpdate(() {
+      var isRestoring = false;
       bootstrapChapterWindow(currentChapterIndex);
       if (initialCharOffset > 0) {
-        restoreInitialCharOffset(currentChapterIndex, initialCharOffset);
+        isRestoring = restoreInitialCharOffset(
+          currentChapterIndex,
+          initialCharOffset,
+        );
         clearInitialCharOffset();
       }
       setLifecycle(ReaderLifecycle.ready);
-      updatePhase(ReaderSessionPhase.ready);
+      updatePhase(
+        isRestoring ? ReaderSessionPhase.restoring : ReaderSessionPhase.ready,
+      );
     });
 
     startBatteryHeartbeat();
     attachReadAloud();
     scheduleDeferredWindowWarmup(currentChapterIndex);
-    if (pageTurnMode == PageAnim.scroll) {
+    if (pageTurnMode() == PageAnim.scroll) {
       updateScrollPreloadForVisibleChapter(visibleChapterIndex);
       triggerSilentPreload();
     }

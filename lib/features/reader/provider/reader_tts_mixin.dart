@@ -192,7 +192,7 @@ mixin ReaderTtsMixin
   void saveTtsProgress() {
     readAloudController.saveProgress(
       persist: (chapterIndex, charOffset) {
-        contentCallbacksRef.updateSessionLocation?.call(
+        contentCallbacksRef.updateCommittedLocation?.call(
           ReaderLocation(chapterIndex: chapterIndex, charOffset: charOffset),
         );
         contentCallbacksRef.persistCurrentProgress?.call(

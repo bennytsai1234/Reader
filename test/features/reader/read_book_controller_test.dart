@@ -20,6 +20,7 @@ import 'package:inkpage_reader/features/reader/engine/page_view_widget.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_scroll_layout.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader/reader_bottom_menu.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader/reader_top_menu.dart';
 import 'package:provider/provider.dart';
@@ -100,6 +101,8 @@ class _PendingNavigationReaderProvider extends ReaderProvider {
 
   final List<({int chapterIndex, bool fromEnd, ReaderCommandReason reason})>
   loadRequests = [];
+  final List<Set<int>> retainedSnapshots = [];
+  final List<Set<int>> focusedRetainedSnapshots = [];
   Completer<void>? loadCompleter;
 
   @override
@@ -107,8 +110,13 @@ class _PendingNavigationReaderProvider extends ReaderProvider {
     int index, {
     bool fromEnd = false,
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
   }) async {
     loadRequests.add((chapterIndex: index, fromEnd: fromEnd, reason: reason));
+    retainedSnapshots.add(retainedChapterIndexes());
+    focusedRetainedSnapshots.add(
+      retainedChapterIndexes(focusChapterIndex: index),
+    );
     final completer = loadCompleter ??= Completer<void>();
     await completer.future;
     currentChapterIndex = index;
@@ -281,6 +289,59 @@ void main() {
       controller.dispose();
     });
 
+    test('ReaderProvider 預設會從書籍 durable location resume', () async {
+      final book =
+          _makeBook()
+            ..durChapterIndex = 2
+            ..durChapterPos = 144;
+      final controller = ReaderProvider(book: book);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(controller.currentChapterIndex, 2);
+      expect(
+        controller.committedLocation,
+        const ReaderLocation(chapterIndex: 2, charOffset: 144),
+      );
+      controller.dispose();
+    });
+
+    test('章節高度 cache 會在 runtime evict 後保留最後真實高度', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.refreshChapterRuntime(0);
+      expect(controller.cachedChapterContentHeight(0), closeTo(420.0, 0.1));
+
+      controller.chapterPagesCache.remove(0);
+      controller.refreshChapterRuntime(0);
+
+      expect(controller.chapterAt(0), isNull);
+      expect(controller.estimatedChapterContentHeight(0), closeTo(420.0, 0.1));
+      controller.dispose();
+    });
+
+    test('clearChapterRuntimeCacheEntry 會同步清掉章節高度 cache', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.refreshChapterRuntime(0);
+      expect(controller.cachedChapterContentHeight(0), isNotNull);
+
+      controller.clearChapterRuntimeCacheEntry(0);
+
+      expect(controller.chapterAt(0), isNull);
+      expect(controller.cachedChapterContentHeight(0), isNull);
+      controller.dispose();
+    });
+
     test('dispose 後 isLoading 中的章節集合仍可安全讀取', () {
       final controller = ReadBookController(book: _makeBook());
       controller.dispose();
@@ -313,7 +374,10 @@ void main() {
         BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
         BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
       ];
-      final controller = ReadBookController(book: _makeBook(), chapterIndex: 1);
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 0),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       controller.pageTurnMode = PageAnim.slide;
@@ -344,7 +408,7 @@ void main() {
         ];
         final controller = ReadBookController(
           book: _makeBook(),
-          chapterIndex: 1,
+          initialLocation: const ReaderLocation(chapterIndex: 1, charOffset: 0),
         );
         await Future<void>.delayed(const Duration(milliseconds: 10));
 
@@ -377,6 +441,90 @@ void main() {
       },
     );
 
+    test('slide 模式跨章節 jump 會以目標章節作為 presentation anchor', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.slide;
+      controller.chapterPagesCache[0] = _buildPages(0, [0], title: 'c0');
+      controller.chapterPagesCache[1] = _buildPages(1, [0, 8], title: 'c1');
+      controller.refreshChapterRuntime(0);
+      controller.refreshChapterRuntime(1);
+      controller.slidePages = [
+        ...controller.chapterPagesCache[0]!,
+        ...controller.chapterPagesCache[1]!,
+      ];
+      controller.currentChapterIndex = 0;
+      controller.visibleChapterIndex = 0;
+      controller.updateCommittedLocationForAuxiliary(
+        const ReaderLocation(chapterIndex: 0, charOffset: 8),
+      );
+
+      await controller.jumpToChapter(1);
+
+      expect(controller.currentPageIndex, 1);
+      expect(controller.consumePendingSlidePageIndex(), 1);
+      expect(
+        controller.committedLocation,
+        const ReaderLocation(chapterIndex: 1, charOffset: 0),
+      );
+      controller.dispose();
+    });
+
+    test(
+      'failure chapter load 會進入 transient viewport state，不污染 committed/durable location',
+      () async {
+        final remoteBook = Book(
+          bookUrl: 'http://test.com/book',
+          name: 'Test Book',
+          author: 'Author',
+          origin: 'source://missing',
+          durChapterIndex: 0,
+          durChapterPos: 0,
+        );
+        final controller = ReadBookController(
+          book: remoteBook,
+          initialChapters: [
+            BookChapter(
+              title: 'c0',
+              index: 0,
+              bookUrl: 'http://test.com/book',
+              content: '第一章正文',
+            ),
+            BookChapter(
+              title: 'c1',
+              index: 1,
+              bookUrl: 'http://test.com/book',
+              content: '加載章節失敗: 測試錯誤',
+            ),
+          ],
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        await controller.loadChapter(1);
+
+        expect(controller.transientViewportState?.message, '加載章節失敗: 測試錯誤');
+        expect(controller.transientViewportChapterIndex, 1);
+        expect(
+          controller.committedLocation,
+          const ReaderLocation(chapterIndex: 0, charOffset: 0),
+        );
+        expect(
+          controller.durableLocation,
+          const ReaderLocation(chapterIndex: 0, charOffset: 0),
+        );
+        expect(controller.currentChapterIndex, 0);
+        controller.dispose();
+      },
+    );
+
     test(
       'scroll 模式 charOffset repaginate 會暫時抑制 visible progress persist',
       () async {
@@ -404,6 +552,43 @@ void main() {
         controller.dispose();
       },
     );
+
+    test('scroll target 到達前不會釋放 transaction，到達後才恢復 persistence', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.refreshChapterRuntime(0);
+
+      controller.jumpToChapterCharOffset(
+        chapterIndex: 0,
+        charOffset: 8,
+        reason: ReaderCommandReason.settingsRepaginate,
+      );
+
+      expect(controller.shouldPersistVisiblePosition(), isFalse);
+
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: 0,
+        alignment: 0,
+        visibleChapterIndexes: const [0],
+      );
+      expect(controller.shouldPersistVisiblePosition(), isFalse);
+
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: controller.chapterAt(0)!.localOffsetFromCharOffset(8),
+        alignment: 0,
+        visibleChapterIndexes: const [0],
+      );
+      expect(controller.shouldPersistVisiblePosition(), isTrue);
+      controller.dispose();
+    });
 
     test('slide user page change 只會持久化一次正確進度', () async {
       _fakeChaptersFromDao = [
@@ -471,7 +656,7 @@ void main() {
       expect(pending!.chapterIndex, 0);
       expect(pending.reason, ReaderCommandReason.settingsRepaginate);
       expect(
-        controller.sessionLocation,
+        controller.committedLocation,
         const ReaderLocation(chapterIndex: 0, charOffset: 8),
       );
       controller.dispose();
@@ -503,7 +688,7 @@ void main() {
         ReaderCommandReason.settingsRepaginate,
       );
       expect(
-        controller.sessionLocation,
+        controller.committedLocation,
         const ReaderLocation(chapterIndex: 0, charOffset: 8),
       );
       controller.dispose();
@@ -626,10 +811,152 @@ void main() {
       controller.nextPage();
 
       final pending = controller.consumePendingChapterJump();
+      final separatorExtent = ReaderScrollLayout.chapterSeparatorExtent(
+        fontSize: controller.fontSize,
+        lineHeight: controller.lineHeight,
+      );
+      final expectedLocalOffset =
+          (((400 - 40 - 40) * 0.88) - (420 - 380) - separatorExtent);
       expect(pending, isNotNull);
       expect(pending!.chapterIndex, 1);
-      expect(pending.localOffset, closeTo(241.6, 0.1));
+      expect(pending.localOffset, closeTo(expectedLocalOffset, 0.1));
       expect(pending.reason, ReaderCommandReason.userScroll);
+      controller.dispose();
+    });
+
+    test('沒有 page anchor confirmation 時不會釋放 scroll transaction', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.refreshChapterRuntime(0);
+
+      controller.jumpToChapterCharOffset(
+        chapterIndex: 0,
+        charOffset: 8,
+        reason: ReaderCommandReason.settingsRepaginate,
+      );
+      expect(controller.shouldPersistVisiblePosition(), isFalse);
+
+      final localOffset = controller.chapterAt(0)!.localOffsetFromCharOffset(8);
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: localOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+        isAnchorConfirmed: false,
+      );
+
+      expect(controller.shouldPersistVisiblePosition(), isFalse);
+
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: localOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+      );
+
+      expect(controller.shouldPersistVisiblePosition(), isTrue);
+      controller.dispose();
+    });
+
+    test('scroll target 章節 ready 後會重送對應 localOffset jump', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.jumpToChapterCharOffset(
+        chapterIndex: 0,
+        charOffset: 8,
+        reason: ReaderCommandReason.settingsRepaginate,
+      );
+
+      final initialJump = controller.consumePendingChapterJump();
+      expect(initialJump, isNotNull);
+      expect(initialJump!.localOffset, 0.0);
+
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.handleChapterReadyEvent(0);
+
+      final repairedJump = controller.consumePendingChapterJump();
+      expect(repairedJump, isNotNull);
+      expect(repairedJump!.chapterIndex, 0);
+      expect(repairedJump.localOffset, closeTo(140.0, 0.1));
+      expect(repairedJump.reason, ReaderCommandReason.settingsRepaginate);
+      controller.dispose();
+    });
+
+    test('visible placeholder 章節 ready 後會依相對進度 re-anchor', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.recordEstimatedPlaceholderChapterContentHeight(
+        0,
+        contentHeight: 600,
+      );
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: 300,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+        isAnchorConfirmed: false,
+      );
+
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.handleChapterReadyEvent(0);
+
+      final correctedJump = controller.consumePendingChapterJump();
+      expect(correctedJump, isNotNull);
+      expect(correctedJump!.chapterIndex, 0);
+      expect(correctedJump.localOffset, closeTo(210.0, 0.1));
+      expect(correctedJump.reason, ReaderCommandReason.system);
+      controller.dispose();
+    });
+
+    test('使用者拖動期間會延後 visible placeholder re-anchor', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(book: _makeBook());
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.recordEstimatedPlaceholderChapterContentHeight(
+        0,
+        contentHeight: 600,
+      );
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: 300,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+        isAnchorConfirmed: false,
+      );
+      controller.setScrollInteractionActive(true);
+
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.handleChapterReadyEvent(0);
+
+      expect(controller.consumePendingChapterJump(), isNull);
+
+      controller.setScrollInteractionActive(false);
+
+      final correctedJump = controller.consumePendingChapterJump();
+      expect(correctedJump, isNotNull);
+      expect(correctedJump!.chapterIndex, 0);
+      expect(correctedJump.localOffset, closeTo(210.0, 0.1));
+      expect(correctedJump.reason, ReaderCommandReason.system);
       controller.dispose();
     });
 
@@ -646,12 +973,17 @@ void main() {
       controller.currentChapterIndex = 0;
       controller.visibleChapterIndex = 0;
 
-      final firstJump = controller.jumpToChapter(1);
+      final firstJump = controller.jumpToChapter(2);
       await Future<void>.delayed(Duration.zero);
 
       expect(controller.hasPendingChapterNavigation, isTrue);
-      expect(controller.pendingChapterNavigationIndex, 1);
+      expect(controller.pendingChapterNavigationIndex, 2);
       expect(controller.loadRequests, hasLength(1));
+      expect(controller.retainedSnapshots.single, containsAll(<int>{0, 1, 2}));
+      expect(
+        controller.focusedRetainedSnapshots.single,
+        containsAll(<int>{0, 1, 2}),
+      );
 
       unawaited(controller.nextChapter());
       await Future<void>.delayed(Duration.zero);
@@ -662,6 +994,31 @@ void main() {
 
       expect(controller.hasPendingChapterNavigation, isFalse);
       expect(controller.pendingChapterNavigationIndex, isNull);
+      controller.dispose();
+    });
+
+    test('retainedChapterIndexes 會保留 pending scroll restore target', () async {
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: List.generate(
+          6,
+          (index) => BookChapter(
+            title: 'c$index',
+            index: index,
+            bookUrl: 'http://test.com/book',
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.currentChapterIndex = 2;
+      controller.visibleChapterIndex = 2;
+      controller.registerPendingScrollRestore(chapterIndex: 5, localOffset: 42);
+
+      expect(
+        controller.retainedChapterIndexes(),
+        containsAll(<int>{1, 2, 3, 5}),
+      );
       controller.dispose();
     });
 
@@ -686,6 +1043,49 @@ void main() {
       expect(_FakeBookDao.updates.last.pos, 8);
       expect(controller.durableLocation.charOffset, 8);
       controller.dispose();
+    });
+
+    test('dispose fallback 會 flush debounce 中的 scroll progress', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.refreshChapterRuntime(0);
+      final firstOffset = controller.chapterAt(0)!.localOffsetFromCharOffset(8);
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: firstOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(_FakeBookDao.updates.last.pos, 8);
+
+      final secondOffset = controller
+          .chapterAt(0)!
+          .localOffsetFromCharOffset(16);
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: secondOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+      );
+
+      controller.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(_FakeBookDao.updates.last.pos, 16);
+      expect(
+        controller.durableLocation,
+        const ReaderLocation(chapterIndex: 0, charOffset: 16),
+      );
     });
 
     test('persistExitProgress 在 scroll 模式會保存目前可見 charOffset', () async {
@@ -719,6 +1119,58 @@ void main() {
         const ReaderLocation(chapterIndex: 0, charOffset: 8),
       );
       controller.dispose();
+    });
+
+    test('app pause 與 persistExitProgress 會共用同一條 flush，不重複寫入', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8, 16], title: 'c0');
+      controller.refreshChapterRuntime(0);
+      final firstOffset = controller.chapterAt(0)!.localOffsetFromCharOffset(8);
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: firstOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final secondOffset = controller
+          .chapterAt(0)!
+          .localOffsetFromCharOffset(16);
+      controller.handleVisibleScrollState(
+        chapterIndex: 0,
+        localOffset: secondOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [0],
+      );
+
+      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await controller.persistExitProgress();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(
+        _FakeBookDao.updates.where((update) => update.pos == 16),
+        hasLength(1),
+      );
+      expect(
+        controller.durableLocation,
+        const ReaderLocation(chapterIndex: 0, charOffset: 16),
+      );
+      controller.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(
+        _FakeBookDao.updates.where((update) => update.pos == 16),
+        hasLength(1),
+      );
     });
 
     test(

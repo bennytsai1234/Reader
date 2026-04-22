@@ -18,7 +18,7 @@ class ReaderScrollVisibilityCoordinator {
 
   ReaderScrollVisibilityUpdate evaluate({
     required List<int> visibleChapterIndexes,
-    required int currentChapterIndex,
+    required int focusChapterIndex,
     required bool Function(int chapterIndex) hasRuntimeChapter,
     required bool Function(int chapterIndex) isLoadingChapter,
   }) {
@@ -29,17 +29,17 @@ class ReaderScrollVisibilityCoordinator {
           _requestedVisibleChapterLoads.contains(visibleChapter)) {
         continue;
       }
-      if ((visibleChapter - currentChapterIndex).abs() > 1) continue;
+      if ((visibleChapter - focusChapterIndex).abs() > 1) continue;
       _requestedVisibleChapterLoads.add(visibleChapter);
       chaptersToEnsure.add(visibleChapter);
     }
 
     int? preloadCenterChapter;
     if (visibleChapterIndexes.isNotEmpty) {
-      final topChapter = visibleChapterIndexes.first;
-      if (_lastPreloadChapterIndex != topChapter || chaptersToEnsure.isNotEmpty) {
-        _lastPreloadChapterIndex = topChapter;
-        preloadCenterChapter = topChapter;
+      if (_lastPreloadChapterIndex != focusChapterIndex ||
+          chaptersToEnsure.isNotEmpty) {
+        _lastPreloadChapterIndex = focusChapterIndex;
+        preloadCenterChapter = focusChapterIndex;
       }
     }
 

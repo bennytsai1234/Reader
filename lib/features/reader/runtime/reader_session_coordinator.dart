@@ -17,7 +17,11 @@ class ReaderSessionCoordinator {
     required ReaderProgressStore store,
     required Book Function() book,
     required List<BookChapter> Function() chapters,
-    required Future<void> Function(int chapterIndex, String title, int charOffset)
+    required Future<void> Function(
+      int chapterIndex,
+      String title,
+      int charOffset,
+    )
     writeProgress,
   }) : _state = state,
        _store = store,
@@ -25,13 +29,15 @@ class ReaderSessionCoordinator {
        _chapters = chapters,
        _writeProgress = writeProgress;
 
-  ReaderLocation get sessionLocation => _state.sessionLocation;
+  ReaderLocation get committedLocation => _state.committedLocation;
   ReaderLocation get visibleLocation => _state.visibleLocation;
   ReaderLocation get durableLocation => _state.durableLocation;
+  bool get visibleConfirmed => _state.visibleConfirmed;
+  int get generation => _state.generation;
   ReaderSessionPhase get phase => _state.phase;
 
-  void updateSessionLocation(ReaderLocation location) {
-    _state.updateSessionLocation(location);
+  void updateCommittedLocation(ReaderLocation location) {
+    _state.updateCommittedLocation(location);
   }
 
   void updateVisibleLocation(ReaderLocation location) {
@@ -42,13 +48,21 @@ class ReaderSessionCoordinator {
     _state.updateDurableLocation(location);
   }
 
+  void updateVisibleConfirmed(bool confirmed) {
+    _state.updateVisibleConfirmed(confirmed);
+  }
+
+  int bumpGeneration() {
+    return _state.bumpGeneration();
+  }
+
   void updatePhase(ReaderSessionPhase phase) {
     _state.updatePhase(phase);
   }
 
   Future<void> persistLocation(ReaderLocation location) async {
     final normalized = location.normalized();
-    updateSessionLocation(normalized);
+    updateCommittedLocation(normalized);
     updateDurableLocation(normalized);
     await _store.persistCharOffset(
       write: _writeProgress,
