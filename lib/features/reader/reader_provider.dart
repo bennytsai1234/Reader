@@ -9,7 +9,6 @@ class ReaderProvider extends ReadBookController {
     ReaderOpenTarget? openTarget,
     super.initialChapters = const [],
   }) : super(
-         initialLocation:
-             (openTarget ?? ReaderOpenTarget.resume(book)).location,
+         initialAnchor: (openTarget ?? ReaderOpenTarget.resume(book)).anchor,
        );
 }

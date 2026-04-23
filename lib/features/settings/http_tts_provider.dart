@@ -28,7 +28,11 @@ class HttpTtsProvider extends ChangeNotifier {
   }
 
   Future<void> upsert(HttpTTS engine) async {
-    await _dao.upsert(engine);
+    if (engine.id <= 0) {
+      await _dao.create(engine);
+    } else {
+      await _dao.upsert(engine);
+    }
     await loadEngines();
   }
 

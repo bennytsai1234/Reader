@@ -2,6 +2,7 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter_metrics.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/read_aloud_segment.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_paragraph.dart';
 
 class ReaderChapter {
@@ -91,11 +92,24 @@ class ReaderChapter {
   }
 
   TextLine? lineAtCharOffset(int charOffset) {
+    return locateLineAtCharOffset(charOffset)?.line;
+  }
+
+  ({TextLine line, int pageIndex, int lineIndex})? locateLineAtCharOffset(
+    int charOffset,
+  ) {
     for (final line in _allTextLines) {
       if (line.image != null) continue;
       final lineEnd = line.chapterPosition + line.text.length;
       if (charOffset >= line.chapterPosition && charOffset < lineEnd) {
-        return line;
+        for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+          final page = pages[pageIndex];
+          for (var lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
+            if (identical(page.lines[lineIndex], line)) {
+              return (line: line, pageIndex: pageIndex, lineIndex: lineIndex);
+            }
+          }
+        }
       }
     }
     return null;
@@ -136,7 +150,11 @@ class ReaderChapter {
       final pageTop = metrics.pageTopOffsets[i];
       for (final line in page.lines) {
         if (line.image != null) continue;
-        if (line.chapterPosition >= charOffset) {
+        final lineStart = line.chapterPosition;
+        final lineEnd = lineStart + line.text.length;
+        final containsOffset = charOffset >= lineStart && charOffset < lineEnd;
+        final fallsBeforeLine = charOffset < lineStart;
+        if (containsOffset || fallsBeforeLine) {
           return pageTop + line.lineTop;
         }
       }
@@ -451,6 +469,44 @@ class ReaderChapter {
       text: buffer.toString(),
       baseOffset: map.first.chapterOffset,
       offsetMap: map,
+    );
+  }
+
+  ReadAloudBuildResult? buildReadAloudSegments({required int startCharOffset}) {
+    final segments = <ReadAloudSegment>[];
+    for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+      final page = pages[pageIndex];
+      for (var lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
+        final line = page.lines[lineIndex];
+        if (line.image != null) continue;
+        final lineStart = line.chapterPosition;
+        final lineEnd = lineStart + line.text.length;
+        if (lineEnd <= startCharOffset) continue;
+
+        final speakStart =
+            startCharOffset > lineStart ? startCharOffset - lineStart : 0;
+        final text =
+            speakStart <= 0 ? line.text : line.text.substring(speakStart);
+        if (text.trim().isEmpty) continue;
+
+        segments.add(
+          ReadAloudSegment(
+            chapterIndex: index,
+            pageIndex: pageIndex,
+            lineIndex: lineIndex,
+            chapterStart: lineStart + speakStart,
+            chapterEnd: lineEnd,
+            text: text,
+          ),
+        );
+      }
+    }
+
+    if (segments.isEmpty) return null;
+    return ReadAloudBuildResult(
+      chapterIndex: index,
+      startCharOffset: startCharOffset,
+      segments: List<ReadAloudSegment>.unmodifiable(segments),
     );
   }
 

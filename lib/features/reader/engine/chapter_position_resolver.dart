@@ -28,7 +28,11 @@ class ChapterPositionResolver {
       final page = pages[i];
       for (final line in page.lines) {
         if (line.image != null) continue;
-        if (line.chapterPosition >= charOffset) {
+        final lineStart = line.chapterPosition;
+        final lineEnd = lineStart + line.text.length;
+        final containsOffset = charOffset >= lineStart && charOffset < lineEnd;
+        final fallsBeforeLine = charOffset < lineStart;
+        if (containsOffset || fallsBeforeLine) {
           return tops[i] + line.lineTop;
         }
       }

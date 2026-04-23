@@ -1,16 +1,16 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
-import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_tts_position.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_aloud_controller.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_tts_engine.dart';
 
-class FakeTtsService extends ChangeNotifier implements TTSService {
-  final StreamController<String> _audioEvents =
-      StreamController<String>.broadcast();
+class FakeTtsEngine implements ReaderTtsEngine {
+  final StreamController<ReaderTtsEngineEvent> _events =
+      StreamController<ReaderTtsEngineEvent>.broadcast();
   final List<String> spokenTexts = <String>[];
   bool _isPlaying = false;
   int pauseCount = 0;
@@ -21,24 +21,13 @@ class FakeTtsService extends ChangeNotifier implements TTSService {
   bool get isPlaying => _isPlaying;
 
   @override
-  int currentWordStart = -1;
-
-  @override
-  int currentWordEnd = -1;
-
-  @override
-  String currentSpokenText = '';
-
-  @override
-  Stream<String> get audioEvents => _audioEvents.stream;
+  Stream<ReaderTtsEngineEvent> get events => _events.stream;
 
   @override
   Future<void> speak(String text) async {
     spokenTexts.add(text);
-    currentSpokenText = text;
-    currentWordStart = -1;
-    currentWordEnd = -1;
     _isPlaying = true;
+    _events.add(const ReaderTtsEngineStarted());
   }
 
   @override
@@ -53,29 +42,55 @@ class FakeTtsService extends ChangeNotifier implements TTSService {
     _isPlaying = false;
   }
 
-  @override
-  Future<void> resume() async {
-    resumeCount++;
-    _isPlaying = true;
-  }
-
   void emitProgress(int start, int end) {
-    currentWordStart = start;
-    currentWordEnd = end;
-    notifyListeners();
+    _events.add(ReaderTtsEngineProgress(wordStart: start, wordEnd: end));
   }
 
   Future<void> emitAudioEvent(String event) async {
-    _audioEvents.add(event);
+    switch (event) {
+      case 'onComplete':
+        _isPlaying = false;
+        _events.add(const ReaderTtsEngineCompleted());
+        break;
+      case 'onPlay':
+        _events.add(
+          const ReaderTtsEngineCommand(ReaderTtsEngineCommandAction.play),
+        );
+        break;
+      case 'onPause':
+        _isPlaying = false;
+        _events.add(
+          const ReaderTtsEngineCommand(ReaderTtsEngineCommandAction.pause),
+        );
+        break;
+      case 'onStop':
+        _isPlaying = false;
+        _events.add(
+          const ReaderTtsEngineCommand(ReaderTtsEngineCommandAction.stop),
+        );
+        break;
+      case 'onSkipToNext':
+        _events.add(
+          const ReaderTtsEngineCommand(ReaderTtsEngineCommandAction.skipToNext),
+        );
+        break;
+      case 'onSkipToPrevious':
+        _events.add(
+          const ReaderTtsEngineCommand(
+            ReaderTtsEngineCommandAction.skipToPrevious,
+          ),
+        );
+        break;
+    }
     await Future<void>.delayed(Duration.zero);
   }
 
   Future<void> disposeStreams() async {
-    await _audioEvents.close();
+    await _events.close();
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  Future<void> dispose() async {}
 }
 
 ReaderChapter buildChapter({
@@ -137,7 +152,7 @@ Future<void> flushAsync() async {
 void main() {
   group('ReadAloudController', () {
     test('同一行內 progress 會保留行高亮並更新詞位置', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: buildChapter(
           index: 0,
@@ -149,7 +164,7 @@ void main() {
       var pageJumpRequests = 0;
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {},
         prevChapter: ({bool fromEnd = true}) async {},
         nextPage: () async {},
@@ -184,12 +199,24 @@ void main() {
       fakeTts.emitProgress(0, 3);
       await flushAsync();
 
+      final firstPosition = controller.currentTtsPosition;
       final firstStart = controller.ttsStart;
       final firstEnd = controller.ttsEnd;
       final firstWordStart = controller.ttsWordStart;
       final firstWordEnd = controller.ttsWordEnd;
       final firstStateChanges = stateChanges;
       final firstPageJumpRequests = pageJumpRequests;
+
+      expect(firstPosition, isNotNull);
+      expect(firstPosition, isA<ReaderTtsPosition>());
+      expect(firstPosition!.chapterIndex, 0);
+      expect(firstPosition.pageIndex, 0);
+      expect(firstPosition.lineIndex, 0);
+      expect(firstPosition.highlightStart, firstStart);
+      expect(firstPosition.highlightEnd, firstEnd);
+      expect(firstPosition.wordStart, firstWordStart);
+      expect(firstPosition.wordEnd, firstWordEnd);
+      expect(firstPosition.localOffset, 0);
 
       fakeTts.emitProgress(3, 4);
       await flushAsync();
@@ -206,7 +233,7 @@ void main() {
     });
 
     test('toggle 會從目前可見位置開始朗讀，而不是從章首重播', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapter = buildChapter(
         index: 0,
         title: 'Chapter 0',
@@ -214,7 +241,7 @@ void main() {
       );
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {},
         prevChapter: ({bool fromEnd = true}) async {},
         nextPage: () async {},
@@ -242,14 +269,69 @@ void main() {
       controller.toggle();
       await flushAsync();
 
-      expect(fakeTts.spokenTexts.single, 'BBBB\nCCCCCDDDDD');
+      expect(fakeTts.spokenTexts.single, 'BBBB');
+
+      controller.detach();
+      await fakeTts.disposeStreams();
+    });
+
+    test('pause 後重新 toggle 會從目前章內 offset 重建朗讀', () async {
+      final fakeTts = FakeTtsEngine();
+      final chapter = buildChapter(
+        index: 0,
+        title: 'Chapter 0',
+        paragraphs: ['AAAAABBBBB', 'CCCCCDDDDD'],
+      );
+
+      final controller = ReadAloudController(
+        ttsEngine: fakeTts,
+        nextChapter: () async {},
+        prevChapter: ({bool fromEnd = true}) async {},
+        nextPage: () async {},
+        prevPage: () async {},
+        canMoveToNextPage: () => true,
+        canMoveToPrevPage: () => true,
+        requestJumpToPage: (_) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
+        chapterOf: (_) => chapter,
+        currentChapterIndex: () => 0,
+        visibleChapterIndex: () => 0,
+        currentCharOffset: () => 0,
+        visibleCharOffset: () => 0,
+        isScrollMode: () => true,
+        onStateChanged: () {},
+        updateMediaInfo: (_, __) {},
+      );
+
+      controller.attach();
+      controller.toggle();
+      await flushAsync();
+
+      fakeTts.emitProgress(2, 3);
+      await flushAsync();
+
+      controller.toggle();
+      await flushAsync();
+      expect(fakeTts.pauseCount, 1);
+
+      controller.toggle();
+      await flushAsync();
+
+      expect(fakeTts.resumeCount, 0);
+      expect(fakeTts.spokenTexts, hasLength(2));
+      expect(fakeTts.spokenTexts.last, 'AAA');
 
       controller.detach();
       await fakeTts.disposeStreams();
     });
 
     test('nextPageOrChapter 在有下一頁時翻頁，否則切章', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: buildChapter(
           index: 0,
@@ -269,7 +351,7 @@ void main() {
       var nextChapterCalls = 0;
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {
           nextChapterCalls++;
           currentChapterIndex = 1;
@@ -325,7 +407,7 @@ void main() {
     });
 
     test('prevPageOrChapter 在有上一頁時翻頁，否則切章', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: buildChapter(
           index: 0,
@@ -345,7 +427,7 @@ void main() {
       var prevChapterCalls = 0;
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {},
         prevChapter: ({bool fromEnd = true}) async {
           prevChapterCalls++;
@@ -401,7 +483,7 @@ void main() {
     });
 
     test('prefetched handoff 會在章節完成後接續下一章', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: buildChapter(
           index: 0,
@@ -418,7 +500,7 @@ void main() {
       var nextChapterCalls = 0;
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {
           nextChapterCalls++;
           currentChapterIndex = 1;
@@ -450,13 +532,23 @@ void main() {
       await flushAsync();
 
       expect(fakeTts.spokenTexts, hasLength(1));
+      expect(fakeTts.spokenTexts.first, 'AAAAA');
+      expect(controller.ttsChapterIndex, 0);
+
+      await fakeTts.emitAudioEvent('onComplete');
+      await flushAsync();
+
+      expect(nextChapterCalls, 0);
+      expect(fakeTts.spokenTexts, hasLength(2));
+      expect(fakeTts.spokenTexts.last, 'BBBBB');
       expect(controller.ttsChapterIndex, 0);
 
       await fakeTts.emitAudioEvent('onComplete');
       await flushAsync();
 
       expect(nextChapterCalls, 1);
-      expect(fakeTts.spokenTexts, hasLength(2));
+      expect(fakeTts.spokenTexts, hasLength(3));
+      expect(fakeTts.spokenTexts.last, 'CCCCC');
       expect(controller.ttsChapterIndex, 1);
       expect(controller.isActive, isTrue);
 
@@ -464,8 +556,58 @@ void main() {
       await fakeTts.disposeStreams();
     });
 
+    test('retainedChapterIndexes 會保留目前章與 prefetched next 章', () async {
+      final fakeTts = FakeTtsEngine();
+      final chapters = <int, ReaderChapter>{
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB'],
+        ),
+        1: buildChapter(
+          index: 1,
+          title: 'Chapter 1',
+          paragraphs: ['CCCCCDDDDD'],
+        ),
+      };
+
+      final controller = ReadAloudController(
+        ttsEngine: fakeTts,
+        nextChapter: () async {},
+        prevChapter: ({bool fromEnd = true}) async {},
+        nextPage: () async {},
+        prevPage: () async {},
+        canMoveToNextPage: () => false,
+        canMoveToPrevPage: () => false,
+        requestJumpToPage: (_) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
+        chapterOf: (chapterIndex) => chapters[chapterIndex],
+        currentChapterIndex: () => 0,
+        visibleChapterIndex: () => 0,
+        currentCharOffset: () => 0,
+        visibleCharOffset: () => 0,
+        isScrollMode: () => false,
+        onStateChanged: () {},
+        updateMediaInfo: (_, __) {},
+      );
+
+      controller.attach();
+      controller.toggle();
+      await flushAsync();
+
+      expect(controller.retainedChapterIndexes, <int>{0, 1});
+
+      controller.detach();
+      await fakeTts.disposeStreams();
+    });
+
     test('slide 模式 progress 會跳到對應頁並更新高亮', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: buildChapter(
           index: 0,
@@ -476,7 +618,7 @@ void main() {
       final pageJumpRequests = <int>[];
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {},
         prevChapter: ({bool fromEnd = true}) async {},
         nextPage: () async {},
@@ -504,17 +646,19 @@ void main() {
       controller.toggle();
       await flushAsync();
 
-      fakeTts.emitProgress(14, 16);
+      await fakeTts.emitAudioEvent('onComplete');
+      await flushAsync();
+      await fakeTts.emitAudioEvent('onComplete');
+      await flushAsync();
+
+      fakeTts.emitProgress(0, 2);
       await flushAsync();
 
       expect(controller.ttsChapterIndex, 0);
-      expect(controller.ttsStart, greaterThanOrEqualTo(0));
-      expect(controller.ttsEnd, greaterThan(controller.ttsStart));
-      expect(
-        controller.ttsWordStart,
-        greaterThanOrEqualTo(controller.ttsStart),
-      );
-      expect(controller.ttsWordEnd, greaterThan(controller.ttsWordStart));
+      expect(controller.ttsStart, 10);
+      expect(controller.ttsEnd, 15);
+      expect(controller.ttsWordStart, 10);
+      expect(controller.ttsWordEnd, 12);
       expect(pageJumpRequests, [1]);
 
       controller.detach();
@@ -522,7 +666,7 @@ void main() {
     });
 
     test('跨章 handoff 後第一筆 progress 仍會產生下一章高亮', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: buildChapter(
           index: 0,
@@ -538,7 +682,7 @@ void main() {
       var currentChapterIndex = 0;
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {
           currentChapterIndex = 1;
         },
@@ -570,6 +714,8 @@ void main() {
 
       await fakeTts.emitAudioEvent('onComplete');
       await flushAsync();
+      await fakeTts.emitAudioEvent('onComplete');
+      await flushAsync();
 
       fakeTts.emitProgress(0, 2);
       await flushAsync();
@@ -585,7 +731,7 @@ void main() {
     });
 
     test('空章節啟動 TTS 會安全回退到 idle', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: ReaderChapter(
           chapter: BookChapter(title: 'Empty', index: 0, url: 'chapter-0'),
@@ -596,7 +742,7 @@ void main() {
       };
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {},
         prevChapter: ({bool fromEnd = true}) async {},
         nextPage: () async {},
@@ -632,7 +778,7 @@ void main() {
     });
 
     test('handoff 到空下一章時會安全回退到 idle', () async {
-      final fakeTts = FakeTtsService();
+      final fakeTts = FakeTtsEngine();
       final chapters = <int, ReaderChapter>{
         0: buildChapter(
           index: 0,
@@ -649,7 +795,7 @@ void main() {
       var currentChapterIndex = 0;
 
       final controller = ReadAloudController(
-        tts: fakeTts,
+        ttsEngine: fakeTts,
         nextChapter: () async {
           currentChapterIndex = 1;
         },
@@ -679,6 +825,8 @@ void main() {
       controller.toggle();
       await flushAsync();
 
+      await fakeTts.emitAudioEvent('onComplete');
+      await flushAsync();
       await fakeTts.emitAudioEvent('onComplete');
       await flushAsync();
 

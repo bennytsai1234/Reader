@@ -1,31 +1,37 @@
+import 'package:inkpage_reader/core/constant/page_anim.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_scroll_viewport_settle_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_view_runtime_coordinator.dart';
 
 class ReaderViewportRuntimeUpdate {
   final bool didModeChange;
   final PendingScrollAction? pendingScrollAction;
   final bool shouldFollowTts;
+  final bool shouldHoldScrollUntilRestore;
+  final ReaderScrollViewportSettleState viewportSettleState;
 
   const ReaderViewportRuntimeUpdate({
     this.didModeChange = false,
     this.pendingScrollAction,
     this.shouldFollowTts = false,
+    this.shouldHoldScrollUntilRestore = false,
+    this.viewportSettleState = ReaderScrollViewportSettleState.settled,
   });
 }
 
 class ReaderViewportRuntime {
   final ReadViewRuntimeCoordinator _coordinator;
   int _lastPageTurnMode;
-  int _lastTtsFollowOffset;
+  int _lastTtsFollowKey;
   bool _isUserScrolling = false;
 
   ReaderViewportRuntime({
     required int initialPageTurnMode,
-    int initialTtsFollowOffset = -1,
+    int initialTtsFollowKey = -1,
     ReadViewRuntimeCoordinator coordinator = const ReadViewRuntimeCoordinator(),
   }) : _coordinator = coordinator,
        _lastPageTurnMode = initialPageTurnMode,
-       _lastTtsFollowOffset = initialTtsFollowOffset;
+       _lastTtsFollowKey = initialTtsFollowKey;
 
   bool get isUserScrolling => _isUserScrolling;
 
@@ -40,25 +46,35 @@ class ReaderViewportRuntime {
       didModeChange = true;
     }
 
+    final hasVisibleData = _hasVisibleData(provider);
     final pendingScrollAction = _coordinator.consumePendingScrollAction(
       provider,
     );
+    final viewportSettleState = _coordinator.resolveScrollViewportSettleState(
+      provider,
+      hasVisibleData: hasVisibleData,
+    );
     final shouldFollowTts = _coordinator.shouldFollowTts(
       provider,
-      lastTtsFollowOffset: _lastTtsFollowOffset,
+      lastTtsFollowKey: _lastTtsFollowKey,
       isUserScrolling: _isUserScrolling,
+      hasVisibleData: hasVisibleData,
     );
-    final followOffset = _currentTtsFollowOffset(provider);
+    final followKey = _currentTtsFollowKey(provider);
     if (shouldFollowTts) {
-      _lastTtsFollowOffset = followOffset;
-    } else if (followOffset < 0) {
-      _lastTtsFollowOffset = -1;
+      _lastTtsFollowKey = followKey;
+    } else if (followKey < 0) {
+      _lastTtsFollowKey = -1;
+    } else if (viewportSettleState.shouldConsumeSuppressedTtsFollow) {
+      _lastTtsFollowKey = followKey;
     }
 
     return ReaderViewportRuntimeUpdate(
       didModeChange: didModeChange,
       pendingScrollAction: pendingScrollAction,
       shouldFollowTts: shouldFollowTts,
+      shouldHoldScrollUntilRestore: viewportSettleState.shouldHoldContent,
+      viewportSettleState: viewportSettleState,
     );
   }
 
@@ -79,14 +95,18 @@ class ReaderViewportRuntime {
 
   void reset(ReaderProvider provider) {
     _isUserScrolling = false;
-    _lastTtsFollowOffset = -1;
+    _lastTtsFollowKey = -1;
     _lastPageTurnMode = provider.pageTurnMode;
     provider.setScrollInteractionActive(false);
   }
 
-  int _currentTtsFollowOffset(ReaderProvider provider) {
-    return provider.ttsWordStart >= 0
-        ? provider.ttsWordStart
-        : provider.ttsStart;
+  int _currentTtsFollowKey(ReaderProvider provider) {
+    return provider.currentTtsPosition?.followKey ?? -1;
+  }
+
+  bool _hasVisibleData(ReaderProvider provider) {
+    return provider.pageTurnMode == PageAnim.scroll
+        ? provider.pageFactory.orderedChapters.isNotEmpty
+        : provider.slidePages.isNotEmpty;
   }
 }

@@ -1,5 +1,6 @@
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_session_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
@@ -61,15 +62,20 @@ class ReaderSessionCoordinator {
   }
 
   Future<void> persistLocation(ReaderLocation location) async {
-    final normalized = location.normalized();
-    updateCommittedLocation(normalized);
-    updateDurableLocation(normalized);
+    await persistAnchor(ReaderAnchor.location(location));
+  }
+
+  Future<void> persistAnchor(ReaderAnchor anchor) async {
+    final normalized = anchor.normalized();
+    updateCommittedLocation(normalized.location);
+    updateDurableLocation(normalized.location);
     await _store.persistCharOffset(
       write: _writeProgress,
       book: _book(),
       chapters: _chapters(),
-      chapterIndex: normalized.chapterIndex,
-      charOffset: normalized.charOffset,
+      chapterIndex: normalized.location.chapterIndex,
+      charOffset: normalized.location.charOffset,
+      anchor: normalized,
     );
   }
 }

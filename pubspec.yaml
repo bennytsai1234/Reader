@@ -36,6 +36,7 @@ dependencies:
   # === Media / TTS ===
   flutter_tts: ^4.2.5
   audio_service: ^0.18.18
+  just_audio: ^0.10.5
 
   # === HTML Parsing (replaces Android Jsoup) ===
   html: ^0.15.5

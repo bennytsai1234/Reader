@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_tts_source.dart';
 import 'reader_provider.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
+import 'package:inkpage_reader/features/settings/http_tts_provider.dart';
 
 class TtsDialog extends StatelessWidget {
   const TtsDialog({super.key});
@@ -16,6 +18,7 @@ class TtsDialog extends StatelessWidget {
             providers: [
               ChangeNotifierProvider.value(value: readerProvider),
               ChangeNotifierProvider.value(value: TTSService()),
+              ChangeNotifierProvider(create: (_) => HttpTtsProvider()),
             ],
             child: const TtsDialog(),
           ),
@@ -26,9 +29,17 @@ class TtsDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<ReaderProvider>();
     final tts = context.watch<TTSService>();
+    final httpTts = context.watch<HttpTtsProvider>();
     final isActive = provider.isTtsActive;
     final isPlaying = provider.isTtsPlaying;
     final statusText = isPlaying ? '正在朗讀...' : (isActive ? '已暫停' : '未開始');
+    final availableHttpEngines =
+        httpTts.engines.where((engine) => engine.url.trim().isNotEmpty).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    final selectedSourceKey = _effectiveSourceKey(
+      provider.ttsSourceKey,
+      availableHttpEngines.map((engine) => engine.id).toSet(),
+    );
 
     return SafeArea(
       top: false,
@@ -228,6 +239,33 @@ class TtsDialog extends StatelessWidget {
               current: tts.pitch,
               format: (v) => '${v}x',
               onSelected: (v) => provider.setTtsPitch(v),
+            ),
+            const SizedBox(height: 20),
+            _buildSectionTitle('朗讀來源'),
+            const SizedBox(height: 8),
+            _buildSelectorCard(
+              context: context,
+              label: '來源',
+              value: selectedSourceKey,
+              items: <DropdownMenuItem<String?>>[
+                const DropdownMenuItem<String?>(
+                  value: ReaderTtsSourcePreference.systemKey,
+                  child: Text('系統 TTS'),
+                ),
+                ...availableHttpEngines.map(
+                  (engine) => DropdownMenuItem<String?>(
+                    value: ReaderTtsSourcePreference.httpKeyForId(engine.id),
+                    child: Text(
+                      'HTTP TTS · ${engine.name}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                provider.setTtsSourceKey(value);
+              },
             ),
             if (tts.engines.isNotEmpty || tts.voices.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -477,5 +515,14 @@ class TtsDialog extends StatelessWidget {
         },
       ),
     );
+  }
+
+  String _effectiveSourceKey(String rawKey, Set<int> availableHttpIds) {
+    final normalized = ReaderTtsSourcePreference.normalize(rawKey);
+    final httpId = ReaderTtsSourcePreference.httpIdFromKey(normalized);
+    if (httpId != null && !availableHttpIds.contains(httpId)) {
+      return ReaderTtsSourcePreference.systemKey;
+    }
+    return normalized;
   }
 }

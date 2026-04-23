@@ -1,30 +1,48 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/read_aloud_segment.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_tts_position.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_tts_engine.dart';
 
 enum ReadAloudState { idle, speaking, paused, transitioning }
 
 class ReadAloudSession {
   final int chapterIndex;
-  final String text;
-  final int baseOffset;
-  final List<({int ttsOffset, int chapterOffset})> offsetMap;
+  final List<ReadAloudSegment> segments;
+  int currentSegmentIndex;
   ReadAloudSession? prefetchedNext;
 
   ReadAloudSession({
     required this.chapterIndex,
-    required this.text,
-    required this.baseOffset,
-    required this.offsetMap,
+    required this.segments,
+    this.currentSegmentIndex = 0,
     this.prefetchedNext,
   });
+
+  ReadAloudSegment? get currentSegment {
+    if (currentSegmentIndex < 0 || currentSegmentIndex >= segments.length) {
+      return null;
+    }
+    return segments[currentSegmentIndex];
+  }
+
+  bool moveToNextSegment() {
+    if (currentSegmentIndex + 1 >= segments.length) {
+      return false;
+    }
+    currentSegmentIndex += 1;
+    return true;
+  }
+
+  int get totalSpeakLength =>
+      segments.fold(0, (sum, segment) => sum + segment.text.length);
 }
 
 class ReadAloudController extends ChangeNotifier {
-  final TTSService _tts;
+  final ReaderTtsEngine _ttsEngine;
   final Future<void> Function() nextChapter;
   final Future<void> Function({bool fromEnd}) prevChapter;
   final Future<void> Function() nextPage;
@@ -48,7 +66,7 @@ class ReadAloudController extends ChangeNotifier {
   final void Function(String title, String author) updateMediaInfo;
 
   ReadAloudController({
-    required TTSService tts,
+    required ReaderTtsEngine ttsEngine,
     required this.nextChapter,
     required this.prevChapter,
     required this.nextPage,
@@ -65,30 +83,45 @@ class ReadAloudController extends ChangeNotifier {
     required this.isScrollMode,
     required this.onStateChanged,
     required this.updateMediaInfo,
-  }) : _tts = tts;
+  }) : _ttsEngine = ttsEngine;
 
   ReadAloudState _state = ReadAloudState.idle;
   ReadAloudSession? _session;
   int _opVersion = 0;
-  int _ttsStart = -1;
-  int _ttsEnd = -1;
-  int _ttsWordStart = -1;
-  int _ttsWordEnd = -1;
+  ReaderTtsPosition? _currentTtsPosition;
   int _anchorChapterIdx = -1;
   int _lastHighlightStart = -1;
   int _lastHighlightEnd = -1;
   bool _suppressStopReset = false;
   bool _stopAfterChapter = false;
-  StreamSubscription? _audioEventSub;
+  StreamSubscription<ReaderTtsEngineEvent>? _engineEventSub;
 
-  int get ttsStart => _ttsStart;
-  int get ttsEnd => _ttsEnd;
-  int get ttsWordStart => _ttsWordStart;
-  int get ttsWordEnd => _ttsWordEnd;
-  int get ttsChapterIndex => _session?.chapterIndex ?? -1;
+  ReaderTtsPosition? get currentTtsPosition => _currentTtsPosition;
+  int get ttsStart => _currentTtsPosition?.highlightStart ?? -1;
+  int get ttsEnd => _currentTtsPosition?.highlightEnd ?? -1;
+  int get ttsWordStart => _currentTtsPosition?.wordStart ?? -1;
+  int get ttsWordEnd => _currentTtsPosition?.wordEnd ?? -1;
+  int get ttsChapterIndex =>
+      _currentTtsPosition?.chapterIndex ?? _session?.chapterIndex ?? -1;
+  Set<int> get retainedChapterIndexes {
+    final retained = <int>{};
+    final activeChapterIndex =
+        _session?.chapterIndex ?? _currentTtsPosition?.chapterIndex;
+    if (activeChapterIndex != null && activeChapterIndex >= 0) {
+      retained.add(activeChapterIndex);
+    }
+    final prefetchedChapterIndex = _session?.prefetchedNext?.chapterIndex;
+    if (prefetchedChapterIndex != null && prefetchedChapterIndex >= 0) {
+      retained.add(prefetchedChapterIndex);
+    }
+    return retained;
+  }
+
   bool get isActive =>
-      _state != ReadAloudState.idle || _tts.isPlaying || _ttsStart >= 0;
-  bool get isPlaying => _tts.isPlaying;
+      _state != ReadAloudState.idle ||
+      _ttsEngine.isPlaying ||
+      _currentTtsPosition != null;
+  bool get isPlaying => _ttsEngine.isPlaying;
   bool get stopAfterChapter => _stopAfterChapter;
 
   void setStopAfterChapter(bool value) {
@@ -97,50 +130,19 @@ class ReadAloudController extends ChangeNotifier {
   }
 
   void attach() {
-    _tts.addListener(_onTtsProgressUpdate);
-    _audioEventSub?.cancel();
-    _audioEventSub = _tts.audioEvents.listen((event) {
-      switch (event) {
-        case 'onPlay':
-          if (!_tts.isPlaying) toggle();
-          break;
-        case 'onPause':
-          if (_tts.isPlaying) {
-            _state = ReadAloudState.paused;
-            _tts.pause();
-            notifyController();
-          }
-          break;
-        case 'onStop':
-          if (_suppressStopReset) {
-            _suppressStopReset = false;
-            break;
-          }
-          _resetState();
-          notifyController();
-          break;
-        case 'onSkipToNext':
-          unawaited(nextPageOrChapter());
-          break;
-        case 'onSkipToPrevious':
-          unawaited(prevPageOrChapter());
-          break;
-        case 'onComplete':
-          unawaited(_onComplete());
-          break;
-      }
-    });
+    _engineEventSub?.cancel();
+    _engineEventSub = _ttsEngine.events.listen(_onEngineEvent);
   }
 
   void detach() {
-    _tts.removeListener(_onTtsProgressUpdate);
-    _audioEventSub?.cancel();
-    _audioEventSub = null;
+    _engineEventSub?.cancel();
+    _engineEventSub = null;
   }
 
   @override
   void dispose() {
     detach();
+    unawaited(_ttsEngine.dispose());
     super.dispose();
   }
 
@@ -160,16 +162,14 @@ class ReadAloudController extends ChangeNotifier {
 
   void _setSession({
     required int chapterIndex,
-    required String text,
-    required int baseOffset,
-    required List<({int ttsOffset, int chapterOffset})> offsetMap,
+    required List<ReadAloudSegment> segments,
+    int currentSegmentIndex = 0,
     ReadAloudSession? prefetchedNext,
   }) {
     _session = ReadAloudSession(
       chapterIndex: chapterIndex,
-      text: text,
-      baseOffset: baseOffset,
-      offsetMap: offsetMap,
+      segments: segments,
+      currentSegmentIndex: currentSegmentIndex,
       prefetchedNext: prefetchedNext,
     );
   }
@@ -180,17 +180,14 @@ class ReadAloudController extends ChangeNotifier {
   }) {
     _state = ReadAloudState.idle;
     _opVersion++;
-    _ttsStart = -1;
-    _ttsEnd = -1;
-    _ttsWordStart = -1;
-    _ttsWordEnd = -1;
+    _currentTtsPosition = null;
     _lastHighlightStart = -1;
     _lastHighlightEnd = -1;
     _session = null;
     _anchorChapterIdx = -1;
     if (stopPlayback) {
       _suppressStopReset = suppressStopReset;
-      _tts.stop();
+      unawaited(_ttsEngine.stop());
     }
   }
 
@@ -200,16 +197,36 @@ class ReadAloudController extends ChangeNotifier {
   }
 
   void toggle() {
-    if (_tts.isPlaying) {
+    if (_ttsEngine.isPlaying) {
       _state = ReadAloudState.paused;
-      _tts.pause();
+      _ttsEngine.pause();
       notifyController();
       return;
     }
     if (_state == ReadAloudState.paused ||
-        (_session != null && _ttsStart >= 0)) {
-      _state = ReadAloudState.speaking;
-      _tts.resume();
+        (_session != null && _currentTtsPosition != null)) {
+      final version = _begin(ReadAloudState.speaking);
+      final resumeChapterIndex =
+          ttsChapterIndex >= 0
+              ? ttsChapterIndex
+              : (isScrollMode()
+                  ? visibleChapterIndex()
+                  : currentChapterIndex());
+      final resumeCharOffset =
+          ttsWordStart >= 0
+              ? ttsWordStart
+              : (ttsStart >= 0
+                  ? ttsStart
+                  : (isScrollMode()
+                      ? visibleCharOffset()
+                      : currentCharOffset()));
+      unawaited(
+        _start(
+          operationVersion: version,
+          startChapterIndex: resumeChapterIndex,
+          startCharOffset: resumeCharOffset,
+        ),
+      );
       notifyController();
       return;
     }
@@ -234,15 +251,37 @@ class ReadAloudController extends ChangeNotifier {
     notifyController();
   }
 
+  @Deprecated('Use startFromOffset instead.')
   void startFromLine(int lineIndex) {
+    final targetChapterIndex =
+        isScrollMode() ? visibleChapterIndex() : currentChapterIndex();
+    final targetChapter = chapterOf(targetChapterIndex);
+    if (targetChapter == null || targetChapter.isEmpty) return;
+    final textLines = targetChapter.pages
+        .expand((page) => page.lines)
+        .where((line) => line.image == null)
+        .toList(growable: false);
+    if (lineIndex < 0 || lineIndex >= textLines.length) return;
+    startFromOffset(
+      chapterIndex: targetChapterIndex,
+      charOffset: textLines[lineIndex].chapterPosition,
+    );
+  }
+
+  void startFromOffset({int? chapterIndex, required int charOffset}) {
     _resetState(stopPlayback: true, suppressStopReset: true);
     final version = _begin(ReadAloudState.speaking);
-    unawaited(_start(startLineIndex: lineIndex, operationVersion: version));
+    unawaited(
+      _start(
+        operationVersion: version,
+        startChapterIndex: chapterIndex,
+        startCharOffset: charOffset,
+      ),
+    );
     notifyController();
   }
 
   Future<void> _start({
-    int startLineIndex = -1,
     int? operationVersion,
     int? startChapterIndex,
     int? startCharOffset,
@@ -259,21 +298,14 @@ class ReadAloudController extends ChangeNotifier {
       return;
     }
 
-    final pages = targetChapter.pages;
     final startCharPos =
-        startLineIndex >= 0
-            ? pages
-                .expand((page) => page.lines)
-                .where((line) => line.image == null)
-                .elementAt(startLineIndex)
-                .chapterPosition
-            : (startCharOffset ??
-                (isScrollMode() ? visibleCharOffset() : currentCharOffset()));
+        startCharOffset ??
+        (isScrollMode() ? visibleCharOffset() : currentCharOffset());
 
-    final data = targetChapter.buildReadAloudData(
+    final result = targetChapter.buildReadAloudSegments(
       startCharOffset: startCharPos,
     );
-    if (data == null || data.text.trim().isEmpty) {
+    if (result == null || result.segments.isEmpty) {
       _failCurrentStart(version);
       return;
     }
@@ -281,17 +313,12 @@ class ReadAloudController extends ChangeNotifier {
 
     _lastHighlightStart = -1;
     _lastHighlightEnd = -1;
-    _setSession(
-      chapterIndex: targetChapterIndex,
-      text: data.text,
-      baseOffset: data.baseOffset,
-      offsetMap: data.offsetMap,
-    );
+    _setSession(chapterIndex: targetChapterIndex, segments: result.segments);
     _anchorChapterIdx = targetChapterIndex;
 
-    await ReaderPerfTrace.measureAsync(
-      'tts speak chapter $targetChapterIndex',
-      () => _tts.speak(data.text),
+    await _speakCurrentSegment(
+      version: version,
+      traceLabel: 'tts speak chapter $targetChapterIndex',
     );
     if (!_isCurrent(version)) return;
     updateMediaInfo('', '');
@@ -304,33 +331,20 @@ class ReadAloudController extends ChangeNotifier {
     final nextIdx = anchor + 1;
     final chapter = chapterOf(nextIdx);
     if (chapter == null || chapter.isEmpty) return;
-    final data = chapter.buildReadAloudData(
+    final result = chapter.buildReadAloudSegments(
       startCharOffset:
           chapter.firstPage == null
               ? 0
               : chapter.firstCharOffset(chapter.firstPage!),
     );
-    if (data == null || data.text.trim().isEmpty) return;
+    if (result == null || result.segments.isEmpty) return;
     _session?.prefetchedNext = ReadAloudSession(
       chapterIndex: nextIdx,
-      text: data.text,
-      baseOffset: data.baseOffset,
-      offsetMap: data.offsetMap,
+      segments: result.segments,
     );
     ReaderPerfTrace.mark(
-      'tts prefetched next chapter $nextIdx textLength=${data.text.length}',
+      'tts prefetched next chapter $nextIdx segments=${result.segments.length} textLength=${_session?.prefetchedNext?.totalSpeakLength ?? 0}',
     );
-  }
-
-  int _chapterOffsetFromTtsOffset(ReadAloudSession session, int rawStart) {
-    var chapterOffset = session.baseOffset;
-    for (final entry in session.offsetMap.reversed) {
-      if (rawStart >= entry.ttsOffset) {
-        chapterOffset = entry.chapterOffset + (rawStart - entry.ttsOffset);
-        break;
-      }
-    }
-    return chapterOffset;
   }
 
   void _jumpToChapterOffset({
@@ -352,73 +366,179 @@ class ReadAloudController extends ChangeNotifier {
     requestJumpToPage(resolvedPageIndex);
   }
 
-  void _onTtsProgressUpdate() {
-    if (!_tts.isPlaying || _session == null || _session!.offsetMap.isEmpty) {
-      return;
-    }
-    final rawStart = _tts.currentWordStart;
-    final rawEnd = _tts.currentWordEnd;
-    if (rawStart < 0) return;
-
-    final chapterBase = _chapterOffsetFromTtsOffset(_session!, rawStart);
-    final chapterWordEnd =
-        rawEnd <= rawStart
-            ? chapterBase + 1
-            : _chapterOffsetFromTtsOffset(
-              _session!,
-              rawEnd,
-            ).clamp(chapterBase + 1, double.infinity).toInt();
-
-    final chapter = chapterOf(ttsChapterIndex);
+  Future<void> _speakCurrentSegment({
+    required int version,
+    required String traceLabel,
+  }) async {
+    final session = _session;
+    final segment = session?.currentSegment;
+    if (session == null || segment == null || !_isCurrent(version)) return;
+    final chapter = chapterOf(session.chapterIndex);
     if (chapter == null) return;
-    final line = chapter.lineAtCharOffset(chapterBase);
+    _applyTtsPosition(
+      chapter: chapter,
+      segment: segment,
+      chapterBase: segment.chapterStart,
+      chapterWordEnd: segment.chapterStart + 1,
+    );
+    await ReaderPerfTrace.measureAsync(
+      '$traceLabel segment ${session.currentSegmentIndex}',
+      () => _ttsEngine.speak(segment.text),
+    );
+  }
+
+  void _applyTtsPosition({
+    required ReaderChapter chapter,
+    ReadAloudSegment? segment,
+    required int chapterBase,
+    required int chapterWordEnd,
+  }) {
+    final safeWordEnd =
+        chapterWordEnd <= chapterBase ? chapterBase + 1 : chapterWordEnd;
+    final line =
+        chapter.lineAtCharOffset(chapterBase) ??
+        chapter.lineAtCharOffset(safeWordEnd - 1);
     final highlightStart = line?.chapterPosition ?? chapterBase;
     final highlightEnd =
-        line == null ? chapterWordEnd : line.chapterPosition + line.text.length;
+        line == null ? safeWordEnd : line.chapterPosition + line.text.length;
+    final lineChanged =
+        _lastHighlightStart != highlightStart ||
+        _lastHighlightEnd != highlightEnd;
 
     if (_lastHighlightStart >= 0 &&
         _lastHighlightStart == highlightStart &&
         _lastHighlightEnd == highlightEnd &&
-        _ttsWordStart == chapterBase &&
-        _ttsWordEnd == chapterWordEnd) {
+        ttsWordStart == chapterBase &&
+        ttsWordEnd == safeWordEnd) {
       return;
     }
 
+    final resolvedPageIndex =
+        segment?.pageIndex ?? chapter.getPageIndexByCharIndex(highlightStart);
+    final locatedLine =
+        segment == null ? chapter.locateLineAtCharOffset(highlightStart) : null;
+    final resolvedLineIndex =
+        segment?.lineIndex ?? locatedLine?.lineIndex ?? -1;
+    final localOffset = chapter.localOffsetFromCharOffset(highlightStart);
+    final position = ReaderTtsPosition(
+      chapterIndex: chapter.index,
+      pageIndex: resolvedPageIndex,
+      lineIndex: resolvedLineIndex,
+      highlightStart: highlightStart,
+      highlightEnd: highlightEnd,
+      wordStart: chapterBase,
+      wordEnd: safeWordEnd,
+      localOffset: localOffset,
+      followKey: Object.hash(chapter.index, highlightStart, highlightEnd),
+    );
+
     _lastHighlightStart = highlightStart;
     _lastHighlightEnd = highlightEnd;
-    _ttsStart = highlightStart;
-    _ttsEnd = highlightEnd;
-    _ttsWordStart = chapterBase;
-    _ttsWordEnd = chapterWordEnd;
+    _currentTtsPosition = position;
 
     if (!isScrollMode()) {
-      final targetPageIndex = chapter.getPageIndexByCharIndex(chapterBase);
+      final targetPageIndex = position.pageIndex;
       final visiblePageIndex =
           currentChapterIndex() == ttsChapterIndex
               ? chapter.getPageIndexByCharIndex(currentCharOffset())
               : -1;
-      if (visiblePageIndex == targetPageIndex) {
-        notifyController();
-        return;
+      if (lineChanged && visiblePageIndex != targetPageIndex) {
+        _jumpToChapterOffset(
+          chapter: chapter,
+          chapterOffset: chapterBase,
+          pageIndex: targetPageIndex,
+        );
       }
-      _jumpToChapterOffset(
-        chapter: chapter,
-        chapterOffset: chapterBase,
-        pageIndex: targetPageIndex,
-      );
     }
     notifyController();
+  }
+
+  void _onEngineEvent(ReaderTtsEngineEvent event) {
+    if (event is ReaderTtsEngineProgress) {
+      _onTtsProgressUpdate(wordStart: event.wordStart, wordEnd: event.wordEnd);
+      return;
+    }
+    if (event is ReaderTtsEngineCompleted) {
+      unawaited(_onComplete());
+      return;
+    }
+    if (event is! ReaderTtsEngineCommand) return;
+
+    switch (event.action) {
+      case ReaderTtsEngineCommandAction.play:
+        if (!_ttsEngine.isPlaying) toggle();
+        return;
+      case ReaderTtsEngineCommandAction.pause:
+        if (_ttsEngine.isPlaying) {
+          _state = ReadAloudState.paused;
+          _ttsEngine.pause();
+          notifyController();
+        }
+        return;
+      case ReaderTtsEngineCommandAction.stop:
+        if (_suppressStopReset) {
+          _suppressStopReset = false;
+          return;
+        }
+        _resetState();
+        notifyController();
+        return;
+      case ReaderTtsEngineCommandAction.skipToNext:
+        unawaited(nextPageOrChapter());
+        return;
+      case ReaderTtsEngineCommandAction.skipToPrevious:
+        unawaited(prevPageOrChapter());
+        return;
+    }
+  }
+
+  void _onTtsProgressUpdate({required int wordStart, required int wordEnd}) {
+    final session = _session;
+    final segment = session?.currentSegment;
+    if (!_ttsEngine.isPlaying || session == null || segment == null) return;
+    final rawStart = wordStart;
+    final rawEnd = wordEnd;
+    if (rawStart < 0) return;
+
+    final normalizedStart = rawStart.clamp(0, segment.text.length).toInt();
+    final normalizedEnd = rawEnd.clamp(0, segment.text.length).toInt();
+    final chapterBase = segment.chapterStart + normalizedStart;
+    final chapterWordEnd =
+        normalizedEnd <= normalizedStart
+            ? (chapterBase + 1 <= segment.chapterEnd
+                ? chapterBase + 1
+                : segment.chapterEnd)
+            : (segment.chapterStart + normalizedEnd)
+                .clamp(chapterBase + 1, segment.chapterEnd)
+                .toInt();
+
+    final chapter = chapterOf(ttsChapterIndex);
+    if (chapter == null) return;
+    _applyTtsPosition(
+      chapter: chapter,
+      segment: segment,
+      chapterBase: chapterBase,
+      chapterWordEnd: chapterWordEnd,
+    );
   }
 
   Future<void> _onComplete() async {
     if (_state != ReadAloudState.speaking) return;
     final version = _opVersion;
+    if (_session?.moveToNextSegment() ?? false) {
+      await _speakCurrentSegment(
+        version: version,
+        traceLabel: 'tts speak chapter ${_session!.chapterIndex}',
+      );
+      if (_isCurrent(version)) {
+        notifyController();
+      }
+      return;
+    }
+
     _state = ReadAloudState.transitioning;
     try {
-      _ttsStart = -1;
-      _ttsEnd = -1;
-      _ttsWordStart = -1;
-      _ttsWordEnd = -1;
+      _currentTtsPosition = null;
       _lastHighlightStart = -1;
       _lastHighlightEnd = -1;
       notifyController();
@@ -438,14 +558,13 @@ class ReadAloudController extends ChangeNotifier {
         _anchorChapterIdx = prefetched.chapterIndex;
         _setSession(
           chapterIndex: prefetched.chapterIndex,
-          text: prefetched.text,
-          baseOffset: prefetched.baseOffset,
-          offsetMap: prefetched.offsetMap,
+          segments: prefetched.segments,
+          currentSegmentIndex: prefetched.currentSegmentIndex,
         );
         _state = ReadAloudState.speaking;
-        await ReaderPerfTrace.measureAsync(
-          'tts handoff speak chapter ${prefetched.chapterIndex}',
-          () => _tts.speak(prefetched.text),
+        await _speakCurrentSegment(
+          version: version,
+          traceLabel: 'tts handoff speak chapter ${prefetched.chapterIndex}',
         );
         if (!_isCurrent(version)) return;
         _prefetchNextChapter();
@@ -463,15 +582,15 @@ class ReadAloudController extends ChangeNotifier {
   Future<void> nextPageOrChapter() async {
     final version = _begin(ReadAloudState.transitioning);
     _suppressStopReset = true;
-    await _tts.stop();
+    await _ttsEngine.stop();
     if (isScrollMode()) {
       final chapterIndex =
           ttsChapterIndex >= 0 ? ttsChapterIndex : visibleChapterIndex();
       final chapter = chapterOf(chapterIndex);
       final currentOffset =
-          _ttsWordStart >= 0
-              ? _ttsWordStart
-              : (_ttsStart >= 0 ? _ttsStart : visibleCharOffset());
+          ttsWordStart >= 0
+              ? ttsWordStart
+              : (ttsStart >= 0 ? ttsStart : visibleCharOffset());
       final nextOffset = chapter?.nextPageStartCharOffset(currentOffset) ?? -1;
       final nextPageIndex =
           nextOffset >= 0 ? chapter!.getPageIndexByCharIndex(nextOffset) : -1;
@@ -510,15 +629,15 @@ class ReadAloudController extends ChangeNotifier {
   Future<void> prevPageOrChapter() async {
     final version = _begin(ReadAloudState.transitioning);
     _suppressStopReset = true;
-    await _tts.stop();
+    await _ttsEngine.stop();
     if (isScrollMode()) {
       final chapterIndex =
           ttsChapterIndex >= 0 ? ttsChapterIndex : visibleChapterIndex();
       final chapter = chapterOf(chapterIndex);
       final currentOffset =
-          _ttsWordStart >= 0
-              ? _ttsWordStart
-              : (_ttsStart >= 0 ? _ttsStart : visibleCharOffset());
+          ttsWordStart >= 0
+              ? ttsWordStart
+              : (ttsStart >= 0 ? ttsStart : visibleCharOffset());
       final prevOffset = chapter?.prevPageStartCharOffset(currentOffset) ?? -1;
       final prevPageIndex =
           prevOffset >= 0 ? chapter!.getPageIndexByCharIndex(prevOffset) : -1;
@@ -557,11 +676,11 @@ class ReadAloudController extends ChangeNotifier {
   Future<void> saveProgress({
     required void Function(int chapterIndex, int charOffset) persist,
   }) async {
-    if (_tts.isPlaying || _ttsStart >= 0 || _ttsWordStart >= 0) {
-      final savedStart = _ttsWordStart >= 0 ? _ttsWordStart : _ttsStart;
+    if (_ttsEngine.isPlaying || ttsStart >= 0 || ttsWordStart >= 0) {
+      final savedStart = ttsWordStart >= 0 ? ttsWordStart : ttsStart;
       final chapterIndex =
           ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex();
-      await _tts.stop();
+      await _ttsEngine.stop();
       _resetState();
       if (savedStart >= 0) {
         persist(chapterIndex, savedStart);

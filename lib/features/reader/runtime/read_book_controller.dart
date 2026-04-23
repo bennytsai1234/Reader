@@ -32,6 +32,7 @@ import 'package:inkpage_reader/features/reader/runtime/reader_restore_coordinato
 import 'package:inkpage_reader/features/reader/runtime/reader_scroll_layout.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_scroll_visibility_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_display_coordinator.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_session_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_command.dart';
@@ -39,6 +40,10 @@ import 'package:inkpage_reader/features/reader/runtime/reader_page_exit_coordina
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_session_facade.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_session_runtime.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_tts_engine_factory.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_tts_source.dart';
+import 'package:inkpage_reader/features/reader/runtime/switchable_tts_engine.dart';
+import 'package:inkpage_reader/features/reader/runtime/system_tts_engine.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_viewport_lifecycle_runtime.dart';
 import 'package:inkpage_reader/shared/theme/app_theme.dart';
 
@@ -69,6 +74,8 @@ class ReadBookController extends ReaderProviderBase
       ReaderScrollVisibilityCoordinator();
   final ReaderDisplayCoordinator _displayCoordinator =
       const ReaderDisplayCoordinator();
+  late final SwitchableReaderTtsEngine _ttsEngineHost;
+  late final ReaderTtsEngineFactory _ttsEngineFactory;
   late final ReaderProgressCoordinator _progressCoordinator;
   late final ReaderSessionState _sessionState;
   late final ReaderSessionCoordinator _sessionCoordinator;
@@ -82,6 +89,7 @@ class ReadBookController extends ReaderProviderBase
   int _lastReadRecordStamp = DateTime.now().millisecondsSinceEpoch;
   bool _lastVisibleScrollAnchorConfirmed = true;
   int? _pendingVisiblePlaceholderReanchorChapterIndex;
+  late final ReaderAnchor _initialAnchor;
 
   /// 初始章節字元偏移（由呼叫方傳入，用於還原閱讀位置）
   int initialCharOffset = 0;
@@ -89,15 +97,21 @@ class ReadBookController extends ReaderProviderBase
   ReadBookController({
     required Book book,
     ReaderLocation? initialLocation,
+    ReaderAnchor? initialAnchor,
     List<BookChapter> initialChapters = const [],
   }) : super(book) {
-    final initialReaderLocation =
-        (initialLocation ??
-                ReaderLocation(
-                  chapterIndex: book.durChapterIndex,
-                  charOffset: book.durChapterPos,
+    _initialAnchor =
+        (initialAnchor ??
+                ReaderAnchor.location(
+                  initialLocation ??
+                      ReaderLocation(
+                        chapterIndex: book.durChapterIndex,
+                        charOffset: book.durChapterPos,
+                      ),
                 ))
             .normalized();
+    final initialReaderLocation =
+        (initialLocation ?? _initialAnchor.location).normalized();
     currentChapterIndex = initialReaderLocation.chapterIndex;
     visibleChapterIndex = initialReaderLocation.chapterIndex;
     initialCharOffset = initialReaderLocation.charOffset;
@@ -123,6 +137,10 @@ class ReadBookController extends ReaderProviderBase
       pagesForChapter: pagesForChapter,
       slidePages: () => slidePages,
     );
+    _ttsEngineHost = SwitchableReaderTtsEngine(
+      delegate: SystemTtsEngine(tts: TTSService()),
+    );
+    _ttsEngineFactory = ReaderTtsEngineFactory(ttsService: TTSService());
     _sessionRuntime = ReaderSessionRuntime(
       runtimeController: _runtimeController,
       committedLocation: () => committedLocation,
@@ -252,6 +270,9 @@ class ReadBookController extends ReaderProviderBase
   @override
   int get currentNavigationGeneration => _sessionCoordinator.generation;
   ReaderSessionPhase get sessionPhase => _sessionCoordinator.phase;
+  bool get hasActiveNavigation => _navigation.hasActiveNavigation;
+  bool get hasPendingVisiblePlaceholderReanchor =>
+      _pendingVisiblePlaceholderReanchorChapterIndex != null;
   String? get currentChapterFailureMessage =>
       chapterFailureMessage(currentChapterIndex);
 
@@ -259,6 +280,7 @@ class ReadBookController extends ReaderProviderBase
   Set<int> retainedChapterIndexes({int? focusChapterIndex}) {
     if (chapters.isEmpty) return const <int>{};
     final retained = <int>{};
+    final shouldKeepNeighborhoodTargets = pageTurnMode == PageAnim.scroll;
 
     void keepNeighborhood(int chapterIndex) {
       if (chapterIndex < 0 || chapterIndex >= chapters.length) return;
@@ -282,11 +304,27 @@ class ReadBookController extends ReaderProviderBase
       retained.add(chapterIndex);
     }
 
+    void keepTarget(int? chapterIndex) {
+      if (chapterIndex == null ||
+          chapterIndex < 0 ||
+          chapterIndex >= chapters.length) {
+        return;
+      }
+      if (shouldKeepNeighborhoodTargets) {
+        keepNeighborhood(chapterIndex);
+        return;
+      }
+      keepChapter(chapterIndex);
+    }
+
     keepNeighborhood(currentChapterIndex);
     keepNeighborhood(visibleChapterIndex);
-    keepChapter(focusChapterIndex);
-    keepChapter(_navigation.activeNavigationTargetLocation?.chapterIndex);
-    keepChapter(pendingScrollRestoreChapterIndex);
+    keepTarget(focusChapterIndex);
+    keepTarget(_navigation.activeNavigationTargetLocation?.chapterIndex);
+    keepTarget(pendingScrollRestoreChapterIndex);
+    for (final chapterIndex in readAloudController.retainedChapterIndexes) {
+      keepChapter(chapterIndex);
+    }
     return retained;
   }
 
@@ -393,7 +431,7 @@ class ReadBookController extends ReaderProviderBase
 
   ReadAloudController _buildReadAloudController() {
     return ReadAloudController(
-      tts: TTSService(),
+      ttsEngine: _ttsEngineHost,
       nextChapter: () => nextChapter(reason: ReaderCommandReason.tts),
       prevChapter:
           ({bool fromEnd = true}) =>
@@ -423,6 +461,32 @@ class ReadBookController extends ReaderProviderBase
       onStateChanged: notifyIfActive,
       updateMediaInfo: updateTtsMediaInfo,
     );
+  }
+
+  @override
+  Future<void> loadTtsSettings() async {
+    await super.loadTtsSettings();
+    await _configureTtsEngine();
+  }
+
+  @override
+  Future<void> reconfigureTtsEngine() => _configureTtsEngine();
+
+  Future<void> _configureTtsEngine() async {
+    final engine = await _ttsEngineFactory.create(
+      overrideSourceKey: _resolveTtsSourceOverrideKey() ?? ttsSourceKey,
+    );
+    await _ttsEngineHost.setDelegate(engine);
+  }
+
+  String? _resolveTtsSourceOverrideKey() {
+    final overrideKey = book.readConfig?.ttsEngine?.trim();
+    if (overrideKey == null || overrideKey.isEmpty) return null;
+    final normalized = ReaderTtsSourcePreference.normalize(overrideKey);
+    return normalized == ReaderTtsSourcePreference.systemKey &&
+            overrideKey != ReaderTtsSourcePreference.systemKey
+        ? null
+        : normalized;
   }
 
   void jumpToSlidePage(
@@ -485,6 +549,37 @@ class ReadBookController extends ReaderProviderBase
       alignment: alignment,
       localOffset: localOffset,
       reason: reason,
+    );
+  }
+
+  ReaderScrollViewportCommand buildScrollViewportCommand({
+    required int chapterIndex,
+    required double localOffset,
+    double alignment = 0.0,
+    ReaderCommandReason reason = ReaderCommandReason.system,
+    ReaderAnchor? anchor,
+  }) {
+    final targetLocation = _runtimeController.resolveVisibleScrollLocation(
+      chapterIndex: chapterIndex,
+      localOffset: localOffset,
+    );
+    final resolvedAnchor = (anchor ?? ReaderAnchor.location(targetLocation))
+        .normalized()
+        .copyWith(
+          location: targetLocation,
+          pageIndexSnapshot: _runtimeController.pageIndexForLocation(
+            targetLocation,
+          ),
+          localOffsetSnapshot: localOffset,
+        );
+    return ReaderScrollViewportCommand(
+      anchor: resolvedAnchor,
+      reason: reason,
+      target: ReaderScrollTarget(
+        chapterIndex: chapterIndex,
+        localOffset: localOffset,
+        alignment: alignment,
+      ),
     );
   }
 
@@ -715,16 +810,29 @@ class ReadBookController extends ReaderProviderBase
   }
 
   int registerPendingScrollRestore({
-    required int chapterIndex,
-    required double localOffset,
+    int? chapterIndex,
+    int charOffset = 0,
+    double? localOffset,
+    ReaderAnchor? anchor,
   }) {
+    final resolvedAnchor = anchor?.normalized();
+    final resolvedLocalOffset =
+        localOffset ??
+        resolvedAnchor?.localOffsetSnapshot ??
+        (resolvedAnchor != null
+            ? _runtimeController.localOffsetForLocation(resolvedAnchor.location)
+            : 0.0);
     return _restore.registerPendingScrollRestore(
+      anchor: resolvedAnchor,
       chapterIndex: chapterIndex,
-      localOffset: localOffset,
+      charOffset: charOffset,
+      localOffset: resolvedLocalOffset,
     );
   }
 
   int get pendingScrollRestoreToken => _restore.pendingScrollRestoreToken;
+  ReaderAnchor? get pendingScrollRestoreAnchor =>
+      _restore.pendingScrollRestoreAnchor;
   int? get pendingScrollRestoreChapterIndex =>
       _restore.pendingScrollRestoreChapterIndex;
   double? get pendingScrollRestoreLocalOffset =>
@@ -735,7 +843,7 @@ class ReadBookController extends ReaderProviderBase
   bool matchesPendingScrollRestore(int token) =>
       _restore.matchesPendingScrollRestore(token);
 
-  ({int token, int chapterIndex, double localOffset})?
+  ({int token, ReaderAnchor anchor, int chapterIndex, double localOffset})?
   dispatchPendingScrollRestore() {
     return _restore.dispatchPendingScrollRestore();
   }
@@ -1664,7 +1772,16 @@ class ReadBookController extends ReaderProviderBase
           chapterIndex: chapterIndex,
           charOffset: charOffset,
         ).normalized();
+    final baseAnchor =
+        _initialAnchor.location == location
+            ? _initialAnchor
+            : ReaderAnchor.location(location);
     final localOffset = _runtimeController.localOffsetForLocation(location);
+    final restoreAnchor = baseAnchor.copyWith(
+      location: location,
+      pageIndexSnapshot: _runtimeController.pageIndexForLocation(location),
+      localOffsetSnapshot: localOffset,
+    );
     final transaction = _dispatchNavigationCommand(
       ReaderNavigationCommand.chapter(
         reason: ReaderCommandReason.restore,
@@ -1677,10 +1794,7 @@ class ReadBookController extends ReaderProviderBase
     if (transaction == null) {
       return;
     }
-    final restoreToken = registerPendingScrollRestore(
-      chapterIndex: location.chapterIndex,
-      localOffset: localOffset,
-    );
+    final restoreToken = registerPendingScrollRestore(anchor: restoreAnchor);
     _navigation.attachRestoreTokenToActiveNavigation(
       restoreToken,
       reason: ReaderCommandReason.restore,

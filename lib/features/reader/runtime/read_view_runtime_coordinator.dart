@@ -1,16 +1,17 @@
 import 'package:inkpage_reader/core/constant/page_anim.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_scroll_viewport_settle_state.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_session_state.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_command.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
 
 typedef PendingScrollAction =
     ({
-      int chapterIndex,
-      double localOffset,
+      ReaderScrollViewportCommand command,
       int navigationToken,
       int restoreToken,
       bool isRestore,
-      ReaderCommandReason reason,
     });
 
 class ReadViewRuntimeCoordinator {
@@ -32,38 +33,49 @@ class ReadViewRuntimeCoordinator {
     final pendingChapterJump = provider.consumePendingChapterJump();
     if (pendingChapterJump != null) {
       return (
-        chapterIndex: pendingChapterJump.chapterIndex,
-        localOffset: pendingChapterJump.localOffset,
+        command: provider.buildScrollViewportCommand(
+          chapterIndex: pendingChapterJump.chapterIndex,
+          localOffset: pendingChapterJump.localOffset,
+          alignment: pendingChapterJump.alignment,
+          reason: pendingChapterJump.reason,
+        ),
         navigationToken: provider.activeNavigationToken ?? -1,
         restoreToken: -1,
         isRestore: false,
-        reason: pendingChapterJump.reason,
       );
     }
 
     final pendingRestore = provider.dispatchPendingScrollRestore();
     if (pendingRestore == null) return null;
     return (
-      chapterIndex: pendingRestore.chapterIndex,
-      localOffset: pendingRestore.localOffset,
+      command: provider.buildScrollViewportCommand(
+        chapterIndex: pendingRestore.chapterIndex,
+        localOffset: pendingRestore.localOffset,
+        reason: ReaderCommandReason.restore,
+        anchor: pendingRestore.anchor,
+      ),
       navigationToken: provider.activeNavigationToken ?? -1,
       restoreToken: pendingRestore.token,
       isRestore: true,
-      reason: ReaderCommandReason.restore,
     );
   }
 
   bool shouldFollowTts(
     ReaderProvider provider, {
-    required int lastTtsFollowOffset,
+    required int lastTtsFollowKey,
     required bool isUserScrolling,
+    required bool hasVisibleData,
   }) {
-    final followOffset =
-        provider.ttsWordStart >= 0 ? provider.ttsWordStart : provider.ttsStart;
+    final followKey = provider.currentTtsPosition?.followKey ?? -1;
+    final settleState = resolveScrollViewportSettleState(
+      provider,
+      hasVisibleData: hasVisibleData,
+    );
     return provider.pageTurnMode == PageAnim.scroll &&
-        followOffset >= 0 &&
-        followOffset != lastTtsFollowOffset &&
-        !isUserScrolling;
+        followKey >= 0 &&
+        followKey != lastTtsFollowKey &&
+        !isUserScrolling &&
+        !settleState.shouldSuppressTtsFollow;
   }
 
   bool shouldWaitForFirstContent(
@@ -79,8 +91,44 @@ class ReadViewRuntimeCoordinator {
   bool shouldHoldScrollUntilRestored(
     ReaderProvider provider, {
     required bool hasVisibleData,
+  }) =>
+      resolveScrollViewportSettleState(
+        provider,
+        hasVisibleData: hasVisibleData,
+      ).shouldHoldContent;
+
+  bool shouldSuppressScrollFollow(
+    ReaderProvider provider, {
+    required bool hasVisibleData,
+  }) =>
+      resolveScrollViewportSettleState(
+        provider,
+        hasVisibleData: hasVisibleData,
+      ).shouldSuppressTtsFollow;
+
+  ReaderScrollViewportSettleState resolveScrollViewportSettleState(
+    ReaderProvider provider, {
+    required bool hasVisibleData,
   }) {
-    return false;
+    if (provider.pageTurnMode != PageAnim.scroll) {
+      return ReaderScrollViewportSettleState.settled;
+    }
+    if (provider.hasPendingScrollRestore) {
+      return ReaderScrollViewportSettleState.pendingRestore;
+    }
+    if (provider.sessionPhase == ReaderSessionPhase.restoring &&
+        (!provider.visibleConfirmed || !hasVisibleData)) {
+      return ReaderScrollViewportSettleState.awaitingVisibleConfirmation;
+    }
+    if (provider.hasActiveNavigation) {
+      return ReaderScrollViewportSettleState.pendingNavigation(
+        provider.activeCommandReason,
+      );
+    }
+    if (provider.hasPendingVisiblePlaceholderReanchor) {
+      return ReaderScrollViewportSettleState.pendingPlaceholderReanchor;
+    }
+    return ReaderScrollViewportSettleState.settled;
   }
 
   bool shouldRestoreSlidePage(ReaderProvider provider) {

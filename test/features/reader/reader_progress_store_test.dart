@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 
@@ -50,9 +51,45 @@ void main() {
         store.lastSavedLocation,
         const ReaderLocation(chapterIndex: 1, charOffset: 345),
       );
+      expect(
+        store.lastSavedAnchor,
+        const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 1, charOffset: 345),
+        ),
+      );
       expect(savedChapter, 1);
       expect(savedTitle, 'c1');
       expect(savedOffset, 345);
+    });
+
+    test('persistCharOffset 會保留提供的 anchor snapshot', () async {
+      final store = ReaderProgressStore();
+      final book = Book(name: 'book', author: 'author', bookUrl: 'url');
+      final chapters = [BookChapter(title: 'c0', index: 0)];
+
+      await store.persistCharOffset(
+        write: (_, __, ___) async {},
+        book: book,
+        chapters: chapters,
+        chapterIndex: 0,
+        charOffset: 120,
+        anchor: const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 0, charOffset: 1),
+          pageIndexSnapshot: 3,
+          localOffsetSnapshot: 240,
+          layoutSignature: 'sig',
+        ),
+      );
+
+      expect(
+        store.lastSavedAnchor,
+        const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 0, charOffset: 120),
+          pageIndexSnapshot: 3,
+          localOffsetSnapshot: 240,
+          layoutSignature: 'sig',
+        ),
+      );
     });
 
     test('persistCharOffset 寫入失敗時不拋出例外（並靜默記錄）', () async {
@@ -81,6 +118,31 @@ void main() {
       expect(
         store.lastSavedLocation,
         const ReaderLocation(chapterIndex: 0, charOffset: 100),
+      );
+    });
+
+    test('rememberAnchor 會同步更新 lastSavedAnchor 與 lastSavedLocation', () {
+      final store = ReaderProgressStore();
+
+      store.rememberAnchor(
+        const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 2, charOffset: 640),
+          pageIndexSnapshot: 4,
+          localOffsetSnapshot: 512,
+        ),
+      );
+
+      expect(
+        store.lastSavedAnchor,
+        const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 2, charOffset: 640),
+          pageIndexSnapshot: 4,
+          localOffsetSnapshot: 512,
+        ),
+      );
+      expect(
+        store.lastSavedLocation,
+        const ReaderLocation(chapterIndex: 2, charOffset: 640),
       );
     });
 

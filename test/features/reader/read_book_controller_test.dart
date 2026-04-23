@@ -1013,12 +1013,50 @@ void main() {
 
       controller.currentChapterIndex = 2;
       controller.visibleChapterIndex = 2;
+      controller.pageTurnMode = PageAnim.scroll;
       controller.registerPendingScrollRestore(chapterIndex: 5, localOffset: 42);
 
       expect(
         controller.retainedChapterIndexes(),
-        containsAll(<int>{1, 2, 3, 5}),
+        containsAll(<int>{1, 2, 3, 4, 5}),
       );
+      controller.dispose();
+    });
+
+    test('retainedChapterIndexes 會保留 TTS 目前章與下一章', () async {
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: List.generate(
+          5,
+          (index) => BookChapter(
+            title: 'c$index',
+            index: index,
+            bookUrl: 'http://test.com/book',
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.currentChapterIndex = 3;
+      controller.visibleChapterIndex = 3;
+      controller.chapterPagesCache[0] = _buildPages(0, [0, 8], title: 'c0');
+      controller.chapterPagesCache[1] = _buildPages(1, [0, 8], title: 'c1');
+      controller.chapterPagesCache[3] = _buildPages(3, [0, 8], title: 'c3');
+      controller.refreshChapterRuntime(0);
+      controller.refreshChapterRuntime(1);
+      controller.refreshChapterRuntime(3);
+
+      controller.startTtsFromOffset(0, chapterIndex: 0);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        controller.retainedChapterIndexes(),
+        containsAll(<int>{0, 1, 2, 3, 4}),
+      );
+
+      controller.stopTts();
+      await Future<void>.delayed(Duration.zero);
       controller.dispose();
     });
 

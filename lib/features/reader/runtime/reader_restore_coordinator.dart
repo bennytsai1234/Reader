@@ -1,39 +1,52 @@
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
+
 class ReaderRestoreCoordinator {
   int _pendingScrollRestoreToken = 0;
-  int? _pendingScrollRestoreChapterIndex;
-  double? _pendingScrollRestoreLocalOffset;
+  ReaderAnchor? _pendingScrollRestoreAnchor;
   bool _pendingScrollRestoreDispatched = false;
 
   int registerPendingScrollRestore({
-    required int chapterIndex,
-    required double localOffset,
+    ReaderAnchor? anchor,
+    int? chapterIndex,
+    int charOffset = 0,
+    double? localOffset,
   }) {
+    final resolvedLocalOffset =
+        localOffset ?? anchor?.localOffsetSnapshot ?? 0.0;
+    final resolvedAnchor = (anchor ??
+            ReaderAnchor.location(
+              ReaderLocation(
+                chapterIndex: chapterIndex ?? 0,
+                charOffset: charOffset,
+              ),
+            ))
+        .normalized()
+        .copyWith(localOffsetSnapshot: resolvedLocalOffset);
     _pendingScrollRestoreToken++;
-    _pendingScrollRestoreChapterIndex = chapterIndex;
-    _pendingScrollRestoreLocalOffset = localOffset;
+    _pendingScrollRestoreAnchor = resolvedAnchor;
     _pendingScrollRestoreDispatched = false;
     return _pendingScrollRestoreToken;
   }
 
   int get pendingScrollRestoreToken => _pendingScrollRestoreToken;
+  ReaderAnchor? get pendingScrollRestoreAnchor => _pendingScrollRestoreAnchor;
   int? get pendingScrollRestoreChapterIndex =>
-      _pendingScrollRestoreChapterIndex;
+      _pendingScrollRestoreAnchor?.location.chapterIndex;
   double? get pendingScrollRestoreLocalOffset =>
-      _pendingScrollRestoreLocalOffset;
-  bool get hasPendingScrollRestore =>
-      _pendingScrollRestoreChapterIndex != null &&
-      _pendingScrollRestoreLocalOffset != null;
+      _pendingScrollRestoreAnchor?.localOffsetSnapshot;
+  bool get hasPendingScrollRestore => _pendingScrollRestoreAnchor != null;
   bool get hasQueuedScrollRestore =>
       hasPendingScrollRestore && !_pendingScrollRestoreDispatched;
 
   bool matchesPendingScrollRestore(int token) =>
       hasPendingScrollRestore && token == _pendingScrollRestoreToken;
 
-  ({int token, int chapterIndex, double localOffset})?
+  ({int token, ReaderAnchor anchor, int chapterIndex, double localOffset})?
   dispatchPendingScrollRestore() {
-    final chapterIndex = _pendingScrollRestoreChapterIndex;
-    final localOffset = _pendingScrollRestoreLocalOffset;
-    if (chapterIndex == null ||
+    final anchor = _pendingScrollRestoreAnchor;
+    final localOffset = anchor?.localOffsetSnapshot;
+    if (anchor == null ||
         localOffset == null ||
         _pendingScrollRestoreDispatched) {
       return null;
@@ -41,7 +54,8 @@ class ReaderRestoreCoordinator {
     _pendingScrollRestoreDispatched = true;
     return (
       token: _pendingScrollRestoreToken,
-      chapterIndex: chapterIndex,
+      anchor: anchor,
+      chapterIndex: anchor.location.chapterIndex,
       localOffset: localOffset,
     );
   }
@@ -58,8 +72,7 @@ class ReaderRestoreCoordinator {
   }
 
   void clear() {
-    _pendingScrollRestoreChapterIndex = null;
-    _pendingScrollRestoreLocalOffset = null;
+    _pendingScrollRestoreAnchor = null;
     _pendingScrollRestoreDispatched = false;
   }
 }

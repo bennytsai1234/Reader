@@ -91,6 +91,13 @@ void main() {
       expect(target.intraPageOffset, 0);
     });
 
+    test('localOffsetFromCharOffset 會命中當前行而不是跳到下一行', () {
+      final chapter = makeChapter();
+
+      expect(chapter.localOffsetFromCharOffset(9), 80);
+      expect(chapter.localOffsetFromCharOffset(13), 100);
+    });
+
     test('buildReadAloudData 會從指定偏移開始組裝朗讀內容', () {
       final chapter = makeChapter();
 
@@ -99,6 +106,24 @@ void main() {
       expect(data!.baseOffset, 8);
       expect(data.text, contains('CCCC'));
       expect(data.offsetMap.first.chapterOffset, 8);
+    });
+
+    test('buildReadAloudSegments 會保留分段與章內位置資訊', () {
+      final chapter = makeChapter();
+
+      final result = chapter.buildReadAloudSegments(startCharOffset: 9);
+      expect(result, isNotNull);
+      expect(result!.chapterIndex, 0);
+      expect(result.startCharOffset, 9);
+      expect(result.segments, hasLength(2));
+      expect(result.segments.first.text, 'CCC');
+      expect(result.segments.first.pageIndex, 1);
+      expect(result.segments.first.lineIndex, 0);
+      expect(result.segments.first.chapterStart, 9);
+      expect(result.segments.first.chapterEnd, 12);
+      expect(result.segments.last.text, 'DDDD');
+      expect(result.segments.last.chapterStart, 12);
+      expect(result.segments.last.chapterEnd, 16);
     });
 
     test('line 與 paragraph query 會對齊 char offset', () {
@@ -133,11 +158,11 @@ void main() {
       final restore = chapter.resolveRestoreTarget(charOffset: 9);
       expect(restore.pageIndex, 1);
       expect(restore.pageStartCharOffset, 8);
-      expect(restore.targetLocalOffset, 100);
+      expect(restore.targetLocalOffset, 80);
 
       final anchor = chapter.resolveScrollAnchor(9, anchorPadding: 10);
       expect(anchor.pageIndex, 1);
-      expect(anchor.localOffset, 90);
+      expect(anchor.localOffset, 70);
     });
   });
 }

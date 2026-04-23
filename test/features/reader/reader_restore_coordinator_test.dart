@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_restore_coordinator.dart';
 
 void main() {
@@ -20,6 +22,36 @@ void main() {
       expect(coordinator.matchesPendingScrollRestore(2), isTrue);
       expect(coordinator.pendingScrollRestoreChapterIndex, 3);
       expect(coordinator.pendingScrollRestoreLocalOffset, 256);
+      expect(
+        coordinator.pendingScrollRestoreAnchor,
+        const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 3, charOffset: 0),
+          localOffsetSnapshot: 256,
+        ),
+      );
+    });
+
+    test('register 可直接保留完整 anchor metadata', () {
+      final coordinator = ReaderRestoreCoordinator();
+
+      coordinator.registerPendingScrollRestore(
+        anchor: const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 2, charOffset: 88),
+          pageIndexSnapshot: 4,
+          localOffsetSnapshot: 128,
+          layoutSignature: 'scroll:320x640',
+        ),
+      );
+
+      expect(
+        coordinator.pendingScrollRestoreAnchor,
+        const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 2, charOffset: 88),
+          pageIndexSnapshot: 4,
+          localOffsetSnapshot: 128,
+          layoutSignature: 'scroll:320x640',
+        ),
+      );
     });
 
     test('dispatch 只會派發一次，直到 defer 或 complete', () {
@@ -35,6 +67,13 @@ void main() {
 
       expect(first, isNotNull);
       expect(first!.token, token);
+      expect(
+        first.anchor,
+        const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 1, charOffset: 0),
+          localOffsetSnapshot: 64,
+        ),
+      );
       expect(first.chapterIndex, 1);
       expect(first.localOffset, 64);
       expect(second, isNull);

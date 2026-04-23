@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_presentation_contract.dart';
@@ -148,6 +149,11 @@ void main() {
         scrollCommand.target.localOffset,
         chapter1.localOffsetFromCharOffset(8),
       );
+      expect(scrollCommand.anchor.pageIndexSnapshot, 1);
+      expect(
+        scrollCommand.anchor.localOffsetSnapshot,
+        chapter1.localOffsetFromCharOffset(8),
+      );
     });
 
     test('slide viewport command 會把 anchor 轉成對應全域頁索引', () {
@@ -169,6 +175,31 @@ void main() {
       expect(slideCommand.target.globalPageIndex, 2);
       expect(slideCommand.target.chapterIndex, 1);
       expect(slideCommand.target.chapterPageIndex, 1);
+      expect(slideCommand.anchor.pageIndexSnapshot, 2);
+    });
+
+    test('viewport command 會保留 source anchor metadata', () {
+      final command = controller.resolveViewportCommand(
+        isScrollMode: true,
+        anchor: const ReaderPresentationAnchor(
+          location: ReaderLocation(chapterIndex: 1, charOffset: 8),
+        ),
+        sourceAnchor: const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 1, charOffset: 8),
+          layoutSignature: 'scroll:320x640',
+        ),
+      );
+
+      expect(
+        command.anchor.location,
+        const ReaderLocation(chapterIndex: 1, charOffset: 8),
+      );
+      expect(command.anchor.layoutSignature, 'scroll:320x640');
+      expect(command.anchor.pageIndexSnapshot, 1);
+      expect(
+        command.anchor.localOffsetSnapshot,
+        chapter1.localOffsetFromCharOffset(8),
+      );
     });
   });
 }

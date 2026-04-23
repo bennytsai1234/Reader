@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
@@ -16,6 +17,8 @@ import 'package:inkpage_reader/core/database/dao/replace_rule_dao.dart';
 
 class ReaderContentLifecycleRuntime {
   static const int scrollPreloadRadius = 1;
+  static const int localScrollBaseAdjacentRadius = 1;
+  static const int localScrollFastAdjacentRadius = 2;
 
   ChapterContentManager? _contentManager;
   StreamSubscription<int>? _chapterReadySub;
@@ -800,20 +803,16 @@ class ReaderContentLifecycleRuntime {
     required void Function() notifyListeners,
     required void Function(int chapterIndex) refreshChapterRuntime,
   }) async {
-    final direction =
-        _lastVisibleScrollChapter == -1
-            ? 1
-            : (centerIndex - _lastVisibleScrollChapter).sign;
+    final previousCenterIndex =
+        _lastVisibleScrollChapter == -1 ? null : _lastVisibleScrollChapter;
+    final neighbors = computeLocalAdjacentPreloadOrder(
+      centerIndex: centerIndex,
+      totalChapters: chapters.length,
+      previousCenterIndex: previousCenterIndex,
+    );
     _lastVisibleScrollChapter = centerIndex;
-    final neighbors = <int>[
-      if (direction >= 0) centerIndex + 1,
-      if (direction <= 0) centerIndex - 1,
-      if (direction >= 0) centerIndex - 1,
-      if (direction <= 0) centerIndex + 1,
-    ];
 
-    for (final neighbor in neighbors.toSet()) {
-      if (neighbor < 0 || neighbor >= chapters.length) continue;
+    for (final neighbor in neighbors) {
       if (chapterPagesCache[neighbor]?.isNotEmpty ?? false) continue;
       if (loadingChapters.contains(neighbor)) continue;
       await loadAndCacheChapter(
@@ -826,7 +825,35 @@ class ReaderContentLifecycleRuntime {
         refreshChapterRuntime: refreshChapterRuntime,
         silent: true,
       );
-      break;
     }
+  }
+
+  @visibleForTesting
+  List<int> computeLocalAdjacentPreloadOrder({
+    required int centerIndex,
+    required int totalChapters,
+    int? previousCenterIndex,
+  }) {
+    final rawDelta =
+        previousCenterIndex == null ? 1 : centerIndex - previousCenterIndex;
+    final direction = rawDelta == 0 ? 1 : rawDelta.sign;
+    final radius =
+        previousCenterIndex == null || rawDelta.abs() <= 1
+            ? localScrollBaseAdjacentRadius
+            : localScrollFastAdjacentRadius;
+
+    final order = <int>[];
+    for (var delta = 1; delta <= radius; delta++) {
+      final preferred =
+          direction < 0 ? centerIndex - delta : centerIndex + delta;
+      final secondary =
+          direction < 0 ? centerIndex + delta : centerIndex - delta;
+      for (final candidate in <int>[preferred, secondary]) {
+        if (candidate < 0 || candidate >= totalChapters) continue;
+        if (candidate == centerIndex || order.contains(candidate)) continue;
+        order.add(candidate);
+      }
+    }
+    return List<int>.unmodifiable(order);
   }
 }

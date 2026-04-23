@@ -51,5 +51,33 @@ void main() {
         4,
       );
     });
+
+    test('computeLocalAdjacentPreloadOrder 會在 local scroll 補兩側鄰章', () {
+      final runtime = ReaderContentLifecycleRuntime();
+
+      expect(
+        runtime.computeLocalAdjacentPreloadOrder(
+          centerIndex: 2,
+          totalChapters: 6,
+        ),
+        <int>[3, 1],
+      );
+      expect(
+        runtime.computeLocalAdjacentPreloadOrder(
+          centerIndex: 4,
+          totalChapters: 7,
+          previousCenterIndex: 2,
+        ),
+        <int>[5, 3, 6, 2],
+      );
+      expect(
+        runtime.computeLocalAdjacentPreloadOrder(
+          centerIndex: 2,
+          totalChapters: 7,
+          previousCenterIndex: 4,
+        ),
+        <int>[1, 3, 0, 4],
+      );
+    });
   });
 }

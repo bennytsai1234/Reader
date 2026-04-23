@@ -1,10 +1,13 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:inkpage_reader/core/constant/prefer_key.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_aloud_controller.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_tts_source.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_tts_follow_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_tts_position.dart';
 
 import 'reader_provider_base.dart';
 import 'reader_settings_mixin.dart';
@@ -21,7 +24,11 @@ mixin ReaderTtsMixin
   final ReaderTtsFollowCoordinator _ttsFollow =
       const ReaderTtsFollowCoordinator();
   int _ttsMode = 0;
+  String _ttsSourceKey = ReaderTtsSourcePreference.systemKey;
   int get ttsMode => _ttsMode;
+  String get ttsSourceKey => _ttsSourceKey;
+
+  Future<void> reconfigureTtsEngine();
 
   void initTts(ReadAloudController controller) {
     readAloudController = controller;
@@ -30,14 +37,19 @@ mixin ReaderTtsMixin
   Future<void> loadTtsSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _ttsMode = prefs.getInt('reader_tts_mode') ?? 0;
+    _ttsSourceKey = ReaderTtsSourcePreference.normalize(
+      prefs.getString(PreferKey.ttsSource),
+    );
     notifyListeners();
   }
 
-  int get ttsStart => readAloudController.ttsStart;
-  int get ttsEnd => readAloudController.ttsEnd;
-  int get ttsWordStart => readAloudController.ttsWordStart;
-  int get ttsWordEnd => readAloudController.ttsWordEnd;
-  int get ttsChapterIndex => readAloudController.ttsChapterIndex;
+  ReaderTtsPosition? get currentTtsPosition =>
+      readAloudController.currentTtsPosition;
+  int get ttsStart => currentTtsPosition?.highlightStart ?? -1;
+  int get ttsEnd => currentTtsPosition?.highlightEnd ?? -1;
+  int get ttsWordStart => currentTtsPosition?.wordStart ?? -1;
+  int get ttsWordEnd => currentTtsPosition?.wordEnd ?? -1;
+  int get ttsChapterIndex => currentTtsPosition?.chapterIndex ?? -1;
   bool get isTtsActive => readAloudController.isActive;
   bool get isTtsPlaying => readAloudController.isPlaying;
   bool get stopAfterChapter => readAloudController.stopAfterChapter;
@@ -48,6 +60,15 @@ mixin ReaderTtsMixin
     readAloudController.toggle();
   }
 
+  void startTtsFromOffset(int charOffset, {int? chapterIndex}) {
+    if (isAutoPaging) stopAutoPage();
+    readAloudController.startFromOffset(
+      chapterIndex: chapterIndex,
+      charOffset: charOffset,
+    );
+  }
+
+  @Deprecated('Use startTtsFromOffset instead.')
   void startTtsFromLine(int lineIndex) {
     if (isAutoPaging) stopAutoPage();
     readAloudController.startFromLine(lineIndex);
@@ -80,7 +101,8 @@ mixin ReaderTtsMixin
 
   void handleTtsPageJump(int pageIndex) {
     final chapterIndex =
-        ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex;
+        currentTtsPosition?.chapterIndex ??
+        (ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex);
     final globalIndex = contentCallbacksRef.globalPageIndexFor?.call(
       chapterIndex: chapterIndex,
       localPageIndex: pageIndex,
@@ -145,12 +167,22 @@ mixin ReaderTtsMixin
     notifyListeners();
   }
 
+  Future<void> setTtsSourceKey(String sourceKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = ReaderTtsSourcePreference.normalize(sourceKey);
+    _ttsSourceKey = normalized;
+    await prefs.setString(PreferKey.ttsSource, normalized);
+    stopTts();
+    await reconfigureTtsEngine();
+    notifyListeners();
+  }
+
   ReaderTtsFollowTarget? evaluateTtsFollowTarget({
     required double viewportHeight,
   }) {
-    final followOffset = ttsWordStart >= 0 ? ttsWordStart : ttsStart;
-    final chapterIndex =
-        ttsChapterIndex >= 0 ? ttsChapterIndex : currentChapterIndex;
+    final position = currentTtsPosition;
+    if (position == null) return null;
+    final chapterIndex = position.chapterIndex;
     final runtimeChapter =
         contentCallbacksRef.chapterAt?.call(chapterIndex) as ReaderChapter?;
     final pages =
@@ -159,26 +191,17 @@ mixin ReaderTtsMixin
         [];
 
     if (((runtimeChapter == null && pages.isEmpty) ||
-            (runtimeChapter != null && runtimeChapter.isEmpty)) ||
-        followOffset < 0) {
+        (runtimeChapter != null && runtimeChapter.isEmpty))) {
       return null;
     }
-
-    final rawLocalOffset =
-        runtimeChapter != null
-            ? runtimeChapter.resolveScrollAnchor(followOffset).localOffset
-            : ChapterPositionResolver.charOffsetToLocalOffset(
-              pages.cast(),
-              followOffset,
-            );
 
     final chapterHeight =
         runtimeChapter?.chapterHeight ??
         ChapterPositionResolver.chapterHeight(pages.cast());
     final targetLocalOffset =
         chapterHeight > 0
-            ? rawLocalOffset.clamp(0.0, chapterHeight)
-            : rawLocalOffset;
+            ? position.localOffset.clamp(0.0, chapterHeight)
+            : position.localOffset;
 
     return _ttsFollow.evaluate(
       chapterIndex: chapterIndex,

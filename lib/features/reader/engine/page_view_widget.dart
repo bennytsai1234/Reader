@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_tts_position.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader_source_fallback_sheet.dart';
 import 'text_page.dart';
 
@@ -18,12 +19,13 @@ class PageViewWidget extends StatelessWidget {
   final double paddingRight;
   final bool isAutoPaging;
   final double autoPageProgress;
+  final ReaderTtsPosition? ttsPosition;
   final int ttsStart;
   final int ttsEnd;
   final int ttsWordStart;
   final int ttsWordEnd;
   final bool isScrollMode;
-  final void Function(int lineIndex)? onLineTap;
+  final void Function(int charOffset)? onLineTap;
   final GestureTapUpCallback? onPageTapUp;
   final Color pageBackgroundColor;
 
@@ -42,6 +44,7 @@ class PageViewWidget extends StatelessWidget {
     this.paddingRight = 16.0,
     this.isAutoPaging = false,
     this.autoPageProgress = 0.0,
+    this.ttsPosition,
     this.ttsStart = -1,
     this.ttsEnd = -1,
     this.ttsWordStart = -1,
@@ -69,6 +72,12 @@ class PageViewWidget extends StatelessWidget {
     final scanLineColor = provider.currentTheme.textColor.withValues(
       alpha: 0.6,
     );
+    final effectiveTtsStart = ttsPosition?.highlightStart ?? ttsStart;
+    final effectiveTtsEnd = ttsPosition?.highlightEnd ?? ttsEnd;
+    final effectiveTtsWordStart = ttsPosition?.wordStart ?? ttsWordStart;
+    final effectiveTtsWordEnd = ttsPosition?.wordEnd ?? ttsWordEnd;
+    final effectiveTtsChapterIndex =
+        ttsPosition?.chapterIndex ?? ttsChapterIndex;
 
     final content = Stack(
       children: [
@@ -84,7 +93,9 @@ class PageViewWidget extends StatelessWidget {
               for (int i = 0; i < page.lines.length; i++) {
                 final line = page.lines[i];
                 if (tapY >= line.lineTop && tapY < line.lineBottom) {
-                  onLineTap!(i);
+                  if (line.image == null) {
+                    onLineTap!(line.chapterPosition);
+                  }
                   break;
                 }
               }
@@ -106,11 +117,12 @@ class PageViewWidget extends StatelessWidget {
                               autoPageProgress: progress,
                               scanLineColor: scanLineColor,
                               pageBackgroundColor: pageBackgroundColor,
-                              ttsStart: ttsStart,
-                              ttsEnd: ttsEnd,
-                              ttsWordStart: ttsWordStart,
-                              ttsWordEnd: ttsWordEnd,
-                              ttsChapterIndex: ttsChapterIndex,
+                              ttsPosition: ttsPosition,
+                              ttsStart: effectiveTtsStart,
+                              ttsEnd: effectiveTtsEnd,
+                              ttsWordStart: effectiveTtsWordStart,
+                              ttsWordEnd: effectiveTtsWordEnd,
+                              ttsChapterIndex: effectiveTtsChapterIndex,
                             ),
                           ),
                     )
@@ -123,11 +135,12 @@ class PageViewWidget extends StatelessWidget {
                         paddingTop: currentPaddingTop,
                         isAutoPaging: false,
                         autoPageProgress: 0.0,
-                        ttsStart: ttsStart,
-                        ttsEnd: ttsEnd,
-                        ttsWordStart: ttsWordStart,
-                        ttsWordEnd: ttsWordEnd,
-                        ttsChapterIndex: ttsChapterIndex,
+                        ttsPosition: ttsPosition,
+                        ttsStart: effectiveTtsStart,
+                        ttsEnd: effectiveTtsEnd,
+                        ttsWordStart: effectiveTtsWordStart,
+                        ttsWordEnd: effectiveTtsWordEnd,
+                        ttsChapterIndex: effectiveTtsChapterIndex,
                       ),
                     ),
           ),
@@ -298,6 +311,7 @@ class _TextPagePainter extends CustomPainter {
   final double autoPageProgress;
   final Color scanLineColor;
   final Color pageBackgroundColor;
+  final ReaderTtsPosition? ttsPosition;
   final int ttsStart;
   final int ttsEnd;
   final int ttsWordStart;
@@ -315,6 +329,7 @@ class _TextPagePainter extends CustomPainter {
     this.autoPageProgress = 0.0,
     this.scanLineColor = Colors.blue,
     this.pageBackgroundColor = Colors.white,
+    this.ttsPosition,
     this.ttsStart = -1,
     this.ttsEnd = -1,
     this.ttsWordStart = -1,
@@ -470,6 +485,7 @@ class _TextPagePainter extends CustomPainter {
     return oldDelegate.autoPageProgress != autoPageProgress ||
         oldDelegate.page != page ||
         oldDelegate.nextPage != nextPage ||
+        oldDelegate.ttsPosition != ttsPosition ||
         oldDelegate.ttsStart != ttsStart ||
         oldDelegate.ttsEnd != ttsEnd ||
         oldDelegate.ttsWordStart != ttsWordStart ||

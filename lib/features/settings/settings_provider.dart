@@ -6,6 +6,7 @@ import 'package:inkpage_reader/core/config/app_config.dart';
 import 'package:inkpage_reader/core/constant/prefer_key.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_tts_source.dart';
 import 'provider/settings_base.dart';
 
 export 'provider/settings_base.dart';
@@ -75,6 +76,7 @@ class SettingsProvider extends SettingsProviderBase {
   double speechRate = 1.0;
   double speechPitch = 1.0;
   double speechVolume = 1.0;
+  String ttsSourceKey = ReaderTtsSourcePreference.systemKey;
 
   // --- 歡迎介面與圖標 ---
   String welcomeImage = '';
@@ -525,6 +527,9 @@ class SettingsProvider extends SettingsProviderBase {
     speechRate = prefs.getDouble(PreferKey.ttsSpeechRate) ?? 1.0;
     speechPitch = prefs.getDouble(PreferKey.speechPitch) ?? 1.0;
     speechVolume = prefs.getDouble(PreferKey.speechVolume) ?? 1.0;
+    ttsSourceKey = ReaderTtsSourcePreference.normalize(
+      prefs.getString(PreferKey.ttsSource),
+    );
     TTSService().setRate(speechRate);
     TTSService().setPitch(speechPitch);
     TTSService().setVolume(speechVolume);
@@ -647,6 +652,12 @@ class SettingsProvider extends SettingsProviderBase {
     speechVolume = v;
     TTSService().setVolume(v);
     save(PreferKey.speechVolume, v);
+    update();
+  }
+
+  void setTtsSourceKey(String sourceKey) {
+    ttsSourceKey = ReaderTtsSourcePreference.normalize(sourceKey);
+    save(PreferKey.ttsSource, ttsSourceKey);
     update();
   }
 

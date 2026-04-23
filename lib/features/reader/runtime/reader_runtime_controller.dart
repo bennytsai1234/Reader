@@ -1,6 +1,7 @@
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_presentation_contract.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_command.dart';
@@ -137,13 +138,31 @@ class ReaderRuntimeController {
     );
   }
 
+  int? pageIndexForLocation(ReaderLocation location) {
+    final normalized = location.normalized();
+    final runtimeChapter = _chapterAt(normalized.chapterIndex);
+    if (runtimeChapter != null) {
+      return runtimeChapter.getPageIndexByCharIndex(normalized.charOffset);
+    }
+    final pages = _pagesForChapter(normalized.chapterIndex);
+    if (pages.isEmpty) return null;
+    return ChapterPositionResolver.findPageIndexByCharOffset(
+      pages,
+      normalized.charOffset,
+    );
+  }
+
   ReaderViewportCommand resolveViewportCommand({
     required bool isScrollMode,
     required ReaderPresentationAnchor anchor,
+    ReaderAnchor? sourceAnchor,
     int? globalPageIndex,
     ReaderCommandReason reason = ReaderCommandReason.system,
   }) {
     final normalizedAnchor = anchor.normalized();
+    final resolvedSourceAnchor =
+        (sourceAnchor ?? ReaderAnchor.location(normalizedAnchor.location))
+            .normalized();
     if (isScrollMode) {
       final target = ReaderPositionResolver.resolveScrollTarget(
         location: normalizedAnchor.location,
@@ -151,7 +170,11 @@ class ReaderRuntimeController {
         pages: _pagesForChapter(normalizedAnchor.location.chapterIndex),
       );
       return ReaderScrollViewportCommand(
-        location: normalizedAnchor.location,
+        anchor: resolvedSourceAnchor.copyWith(
+          location: normalizedAnchor.location,
+          pageIndexSnapshot: pageIndexForLocation(normalizedAnchor.location),
+          localOffsetSnapshot: target.localOffset,
+        ),
         reason: reason,
         target: target,
       );
@@ -166,7 +189,10 @@ class ReaderRuntimeController {
       targetChapterIndex: normalizedAnchor.location.chapterIndex,
     );
     return ReaderSlideViewportCommand(
-      location: normalizedAnchor.location,
+      anchor: resolvedSourceAnchor.copyWith(
+        location: normalizedAnchor.location,
+        pageIndexSnapshot: target.globalPageIndex,
+      ),
       reason: reason,
       target: target,
     );

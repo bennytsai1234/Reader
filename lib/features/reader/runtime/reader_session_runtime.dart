@@ -1,4 +1,5 @@
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_presentation_contract.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_command.dart';
@@ -21,13 +22,15 @@ class ReaderSessionRuntimeContext {
 }
 
 class ReaderPreparedSessionAnchor {
-  final ReaderLocation location;
+  final ReaderAnchor anchor;
   final double localOffset;
 
   const ReaderPreparedSessionAnchor({
-    required this.location,
+    required this.anchor,
     required this.localOffset,
   });
+
+  ReaderLocation get location => anchor.location;
 }
 
 class ReaderSessionRuntime {
@@ -67,6 +70,32 @@ class ReaderSessionRuntime {
     );
   }
 
+  ReaderAnchor captureSessionAnchor(
+    ReaderSessionRuntimeContext context, {
+    bool fromEnd = false,
+    String? contentHash,
+    String? layoutSignature,
+  }) {
+    final presentationAnchor =
+        captureReadingAnchor(context, fromEnd: fromEnd).normalized();
+    final location = presentationAnchor.location;
+    return ReaderAnchor.location(
+      location,
+      contentHash: contentHash,
+      layoutSignature: layoutSignature,
+      pageIndexSnapshot:
+          context.isScrollMode
+              ? _runtimeController.pageIndexForLocation(location)
+              : (context.currentPageIndex >= 0
+                  ? context.currentPageIndex
+                  : _runtimeController.pageIndexForLocation(location)),
+      localOffsetSnapshot:
+          context.isScrollMode
+              ? context.visibleChapterLocalOffset
+              : _runtimeController.localOffsetForLocation(location),
+    ).normalized();
+  }
+
   ReaderLocation resolveModeSwitchLocation(
     ReaderSessionRuntimeContext context,
   ) {
@@ -88,12 +117,17 @@ class ReaderSessionRuntime {
   ReaderPreparedSessionAnchor prepareSettingsRepaginateAnchor(
     ReaderSessionRuntimeContext context,
   ) {
-    final location = captureReadingAnchor(context).location;
-    _updateCommittedLocation(location);
-    _updateVisibleLocation(location);
+    final anchor = captureSessionAnchor(
+      context,
+      layoutSignature: 'settingsRepaginate',
+    );
+    _updateCommittedLocation(anchor.location);
+    _updateVisibleLocation(anchor.location);
     return ReaderPreparedSessionAnchor(
-      location: location,
-      localOffset: _runtimeController.localOffsetForLocation(location),
+      anchor: anchor,
+      localOffset:
+          anchor.localOffsetSnapshot ??
+          _runtimeController.localOffsetForLocation(anchor.location),
     );
   }
 
@@ -122,15 +156,29 @@ class ReaderSessionRuntime {
     ReaderCommandReason reason = ReaderCommandReason.system,
   }) {
     final targetChapter = chapterIndex ?? currentChapterIndex;
-    final command = _runtimeController.resolveViewportCommand(
+    jumpToAnchor(
       isScrollMode: isScrollMode,
-      anchor: ReaderPresentationAnchor(
-        location: ReaderLocation(
+      anchor: ReaderAnchor.location(
+        ReaderLocation(
           chapterIndex: targetChapter,
           charOffset: charOffset ?? 0,
         ),
+        pageIndexSnapshot: pageIndex,
       ),
-      globalPageIndex: pageIndex,
+      reason: reason,
+    );
+  }
+
+  void jumpToAnchor({
+    required bool isScrollMode,
+    required ReaderAnchor anchor,
+    ReaderCommandReason reason = ReaderCommandReason.system,
+  }) {
+    final command = _runtimeController.resolveViewportCommand(
+      isScrollMode: isScrollMode,
+      anchor: anchor.toPresentationAnchor(),
+      sourceAnchor: anchor,
+      globalPageIndex: anchor.pageIndexSnapshot,
       reason: reason,
     );
     _dispatchViewportCommand(command);

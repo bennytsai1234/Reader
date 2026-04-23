@@ -12,7 +12,11 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_scroll_viewport_settle_state.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_session_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_view_runtime_coordinator.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_tts_position.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -57,9 +61,12 @@ class _FakeBookmarkDao implements BookmarkDao {
 
 class _FakeReaderProvider extends ReaderProvider {
   bool knownEmpty = false;
-  int fakeTtsStart = -1;
-  int fakeTtsWordStart = -1;
+  ReaderTtsPosition? fakeCurrentTtsPosition;
   String? fakeFailureMessage;
+  bool fakePendingVisiblePlaceholderReanchor = false;
+  ReaderSessionPhase fakeSessionPhase = ReaderSessionPhase.ready;
+  bool fakeHasActiveNavigation = false;
+  ReaderCommandReason? fakeActiveCommandReason;
 
   _FakeReaderProvider()
     : super(book: Book(bookUrl: 'book', name: 'Book', origin: 'local'));
@@ -69,10 +76,20 @@ class _FakeReaderProvider extends ReaderProvider {
       knownEmpty && index == currentChapterIndex;
 
   @override
-  int get ttsStart => fakeTtsStart;
+  ReaderTtsPosition? get currentTtsPosition => fakeCurrentTtsPosition;
 
   @override
-  int get ttsWordStart => fakeTtsWordStart;
+  bool get hasPendingVisiblePlaceholderReanchor =>
+      fakePendingVisiblePlaceholderReanchor;
+
+  @override
+  ReaderSessionPhase get sessionPhase => fakeSessionPhase;
+
+  @override
+  bool get hasActiveNavigation => fakeHasActiveNavigation;
+
+  @override
+  ReaderCommandReason? get activeCommandReason => fakeActiveCommandReason;
 
   @override
   String? chapterFailureMessage(int chapterIndex) {
@@ -242,10 +259,14 @@ void main() {
       final action = coordinator.consumePendingScrollAction(provider);
 
       expect(action, isNotNull);
-      expect(action!.chapterIndex, 2);
-      expect(action.localOffset, 48);
+      expect(action!.command.target.chapterIndex, 2);
+      expect(action.command.target.localOffset, 48);
       expect(action.isRestore, isFalse);
-      expect(action.reason, ReaderCommandReason.settingsRepaginate);
+      expect(action.command.reason, ReaderCommandReason.settingsRepaginate);
+      expect(
+        action.command.location,
+        const ReaderLocation(chapterIndex: 2, charOffset: 0),
+      );
       provider.dispose();
     });
 
@@ -262,8 +283,11 @@ void main() {
       expect(first, isNotNull);
       expect(first!.isRestore, isTrue);
       expect(first.restoreToken, token);
-      expect(first.chapterIndex, 2);
-      expect(first.localOffset, 48);
+      expect(first.command.target.chapterIndex, 2);
+      expect(first.command.target.localOffset, 48);
+      expect(first.command.reason, ReaderCommandReason.restore);
+      expect(first.command.anchor.location.chapterIndex, 2);
+      expect(first.command.anchor.localOffsetSnapshot, 48);
       expect(second, isNull);
       expect(provider.pendingScrollRestoreChapterIndex, 2);
       expect(provider.pendingScrollRestoreLocalOffset, 48);
@@ -275,20 +299,71 @@ void main() {
       provider.dispose();
     });
 
-    test('scroll TTS follow 會優先使用 ttsWordStart 作為去重鍵', () {
+    test('scroll restore pending 期間會持續 hold content', () {
+      final provider = _FakeReaderProvider()..pageTurnMode = PageAnim.scroll;
+
+      provider.registerPendingScrollRestore(chapterIndex: 2, localOffset: 48);
+      final settleState = coordinator.resolveScrollViewportSettleState(
+        provider,
+        hasVisibleData: false,
+      );
+      final shouldHold = coordinator.shouldHoldScrollUntilRestored(
+        provider,
+        hasVisibleData: false,
+      );
+
+      expect(settleState.phase, ReaderScrollViewportSettlePhase.pendingRestore);
+      expect(shouldHold, isTrue);
+      provider.dispose();
+    });
+
+    test(
+      'restoring 但尚未 visible confirmed 時會進入 awaitingVisibleConfirmation',
+      () {
+        final provider =
+            _FakeReaderProvider()
+              ..pageTurnMode = PageAnim.scroll
+              ..fakeSessionPhase = ReaderSessionPhase.restoring;
+
+        final settleState = coordinator.resolveScrollViewportSettleState(
+          provider,
+          hasVisibleData: true,
+        );
+
+        expect(
+          settleState.phase,
+          ReaderScrollViewportSettlePhase.awaitingVisibleConfirmation,
+        );
+        expect(settleState.shouldHoldContent, isTrue);
+        expect(settleState.shouldSuppressTtsFollow, isTrue);
+        provider.dispose();
+      },
+    );
+
+    test('scroll TTS follow 只會在 followKey 變更時觸發', () {
       final provider =
           _FakeReaderProvider()
             ..pageTurnMode = PageAnim.scroll
-            ..fakeTtsStart = 100
-            ..fakeTtsWordStart = 108;
+            ..fakeCurrentTtsPosition = const ReaderTtsPosition(
+              chapterIndex: 0,
+              pageIndex: 0,
+              lineIndex: 0,
+              highlightStart: 100,
+              highlightEnd: 110,
+              wordStart: 108,
+              wordEnd: 109,
+              localOffset: 120,
+              followKey: 5001,
+            );
 
       final shouldFollow = coordinator.shouldFollowTts(
         provider,
-        lastTtsFollowOffset: 100,
+        lastTtsFollowKey: 5001,
         isUserScrolling: false,
+        hasVisibleData: true,
       );
 
-      expect(shouldFollow, isTrue);
+      expect(shouldFollow, isFalse);
       provider.dispose();
     });
 
@@ -296,16 +371,158 @@ void main() {
       final provider =
           _FakeReaderProvider()
             ..pageTurnMode = PageAnim.scroll
-            ..fakeTtsStart = 120
-            ..fakeTtsWordStart = 132;
+            ..fakeCurrentTtsPosition = const ReaderTtsPosition(
+              chapterIndex: 0,
+              pageIndex: 1,
+              lineIndex: 0,
+              highlightStart: 120,
+              highlightEnd: 140,
+              wordStart: 132,
+              wordEnd: 133,
+              localOffset: 160,
+              followKey: 6001,
+            );
 
       final shouldFollow = coordinator.shouldFollowTts(
         provider,
-        lastTtsFollowOffset: 80,
+        lastTtsFollowKey: 80,
         isUserScrolling: true,
+        hasVisibleData: true,
       );
 
       expect(shouldFollow, isFalse);
+      provider.dispose();
+    });
+
+    test('restore pending 期間不會觸發 scroll TTS follow', () {
+      final provider =
+          _FakeReaderProvider()
+            ..pageTurnMode = PageAnim.scroll
+            ..fakeCurrentTtsPosition = const ReaderTtsPosition(
+              chapterIndex: 0,
+              pageIndex: 1,
+              lineIndex: 0,
+              highlightStart: 120,
+              highlightEnd: 140,
+              wordStart: 132,
+              wordEnd: 133,
+              localOffset: 160,
+              followKey: 6002,
+            );
+
+      provider.registerPendingScrollRestore(chapterIndex: 2, localOffset: 48);
+      final shouldFollow = coordinator.shouldFollowTts(
+        provider,
+        lastTtsFollowKey: -1,
+        isUserScrolling: false,
+        hasVisibleData: true,
+      );
+
+      expect(shouldFollow, isFalse);
+      provider.dispose();
+    });
+
+    test('visible placeholder re-anchor pending 期間會抑制 scroll TTS follow', () {
+      final provider =
+          _FakeReaderProvider()
+            ..pageTurnMode = PageAnim.scroll
+            ..fakePendingVisiblePlaceholderReanchor = true
+            ..fakeCurrentTtsPosition = const ReaderTtsPosition(
+              chapterIndex: 0,
+              pageIndex: 0,
+              lineIndex: 0,
+              highlightStart: 100,
+              highlightEnd: 110,
+              wordStart: 108,
+              wordEnd: 109,
+              localOffset: 120,
+              followKey: 7003,
+            );
+
+      final shouldFollow = coordinator.shouldFollowTts(
+        provider,
+        lastTtsFollowKey: -1,
+        isUserScrolling: false,
+        hasVisibleData: true,
+      );
+      final settleState = coordinator.resolveScrollViewportSettleState(
+        provider,
+        hasVisibleData: true,
+      );
+
+      expect(shouldFollow, isFalse);
+      expect(
+        settleState.phase,
+        ReaderScrollViewportSettlePhase.pendingPlaceholderReanchor,
+      );
+      expect(
+        coordinator.shouldHoldScrollUntilRestored(
+          provider,
+          hasVisibleData: true,
+        ),
+        isFalse,
+      );
+      provider.dispose();
+    });
+
+    test('active navigation pending 期間只抑制 scroll TTS follow', () {
+      final provider =
+          _FakeReaderProvider()
+            ..pageTurnMode = PageAnim.scroll
+            ..fakeHasActiveNavigation = true
+            ..fakeActiveCommandReason = ReaderCommandReason.userScroll
+            ..fakeCurrentTtsPosition = const ReaderTtsPosition(
+              chapterIndex: 0,
+              pageIndex: 0,
+              lineIndex: 0,
+              highlightStart: 100,
+              highlightEnd: 110,
+              wordStart: 108,
+              wordEnd: 109,
+              localOffset: 120,
+              followKey: 7004,
+            );
+
+      final settleState = coordinator.resolveScrollViewportSettleState(
+        provider,
+        hasVisibleData: true,
+      );
+      final shouldFollow = coordinator.shouldFollowTts(
+        provider,
+        lastTtsFollowKey: -1,
+        isUserScrolling: false,
+        hasVisibleData: true,
+      );
+
+      expect(
+        settleState.phase,
+        ReaderScrollViewportSettlePhase.pendingNavigation,
+      );
+      expect(settleState.commandReason, ReaderCommandReason.userScroll);
+      expect(settleState.isNavigationDriven, isTrue);
+      expect(settleState.shouldHoldContent, isFalse);
+      expect(settleState.shouldSuppressTtsFollow, isTrue);
+      expect(shouldFollow, isFalse);
+      provider.dispose();
+    });
+
+    test('active navigation 會保留 tts command reason', () {
+      final provider =
+          _FakeReaderProvider()
+            ..pageTurnMode = PageAnim.scroll
+            ..fakeHasActiveNavigation = true
+            ..fakeActiveCommandReason = ReaderCommandReason.tts;
+
+      final settleState = coordinator.resolveScrollViewportSettleState(
+        provider,
+        hasVisibleData: true,
+      );
+
+      expect(
+        settleState.phase,
+        ReaderScrollViewportSettlePhase.pendingNavigation,
+      );
+      expect(settleState.commandReason, ReaderCommandReason.tts);
       provider.dispose();
     });
   });

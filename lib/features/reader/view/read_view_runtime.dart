@@ -92,9 +92,12 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
     // If the provider is already ready (e.g., ReadViewRuntime was recreated
     // due to a controller reset), skip the fade-in reveal to avoid a flash
     // on the next notifyListeners call.
-    if (widget.provider.isReady &&
-        widget.provider.sessionPhase != ReaderSessionPhase.restoring &&
-        widget.provider.pendingScrollRestoreChapterIndex == null) {
+    final initialViewportSettleState = _coordinator
+        .resolveScrollViewportSettleState(
+          widget.provider,
+          hasVisibleData: _hasVisibleData(widget.provider),
+        );
+    if (widget.provider.isReady && !initialViewportSettleState.shouldHoldContent) {
       _contentRevealed = true;
       _fadeCtrl.value = 1.0;
     }
@@ -123,14 +126,8 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
 
     final p = widget.provider;
     final runtimeUpdate = _viewportRuntime.handleProviderStateChanged(p);
-    if (runtimeUpdate.pendingScrollAction?.isRestore == true ||
-        (p.sessionPhase == ReaderSessionPhase.restoring &&
-            !p.visibleConfirmed)) {
-      _holdContentUntilScrollRestore = true;
-    } else if (_holdContentUntilScrollRestore &&
-        p.sessionPhase != ReaderSessionPhase.restoring) {
-      _holdContentUntilScrollRestore = false;
-    }
+    _holdContentUntilScrollRestore =
+        runtimeUpdate.viewportSettleState.shouldHoldContent;
     if (!_holdContentUntilScrollRestore && !_contentRevealed && p.isReady) {
       _contentRevealed = true;
       _fadeCtrl.forward();
@@ -143,23 +140,24 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
 
     final pendingScrollAction = runtimeUpdate.pendingScrollAction;
     if (pendingScrollAction != null) {
+      final command = pendingScrollAction.command;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (pendingScrollAction.isRestore) {
           _scrollRuntimeExecutor.restoreScrollPosition(
-            chapterIndex: pendingScrollAction.chapterIndex,
-            localOffset: pendingScrollAction.localOffset,
+            chapterIndex: command.target.chapterIndex,
+            localOffset: command.target.localOffset,
             token: pendingScrollAction.restoreToken,
             navigationToken: pendingScrollAction.navigationToken,
           );
           return;
         }
         _scrollRuntimeExecutor.jumpScrollPosition(
-          chapterIndex: pendingScrollAction.chapterIndex,
-          localOffset: pendingScrollAction.localOffset,
+          chapterIndex: command.target.chapterIndex,
+          localOffset: command.target.localOffset,
           onCompleted:
               () => widget.provider.completeNavigation(
                 pendingScrollAction.navigationToken,
-                pendingScrollAction.reason,
+                command.reason,
               ),
         );
       });
@@ -197,6 +195,12 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
         topInset: p.scrollViewportTopInset,
       ),
     );
+  }
+
+  bool _hasVisibleData(ReaderProvider provider) {
+    return provider.pageTurnMode == PageAnim.scroll
+        ? provider.pageFactory.orderedChapters.isNotEmpty
+        : provider.slidePages.isNotEmpty;
   }
 
   @override

@@ -217,15 +217,20 @@ class ScrollRuntimeExecutor {
       viewportHeight: viewportHeight(),
     );
     if (target == null) return;
+    final command = provider.buildScrollViewportCommand(
+      chapterIndex: target.chapterIndex,
+      localOffset: target.localOffset,
+      reason: ReaderCommandReason.tts,
+    );
     itemScrollController.scrollTo(
-      index: target.chapterIndex,
+      index: command.target.chapterIndex,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       scrollToChapterLocalOffset(
-        chapterIndex: target.chapterIndex,
-        localOffset: target.localOffset,
+        chapterIndex: command.target.chapterIndex,
+        localOffset: command.target.localOffset,
         animate: true,
         duration: const Duration(milliseconds: 160),
         topPadding: target.topPadding,

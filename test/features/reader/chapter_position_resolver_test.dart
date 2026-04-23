@@ -58,6 +58,7 @@ void main() {
 
     test('charOffset 轉章內 local offset 正確', () {
       expect(ChapterPositionResolver.charOffsetToLocalOffset(pages, 4), 40);
+      expect(ChapterPositionResolver.charOffsetToLocalOffset(pages, 5), 40);
       expect(ChapterPositionResolver.charOffsetToLocalOffset(pages, 8), 90);
     });
 

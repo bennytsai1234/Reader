@@ -31,6 +31,7 @@ class PreferKey {
   static const String readAloudByPage = 'readAloudByPage';
   static const String ttsEngine = 'appTtsEngine';
   static const String ttsVoice = 'appTtsVoice';
+  static const String ttsSource = 'readerTtsSource';
   static const String ttsFollowSys = 'ttsFollowSys';
   static const String ttsSpeechRate = 'ttsSpeechRate';
   static const String prevKeys = 'prevKeyCodes';

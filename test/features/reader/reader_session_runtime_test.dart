@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_command.dart';
@@ -122,6 +123,16 @@ void main() {
         prepared.location,
         const ReaderLocation(chapterIndex: 1, charOffset: 8),
       );
+      expect(
+        prepared.anchor.location,
+        const ReaderLocation(chapterIndex: 1, charOffset: 8),
+      );
+      expect(prepared.anchor.layoutSignature, 'settingsRepaginate');
+      expect(prepared.anchor.pageIndexSnapshot, 2);
+      expect(
+        prepared.anchor.localOffsetSnapshot,
+        chapter1.localOffsetFromCharOffset(8),
+      );
       expect(prepared.localOffset, chapter1.localOffsetFromCharOffset(8));
       expect(sessionUpdates, [
         const ReaderLocation(chapterIndex: 1, charOffset: 8),
@@ -192,6 +203,33 @@ void main() {
       expect(command.target.globalPageIndex, 2);
       expect(command.target.chapterIndex, 1);
       expect(command.target.chapterPageIndex, 1);
+      expect(command.anchor.pageIndexSnapshot, 2);
+    });
+
+    test('jumpToAnchor 會保留 anchor snapshot metadata', () {
+      runtime.jumpToAnchor(
+        isScrollMode: true,
+        anchor: const ReaderAnchor(
+          location: ReaderLocation(chapterIndex: 1, charOffset: 8),
+          pageIndexSnapshot: 1,
+          localOffsetSnapshot: 120,
+          layoutSignature: 'scroll:320x640',
+        ),
+        reason: ReaderCommandReason.restore,
+      );
+
+      expect(dispatchedCommands, hasLength(1));
+      final command = dispatchedCommands.single as ReaderScrollViewportCommand;
+      expect(
+        command.anchor.location,
+        const ReaderLocation(chapterIndex: 1, charOffset: 8),
+      );
+      expect(command.anchor.pageIndexSnapshot, 1);
+      expect(
+        command.anchor.localOffsetSnapshot,
+        chapter1.localOffsetFromCharOffset(8),
+      );
+      expect(command.anchor.layoutSignature, 'scroll:320x640');
     });
 
     test('persistExitProgress 會把 exit location 寫回 store', () async {
