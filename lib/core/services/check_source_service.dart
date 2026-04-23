@@ -224,6 +224,7 @@ extension on _SourceCheckMode {
 /// 參考 legado CheckSourceService，以 group/comment 持久化校驗結果，
 /// 讓來源管理、搜尋池與執行期策略共用同一套狀態。
 class CheckSourceService extends ChangeNotifier {
+  static const int _validationPageConcurrency = 1;
   final BookSourceService _service;
   final BookSourceDao _sourceDao;
   final AppEventBus _eventBus;
@@ -732,7 +733,11 @@ class CheckSourceService extends ChangeNotifier {
       );
       _appendLog('  ◇ 測試${mode.label}目錄: ${book.name}');
       final chapters = await _service
-          .getChapterList(source, book)
+          .getChapterList(
+            source,
+            book,
+            pageConcurrency: _validationPageConcurrency,
+          )
           .timeout(config.timeoutDuration);
       readableChapters =
           chapters.where((chapter) => !chapter.isVolume).toList();
@@ -838,6 +843,7 @@ class CheckSourceService extends ChangeNotifier {
             book,
             firstChapter,
             nextChapterUrl: nextChapterUrl,
+            pageConcurrency: _validationPageConcurrency,
           )
           .timeout(config.timeoutDuration);
 

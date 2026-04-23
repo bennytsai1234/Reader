@@ -23,17 +23,31 @@ class BookSourceService {
     BookSource source,
     Book book, {
     int? chapterLimit,
+    int? pageConcurrency,
   }) async {
     return await WebBook.getChapterListAwait(
       source,
       book,
       chapterLimit: chapterLimit,
+      pageConcurrency: pageConcurrency,
     );
   }
 
   /// 獲取正文內容 (對標 getContentAwait)
-  Future<String> getContent(BookSource source, Book book, BookChapter chapter, {String? nextChapterUrl}) async {
-    return await WebBook.getContentAwait(source, book, chapter, nextChapterUrl: nextChapterUrl);
+  Future<String> getContent(
+    BookSource source,
+    Book book,
+    BookChapter chapter, {
+    String? nextChapterUrl,
+    int? pageConcurrency,
+  }) async {
+    return await WebBook.getContentAwait(
+      source,
+      book,
+      chapter,
+      nextChapterUrl: nextChapterUrl,
+      pageConcurrency: pageConcurrency,
+    );
   }
 
   /// 搜尋書籍 (對標 searchBookAwait)
@@ -56,8 +70,18 @@ class BookSourceService {
   }
 
   /// 發現/探索書籍 (對標 exploreBookAwait)
-  Future<List<SearchBook>> exploreBooks(BookSource source, String url, {int page = 1}) async {
-    return await WebBook.exploreBookAwait(source, url, page: page);
+  Future<List<SearchBook>> exploreBooks(
+    BookSource source,
+    String url, {
+    int page = 1,
+    CancelToken? cancelToken,
+  }) async {
+    return await WebBook.exploreBookAwait(
+      source,
+      url,
+      page: page,
+      cancelToken: cancelToken,
+    );
   }
 
   /// 精確搜尋

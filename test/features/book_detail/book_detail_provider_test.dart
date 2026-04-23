@@ -75,6 +75,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     BookSource source,
     Book book, {
     int? chapterLimit,
+    int? pageConcurrency,
   }) async {
     return chapterList;
   }

@@ -23,6 +23,7 @@ const String _sourceListCacheRelativePath =
     '.cache/inkpage_reader/source_lists/382015f6ff010d7fee368c6daabd5081.json';
 const String legadoValidationDefaultKeyword = '我的';
 const int sourceValidationChapterLimit = 128;
+const int validationPageConcurrency = 1;
 
 enum SourceValidationOutcome { pass, skip, fail }
 
@@ -340,6 +341,7 @@ Future<SourceValidationResult> validateSourceFlow(
       source,
       hydratedBook,
       chapterLimit: sourceValidationChapterLimit,
+      pageConcurrency: validationPageConcurrency,
     );
     readableChapters = chapters.where((chapter) => !chapter.isVolume).toList();
     if (readableChapters.isEmpty) {
@@ -362,6 +364,7 @@ Future<SourceValidationResult> validateSourceFlow(
         source,
         hydratedBook!,
         chapter,
+        pageConcurrency: validationPageConcurrency,
         nextChapterUrl:
             readableChapters.length > chapterIndex + 1
                 ? readableChapters[chapterIndex + 1].url
@@ -760,34 +763,46 @@ Future<SearchKeywordSeed?> pickKeywordFromHomepage(
   final listRule = AnalyzeRule(
     source: source,
   ).setContent(response.body, baseUrl: response.url);
-  final items = listRule.getElements(searchRule.bookList!);
-  for (final item in items.take(5)) {
-    final itemRule = AnalyzeRule(
-      source: source,
-    ).setContent(item, baseUrl: response.url);
-    final name = itemRule.getString(searchRule.name ?? '').trim();
-    if (!looksLikeBookName(name)) {
-      continue;
+  try {
+    final items = listRule.getElements(searchRule.bookList!);
+    for (final item in items.take(5)) {
+      final itemRule = AnalyzeRule(
+        source: source,
+      ).setContent(item, baseUrl: response.url);
+      try {
+        final name = itemRule.getString(searchRule.name ?? '').trim();
+        if (!looksLikeBookName(name)) {
+          continue;
+        }
+        final matched = await findWorkingKeywordCandidate(service, source, name);
+        if (matched != null) {
+          return matched;
+        }
+      } finally {
+        itemRule.dispose();
+      }
     }
-    final matched = await findWorkingKeywordCandidate(service, source, name);
-    if (matched != null) {
-      return matched;
-    }
-  }
 
-  final fallbackRule = AnalyzeRule(
-    source: source,
-  ).setContent(response.body, baseUrl: response.url);
-  final anchorTexts = fallbackRule.getStringList('a@text');
-  for (final text in anchorTexts) {
-    final name = text.trim();
-    if (!looksLikeBookName(name)) {
-      continue;
+    final fallbackRule = AnalyzeRule(
+      source: source,
+    ).setContent(response.body, baseUrl: response.url);
+    try {
+      final anchorTexts = fallbackRule.getStringList('a@text');
+      for (final text in anchorTexts) {
+        final name = text.trim();
+        if (!looksLikeBookName(name)) {
+          continue;
+        }
+        final matched = await findWorkingKeywordCandidate(service, source, name);
+        if (matched != null) {
+          return matched;
+        }
+      }
+    } finally {
+      fallbackRule.dispose();
     }
-    final matched = await findWorkingKeywordCandidate(service, source, name);
-    if (matched != null) {
-      return matched;
-    }
+  } finally {
+    listRule.dispose();
   }
   return null;
 }

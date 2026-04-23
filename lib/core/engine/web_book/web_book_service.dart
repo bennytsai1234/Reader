@@ -76,9 +76,10 @@ class WebBook {
     BookSource source,
     String url, {
     int? page = 1,
+    CancelToken? cancelToken,
   }) async {
     final analyzeUrl = await AnalyzeUrl.create(url, source: source, page: page);
-    var res = await analyzeUrl.getStrResponse();
+    var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res);
     _checkRedirect(source, res);
     _checkLoginRequired(res, stage: 'explore');
@@ -140,165 +141,175 @@ class WebBook {
     BookSource source,
     Book book, {
     int? chapterLimit,
+    int? pageConcurrency,
   }) async {
+    final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final rule = AnalyzeRule(source: source, ruleData: book);
-    await rule.preUpdateToc();
+    try {
+      await rule.preUpdateToc();
 
-    final allChapters = <BookChapter>[];
-    final visitedUrls = <String>{};
-    var isReverse = false;
-    // tocUrl 為空時以 bookUrl 作為備用 (對標 Android 邏輯)
-    final initialUrl = book.tocUrl.isNotEmpty ? book.tocUrl : book.bookUrl;
+      final allChapters = <BookChapter>[];
+      final visitedUrls = <String>{};
+      var isReverse = false;
+      // tocUrl 為空時以 bookUrl 作為備用 (對標 Android 邏輯)
+      final initialUrl = book.tocUrl.isNotEmpty ? book.tocUrl : book.bookUrl;
 
-    // 1. 抓取首頁目錄
-    visitedUrls.add(initialUrl);
-    final firstRes = await _loadInitialTocResponse(
-      source: source,
-      book: book,
-      initialUrl: initialUrl,
-    );
+      // 1. 抓取首頁目錄
+      visitedUrls.add(initialUrl);
+      final firstRes = await _loadInitialTocResponse(
+        source: source,
+        book: book,
+        initialUrl: initialUrl,
+      );
 
-    final firstResult = await ChapterListParser.parse(
-      source: source,
-      book: book,
-      body: firstRes.body,
-      baseUrl: firstRes.url,
-      maxChapters: chapterLimit,
-    );
-    isReverse = firstResult.isReverse;
-    allChapters.addAll(firstResult.chapters);
+      final firstResult = await ChapterListParser.parse(
+        source: source,
+        book: book,
+        body: firstRes.body,
+        baseUrl: firstRes.url,
+        maxChapters: chapterLimit,
+      );
+      isReverse = firstResult.isReverse;
+      allChapters.addAll(firstResult.chapters);
 
-    if (chapterLimit == null || allChapters.length < chapterLimit) {
-      if (firstResult.nextUrls.length > 1) {
-        // 多 nextUrl → 並發抓取剩餘頁 (對標 Android mapAsync)
-        final pending =
-            firstResult.nextUrls
-                .where((u) => visitedUrls.add(u))
-                .take(_maxTocPages - 1)
-                .toList();
-        final responses = await _fetchParallel(
-          pending,
-          source,
-          book,
-          stage: 'toc',
-        );
-        for (var i = 0; i < responses.length; i++) {
-          if (chapterLimit != null && allChapters.length >= chapterLimit) {
-            break;
+      if (chapterLimit == null || allChapters.length < chapterLimit) {
+        if (firstResult.nextUrls.length > 1) {
+          // 多 nextUrl → 並發抓取剩餘頁 (對標 Android mapAsync)
+          final pending =
+              firstResult.nextUrls
+                  .where((u) => visitedUrls.add(u))
+                  .take(_maxTocPages - 1)
+                  .toList();
+          final responses = await _fetchParallel(
+            pending,
+            source,
+            book,
+            stage: 'toc',
+            concurrency: effectivePageConcurrency,
+          );
+          for (var i = 0; i < responses.length; i++) {
+            if (chapterLimit != null && allChapters.length >= chapterLimit) {
+              break;
+            }
+            final res = responses[i];
+            if (res == null) continue;
+            final pageResult = await ChapterListParser.parse(
+              source: source,
+              book: book,
+              body: res.body,
+              baseUrl: res.url,
+              maxChapters:
+                  chapterLimit == null ? null : chapterLimit - allChapters.length,
+            );
+            allChapters.addAll(pageResult.chapters);
+            // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
           }
-          final res = responses[i];
-          if (res == null) continue;
-          final pageResult = await ChapterListParser.parse(
-            source: source,
-            book: book,
-            body: res.body,
-            baseUrl: res.url,
-            maxChapters:
-                chapterLimit == null ? null : chapterLimit - allChapters.length,
-          );
-          allChapters.addAll(pageResult.chapters);
-          // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
-        }
-      } else {
-        // 單 nextUrl → daisy chain 循序抓取
-        String? currentUrl =
-            firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
-        for (
-          var pageNum = 1;
-          pageNum < _maxTocPages && currentUrl != null;
-          pageNum++
-        ) {
-          if (chapterLimit != null && allChapters.length >= chapterLimit) {
-            break;
+        } else {
+          // 單 nextUrl → daisy chain 循序抓取
+          String? currentUrl =
+              firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
+          for (
+            var pageNum = 1;
+            pageNum < _maxTocPages && currentUrl != null;
+            pageNum++
+          ) {
+            if (chapterLimit != null && allChapters.length >= chapterLimit) {
+              break;
+            }
+            if (!visitedUrls.add(currentUrl)) break;
+
+            final analyzeUrl = await AnalyzeUrl.create(
+              currentUrl,
+              source: source,
+              ruleData: book,
+            );
+            var res = await analyzeUrl.getStrResponse();
+            res = _runLoginCheckJs(source, res, ruleData: book);
+            _checkRedirect(source, res);
+            _checkLoginRequired(res, stage: 'toc');
+
+            final result = await ChapterListParser.parse(
+              source: source,
+              book: book,
+              body: res.body,
+              baseUrl: res.url,
+              maxChapters:
+                  chapterLimit == null
+                      ? null
+                      : (chapterLimit - allChapters.length),
+            );
+            allChapters.addAll(result.chapters);
+            currentUrl =
+                result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
           }
-          if (!visitedUrls.add(currentUrl)) break;
-
-          final analyzeUrl = await AnalyzeUrl.create(
-            currentUrl,
-            source: source,
-            ruleData: book,
-          );
-          var res = await analyzeUrl.getStrResponse();
-          res = _runLoginCheckJs(source, res, ruleData: book);
-          _checkRedirect(source, res);
-          _checkLoginRequired(res, stage: 'toc');
-
-          final result = await ChapterListParser.parse(
-            source: source,
-            book: book,
-            body: res.body,
-            baseUrl: res.url,
-            maxChapters:
-                chapterLimit == null
-                    ? null
-                    : (chapterLimit - allChapters.length),
-          );
-          allChapters.addAll(result.chapters);
-          currentUrl =
-              result.nextUrls.isNotEmpty ? result.nextUrls.first : null;
         }
       }
-    }
 
-    // isReverse == false → Android 會將整列表 reverse (預設來源為逆序)
-    // isReverse == true  → 來源已是順序，保持不變
-    if (!isReverse && allChapters.length > 1) {
-      final reversed = allChapters.reversed.toList();
-      allChapters
-        ..clear()
-        ..addAll(reversed);
-    }
+      // isReverse == false → Android 會將整列表 reverse (預設來源為逆序)
+      // isReverse == true  → 來源已是順序，保持不變
+      if (!isReverse && allChapters.length > 1) {
+        final reversed = allChapters.reversed.toList();
+        allChapters
+          ..clear()
+          ..addAll(reversed);
+      }
 
-    // 依 url 去重並保持順序 (對標 Android LinkedHashSet(chapterList))
-    final seen = <String>{};
-    final deduped = <BookChapter>[];
-    for (final c in allChapters) {
-      if (seen.add(c.url)) deduped.add(c);
-    }
+      // 依 url 去重並保持順序 (對標 Android LinkedHashSet(chapterList))
+      final seen = <String>{};
+      final deduped = <BookChapter>[];
+      for (final c in allChapters) {
+        if (seen.add(c.url)) deduped.add(c);
+      }
 
-    // formatJs (對標 Android BookChapterList.formatJs)
-    final formatJs = source.ruleToc?.formatJs;
-    if (formatJs != null && formatJs.isNotEmpty) {
+      // formatJs (對標 Android BookChapterList.formatJs)
+      final formatJs = source.ruleToc?.formatJs;
+      if (formatJs != null && formatJs.isNotEmpty) {
+        for (var i = 0; i < deduped.length; i++) {
+          final ch = deduped[i];
+          AnalyzeRule? fmtRule;
+          try {
+            // 透過 AnalyzeRule 的 evalJS 管道執行 formatJs，
+            // 以 chapter title 作為 result 傳入，方便 JS 存取原標題。
+            // 同時以 evalJS 內部機制注入 index / title 作為全域變數。
+            fmtRule = AnalyzeRule(
+              source: source,
+              ruleData: book,
+            ).setChapter(ch);
+            fmtRule.page = i + 1;
+            final newTitle = await fmtRule.evalJSAsync(formatJs, ch.title);
+            if (newTitle != null && newTitle.toString().isNotEmpty) {
+              deduped[i] = ch.copyWith(title: newTitle.toString());
+            }
+          } catch (_) {
+            // 格式化失敗則保留原標題
+          } finally {
+            fmtRule?.dispose();
+          }
+        }
+      }
+
+      // legado 會在書源規則歸一後，再依 book.reverseToc 決定最終顯示順序。
+      // 預設 reverseToc=false，因此會再 reverse 一次，讓大多數來源維持正序。
+      final reverseToc = book.readConfig?.reverseToc ?? false;
+      if (!reverseToc && deduped.length > 1) {
+        final finalOrder = deduped.reversed.toList();
+        deduped
+          ..clear()
+          ..addAll(finalOrder);
+      }
+
+      // 重新編號所有章節
       for (var i = 0; i < deduped.length; i++) {
-        final ch = deduped[i];
-        try {
-          // 透過 AnalyzeRule 的 evalJS 管道執行 formatJs，
-          // 以 chapter title 作為 result 傳入，方便 JS 存取原標題。
-          // 同時以 evalJS 內部機制注入 index / title 作為全域變數。
-          final fmtRule = AnalyzeRule(
-            source: source,
-            ruleData: book,
-          ).setChapter(ch);
-          fmtRule.page = i + 1;
-          final newTitle = await fmtRule.evalJSAsync(formatJs, ch.title);
-          if (newTitle != null && newTitle.toString().isNotEmpty) {
-            deduped[i] = ch.copyWith(title: newTitle.toString());
-          }
-        } catch (_) {
-          // 格式化失敗則保留原標題
-        }
+        deduped[i] = deduped[i].copyWith(index: i);
       }
+
+      // 從既有的 DB 資料回填 wordCount (對標 Android BookChapterList.getWordCount)
+      await _fillWordCount(deduped, book);
+
+      return deduped;
+    } finally {
+      rule.dispose();
     }
-
-    // legado 會在書源規則歸一後，再依 book.reverseToc 決定最終顯示順序。
-    // 預設 reverseToc=false，因此會再 reverse 一次，讓大多數來源維持正序。
-    final reverseToc = book.readConfig?.reverseToc ?? false;
-    if (!reverseToc && deduped.length > 1) {
-      final finalOrder = deduped.reversed.toList();
-      deduped
-        ..clear()
-        ..addAll(finalOrder);
-    }
-
-    // 重新編號所有章節
-    for (var i = 0; i < deduped.length; i++) {
-      deduped[i] = deduped[i].copyWith(index: i);
-    }
-
-    // 從既有的 DB 資料回填 wordCount (對標 Android BookChapterList.getWordCount)
-    await _fillWordCount(deduped, book);
-
-    return deduped;
   }
 
   /// 獲取正文內容 (對標 getContentAwait / BookContent.analyzeContent)
@@ -308,7 +319,9 @@ class WebBook {
     Book book,
     BookChapter chapter, {
     String? nextChapterUrl,
+    int? pageConcurrency,
   }) async {
+    final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final contentParts = <String>[];
     final visitedUrls = <String>{};
     String? lastBaseUrl;
@@ -350,6 +363,7 @@ class WebBook {
         source,
         book,
         stage: 'content',
+        concurrency: effectivePageConcurrency,
       );
       for (var i = 0; i < responses.length; i++) {
         final res = responses[i];
@@ -424,9 +438,13 @@ class WebBook {
     final checkJs = source.loginCheckJs;
     if (checkJs != null && checkJs.isNotEmpty) {
       final rule = AnalyzeRule(source: source, ruleData: ruleData);
-      final evalRes = rule.evalJS(checkJs, res);
-      if (evalRes is StrResponse) {
-        return evalRes;
+      try {
+        final evalRes = rule.evalJS(checkJs, res);
+        if (evalRes is StrResponse) {
+          return evalRes;
+        }
+      } finally {
+        rule.dispose();
       }
     }
     return res;

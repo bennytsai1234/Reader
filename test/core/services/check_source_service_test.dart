@@ -37,6 +37,8 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
   BookChapter? contentRequestChapter;
   String? capturedNextChapterUrl;
   String? capturedExploreUrl;
+  int? capturedChapterPageConcurrency;
+  int? capturedContentPageConcurrency;
 
   @override
   Future<List<SearchBook>> searchBooks(
@@ -64,8 +66,10 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     BookSource source,
     Book book, {
     int? chapterLimit,
+    int? pageConcurrency,
   }) async {
     chapterRequestBook = book;
+    capturedChapterPageConcurrency = pageConcurrency;
     return chapters;
   }
 
@@ -75,6 +79,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     Book book,
     BookChapter chapter, {
     String? nextChapterUrl,
+    int? pageConcurrency,
   }) async {
     if (contentError != null) {
       throw contentError!;
@@ -82,6 +87,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     contentRequestBook = book;
     contentRequestChapter = chapter;
     capturedNextChapterUrl = nextChapterUrl;
+    capturedContentPageConcurrency = pageConcurrency;
     return content;
   }
 
@@ -90,6 +96,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     BookSource source,
     String url, {
     int page = 1,
+    dynamic cancelToken,
   }) async {
     capturedExploreUrl = url;
     return exploreResults;
@@ -178,6 +185,8 @@ void main() {
         fakeService.capturedNextChapterUrl,
         'https://example.com/book/1/2.html',
       );
+      expect(fakeService.capturedChapterPageConcurrency, 1);
+      expect(fakeService.capturedContentPageConcurrency, 1);
 
       final saved = fakeDao.store[source.bookSourceUrl]!;
       expect(saved.bookSourceGroup?.contains('搜尋失效') ?? false, isFalse);
