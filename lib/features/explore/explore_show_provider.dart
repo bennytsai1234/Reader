@@ -14,6 +14,7 @@ typedef ExploreBookLoader =
       BookSource source,
       String exploreUrl, {
       int? page,
+      CancelToken? cancelToken,
     });
 
 /// ExploreShowProvider - 探索結果列表的狀態管理
@@ -36,6 +37,8 @@ class ExploreShowProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _hasMore = true;
   String? _errorMessage;
+  int _requestSerial = 0;
+  bool _isDisposed = false;
 
   // --- Getters ---
   List<SearchBook> get books => _books;
@@ -73,6 +76,7 @@ class ExploreShowProvider extends ChangeNotifier {
   /// 載入數據
   Future<void> _loadData() async {
     if (_bookSource == null) return;
+    final requestId = ++_requestSerial;
 
     _isLoading = true;
     _errorMessage = null;
@@ -85,9 +89,14 @@ class ExploreShowProvider extends ChangeNotifier {
         _bookSource!,
         exploreUrl,
         page: _page,
+        cancelToken: _cancelToken,
       );
 
-      if (_cancelToken?.isCancelled ?? false) return;
+      if (_isDisposed ||
+          requestId != _requestSerial ||
+          (_cancelToken?.isCancelled ?? false)) {
+        return;
+      }
 
       if (results.isEmpty) {
         _hasMore = false;
@@ -96,17 +105,22 @@ class ExploreShowProvider extends ChangeNotifier {
         _page++;
       }
     } on DioException catch (e) {
+      if (_isDisposed || requestId != _requestSerial) return;
       if (e.type == DioExceptionType.cancel) return;
       AppLog.e('探索載入失敗', error: e);
       _errorMessage = e.message ?? '載入失敗';
       _hasMore = false;
     } catch (e) {
+      if (_isDisposed || requestId != _requestSerial) return;
       AppLog.e('探索載入失敗', error: e);
       _errorMessage = e.toString();
       _hasMore = false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      final shouldFinalize = !_isDisposed && requestId == _requestSerial;
+      if (shouldFinalize) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -119,6 +133,7 @@ class ExploreShowProvider extends ChangeNotifier {
   /// 重新載入
   Future<void> refresh() async {
     _cancelToken?.cancel('refresh');
+    _requestSerial++;
     _page = 1;
     _books = [];
     _hasMore = true;
@@ -128,6 +143,8 @@ class ExploreShowProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _requestSerial++;
     _cancelToken?.cancel('ExploreShowProvider disposed');
     _bookshelfTracker.dispose();
     super.dispose();

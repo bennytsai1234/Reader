@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
@@ -80,7 +82,7 @@ void main() {
       sourceUrl: 'source://main',
       exploreUrl: 'https://example.com/explore',
       exploreName: '精選',
-      exploreLoader: (_, __, {page}) async => [],
+      exploreLoader: (_, __, {page, cancelToken}) async => [],
     );
   }
 
@@ -161,5 +163,56 @@ void main() {
 
       provider.dispose();
     });
+  });
+
+  test('refresh ignores stale in-flight results after cancellation', () async {
+    final firstCall = Completer<List<SearchBook>>();
+    final secondCall = Completer<List<SearchBook>>();
+    var callCount = 0;
+
+    final provider = ExploreShowProvider(
+      sourceUrl: 'source://main',
+      exploreUrl: 'https://example.com/explore',
+      exploreName: '精選',
+      exploreLoader: (_, __, {page, cancelToken}) async {
+        callCount++;
+        if (callCount == 1) {
+          cancelToken?.whenCancel.then((_) {
+            if (!firstCall.isCompleted) {
+              firstCall.complete(<SearchBook>[
+                _makeSearchBook(
+                  bookUrl: 'https://example.com/books/stale',
+                  name: '舊資料',
+                  author: '作者甲',
+                ),
+              ]);
+            }
+          });
+          return firstCall.future;
+        }
+        return secondCall.future;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+    expect(callCount, 1);
+
+    final refreshFuture = provider.refresh();
+    expect(callCount, 2);
+
+    secondCall.complete(<SearchBook>[
+      _makeSearchBook(
+        bookUrl: 'https://example.com/books/fresh',
+        name: '新資料',
+        author: '作者乙',
+      ),
+    ]);
+
+    await refreshFuture;
+    await _settleAsync();
+
+    expect(provider.books, hasLength(1));
+    expect(provider.books.single.name, '新資料');
   });
 }
