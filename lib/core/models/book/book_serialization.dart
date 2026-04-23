@@ -36,16 +36,19 @@ extension BookSerialization on BookBase {
       'durChapterTitle': book.durChapterTitle,
       'durChapterIndex': book.durChapterIndex,
       'durChapterPos': book.durChapterPos,
+      'readerAnchorJson': book.readerAnchorJson,
       'durChapterTime': book.durChapterTime,
       'wordCount': book.wordCount,
       'canUpdate': book.canUpdate ? 1 : 0,
       'order': book.order,
       'originOrder': book.originOrder,
       'variable': book.variable,
-      'readConfig': book.readConfig != null ? jsonEncode(book.readConfig!.toJson()) : null,
+      'readConfig':
+          book.readConfig != null
+              ? jsonEncode(book.readConfig!.toJson())
+              : null,
       'syncTime': book.syncTime,
       'isInBookshelf': book.isInBookshelf ? 1 : 0,
     };
   }
 }
-

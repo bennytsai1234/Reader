@@ -26,8 +26,9 @@ class _FakeBookDao implements BookDao {
     String bookUrl,
     int chapterIndex,
     String chapterTitle,
-    int pos,
-  ) async {}
+    int pos, {
+    String? readerAnchorJson,
+  }) async {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -313,7 +314,7 @@ void main() {
       );
 
       expect(settleState.phase, ReaderScrollViewportSettlePhase.pendingRestore);
-      expect(shouldHold, isTrue);
+      expect(shouldHold, isFalse);
       provider.dispose();
     });
 
@@ -334,7 +335,8 @@ void main() {
           settleState.phase,
           ReaderScrollViewportSettlePhase.awaitingVisibleConfirmation,
         );
-        expect(settleState.shouldHoldContent, isTrue);
+        expect(settleState.shouldHoldContent, isFalse);
+        expect(settleState.shouldShowRestoreOverlay, isTrue);
         expect(settleState.shouldSuppressTtsFollow, isTrue);
         provider.dispose();
       },

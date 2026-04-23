@@ -38,8 +38,9 @@ class _FakeBookDao implements BookDao {
     String bookUrl,
     int chapterIndex,
     String chapterTitle,
-    int pos,
-  ) async {
+    int pos, {
+    String? readerAnchorJson,
+  }) async {
     updates.add((
       chapterIndex: chapterIndex,
       chapterTitle: chapterTitle,

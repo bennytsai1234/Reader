@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
+import 'package:inkpage_reader/core/models/book/book_logic.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/database/dao/bookmark_dao.dart';
 import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
@@ -172,6 +173,45 @@ void main() {
       await subscription.cancel();
     });
 
+    test('addCurrentBookToBookshelf 不會清掉既有精準 anchor', () async {
+      const facade = ReaderSessionFacade();
+      final progressStore = ReaderProgressStore();
+      final bookDao = _FakeBookDao();
+      final chapterDao = _FakeChapterDao();
+      final book =
+          _makeBook()
+            ..readerAnchorJson =
+                '{"chapterIndex":1,"charOffset":256,"pageIndexSnapshot":4}';
+      final chapters = <BookChapter>[
+        BookChapter(
+          title: '章節 1',
+          index: 0,
+          bookUrl: 'https://example.com/book',
+        ),
+      ];
+
+      await facade.addCurrentBookToBookshelf(
+        book: book,
+        chapters: chapters,
+        location: const ReaderLocation(chapterIndex: 1, charOffset: 256),
+        chapterTitle: '章節 2',
+        progressStore: progressStore,
+        bookDao: bookDao,
+        chapterDao: chapterDao,
+      );
+
+      expect(book.readerAnchorJson, isNotNull);
+      expect(
+        book.readerAnchorJson,
+        '{"chapterIndex":1,"charOffset":256,"pageIndexSnapshot":4}',
+      );
+      expect(bookDao.upserts, hasLength(1));
+      expect(
+        bookDao.upserts.single.readerAnchorJson,
+        '{"chapterIndex":1,"charOffset":256,"pageIndexSnapshot":4}',
+      );
+    });
+
     test('loadChapters 會優先沿用現有章節，否則回退 dao', () async {
       const facade = ReaderSessionFacade();
       final chapterDao = _FakeChapterDao();
@@ -247,29 +287,41 @@ void main() {
       const facade = ReaderSessionFacade();
       final bookDao = _FakeBookDao();
       final chapterDao = _FakeChapterDao();
+      final migratedChapters = <BookChapter>[
+        BookChapter(
+          title: '新章節 1',
+          index: 0,
+          bookUrl: 'https://example.com/new-book',
+        ),
+        BookChapter(
+          title: '新章節 2',
+          index: 1,
+          bookUrl: 'https://example.com/new-book',
+        ),
+      ];
       final book =
           _makeBook()
             ..isInBookshelf = true
+            ..durChapterIndex = 1
             ..durChapterPos = 96
+            ..readerAnchorJson =
+                '{"chapterIndex":1,"charOffset":96,"localOffsetSnapshot":288}'
+            ..totalChapterNum = 2
             ..durChapterTitle = '舊章節';
       final source = _makeSource(
         url: 'https://example.com/source-b',
         name: '來源 B',
       );
-      final migratedBook =
-          _makeSearchBook(origin: source.bookSourceUrl).toBook()
-            ..durChapterIndex = 1
-            ..durChapterPos = 96
-            ..durChapterTitle = '新章節 2'
-            ..isInBookshelf = true;
+      final migratedBook = book.migrateTo(
+        _makeSearchBook(origin: source.bookSourceUrl).toBook()
+          ..isInBookshelf = true,
+        migratedChapters,
+      );
       final resolution = SourceSwitchResolution(
         searchBook: _makeSearchBook(origin: source.bookSourceUrl),
         source: source,
         migratedBook: migratedBook,
-        chapters: <BookChapter>[
-          BookChapter(title: '新章節 1', index: 0, bookUrl: migratedBook.bookUrl),
-          BookChapter(title: '新章節 2', index: 1, bookUrl: migratedBook.bookUrl),
-        ],
+        chapters: migratedChapters,
         targetChapterIndex: 1,
         validatedContent: 'validated content',
       );
@@ -325,6 +377,10 @@ void main() {
 
       expect(book.bookUrl, migratedBook.bookUrl);
       expect(book.origin, migratedBook.origin);
+      expect(
+        book.readerAnchorJson,
+        '{"chapterIndex":1,"charOffset":96,"localOffsetSnapshot":288}',
+      );
       expect(assignedSource?.bookSourceName, '來源 B');
       expect(assignedChapters, hasLength(2));
       expect(assignedChapters[1].content, 'validated content');
@@ -348,6 +404,10 @@ void main() {
         migratedBook.bookUrl,
       ]);
       expect(bookDao.upserts, hasLength(1));
+      expect(
+        bookDao.upserts.single.readerAnchorJson,
+        '{"chapterIndex":1,"charOffset":96,"localOffsetSnapshot":288}',
+      );
       expect(chapterDao.insertedBatches, hasLength(1));
       expect(chapterDao.insertedBatches.single, hasLength(2));
     });

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
@@ -19,11 +20,15 @@ class ReaderProgressStore {
     required int chapterIndex,
     required int charOffset,
     String? title,
+    String? readerAnchorJson,
   }) {
     book.durChapterIndex = chapterIndex;
     book.durChapterPos = charOffset;
     if (title != null) {
       book.durChapterTitle = title;
+    }
+    if (readerAnchorJson != null) {
+      book.readerAnchorJson = readerAnchorJson;
     }
   }
 
@@ -44,6 +49,7 @@ class ReaderProgressStore {
       int chapterIndex,
       String title,
       int charOffset,
+      String? readerAnchorJson,
     )
     write,
     required Book book,
@@ -56,22 +62,25 @@ class ReaderProgressStore {
         chapters.isNotEmpty && chapterIndex < chapters.length
             ? chapters[chapterIndex].title
             : '';
+    final currentLocation =
+        ReaderLocation(
+          chapterIndex: chapterIndex,
+          charOffset: charOffset,
+        ).normalized();
+    final resolvedAnchor = (anchor ?? ReaderAnchor.location(currentLocation))
+        .normalized()
+        .copyWith(location: currentLocation);
     updateBookProgress(
       book: book,
       chapterIndex: chapterIndex,
       charOffset: charOffset,
       title: title,
+      readerAnchorJson: jsonEncode(resolvedAnchor.toJson()),
     );
-    _lastSavedLocation =
-        ReaderLocation(
-          chapterIndex: chapterIndex,
-          charOffset: charOffset,
-        ).normalized();
-    _lastSavedAnchor = (anchor ?? ReaderAnchor.location(_lastSavedLocation!))
-        .normalized()
-        .copyWith(location: _lastSavedLocation!);
+    _lastSavedLocation = currentLocation;
+    _lastSavedAnchor = resolvedAnchor;
     try {
-      await write(chapterIndex, title, charOffset);
+      await write(chapterIndex, title, charOffset, book.readerAnchorJson);
     } catch (e, stack) {
       AppLog.e(
         'ReaderProgressStore: persist failed ch=$chapterIndex pos=$charOffset',

@@ -1,4 +1,3 @@
-
 /// Book - 基礎書籍模型
 /// (原 Android data/entities/Book.kt)
 class BookBase {
@@ -33,6 +32,7 @@ class BookBase {
   String? durChapterTitle; // 目前章節標題
   int durChapterIndex; // 目前章節索引
   int durChapterPos; // 目前閱讀位置 (首行字索引)
+  String? readerAnchorJson; // 本機精準閱讀錨點
   int durChapterTime; // 最近一次閱讀時間
   String? wordCount; // 字數
   bool canUpdate; // 是否自動更新
@@ -45,7 +45,7 @@ class BookBase {
 
   // --- Transient Properties (Not persisted, Android parity) ---
   String? infoHtml; // 緩存的書籍詳情 HTML
-  String? tocHtml;  // 緩存的目錄 HTML
+  String? tocHtml; // 緩存的目錄 HTML
 
   BookBase({
     this.bookUrl = '',
@@ -71,6 +71,7 @@ class BookBase {
     this.durChapterTitle,
     this.durChapterIndex = 0,
     this.durChapterPos = 0,
+    this.readerAnchorJson,
     this.durChapterTime = 0,
     this.wordCount,
     this.canUpdate = true,
@@ -147,4 +148,3 @@ class ReadConfig {
     };
   }
 }
-

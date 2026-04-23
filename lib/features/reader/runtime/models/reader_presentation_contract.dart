@@ -44,6 +44,7 @@ class ReaderSlideTargetRequest {
   final int? previousMappedIndex;
   final ReaderLocation durableLocation;
   final List<TextPage> slidePages;
+  final ReaderSlideTargetResolutionMode resolutionMode;
   final ReaderChapter? Function(int chapterIndex) chapterAt;
   final List<TextPage> Function(int chapterIndex) pagesForChapter;
 
@@ -52,7 +53,10 @@ class ReaderSlideTargetRequest {
     required this.previousMappedIndex,
     required this.durableLocation,
     required this.slidePages,
+    required this.resolutionMode,
     required this.chapterAt,
     required this.pagesForChapter,
   });
 }
+
+enum ReaderSlideTargetResolutionMode { startupRestore, recenter }

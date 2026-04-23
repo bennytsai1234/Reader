@@ -23,6 +23,7 @@ import 'package:inkpage_reader/features/reader/runtime/reader_progress_coordinat
 import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:inkpage_reader/features/reader/runtime/read_aloud_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_chapter_provider.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_chapter_fingerprint.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_session_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_bootstrap_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_navigation_controller.dart';
@@ -125,12 +126,14 @@ class ReadBookController extends ReaderProviderBase
       book: () => book,
       chapters: () => chapters,
       writeProgress:
-          (chapterIndex, title, charOffset) => bookDao.updateProgress(
-            book.bookUrl,
-            chapterIndex,
-            title,
-            charOffset,
-          ),
+          (chapterIndex, title, charOffset, readerAnchorJson) =>
+              bookDao.updateProgress(
+                book.bookUrl,
+                chapterIndex,
+                title,
+                charOffset,
+                readerAnchorJson: readerAnchorJson,
+              ),
     );
     _runtimeController = ReaderRuntimeController(
       chapterAt: chapterAt,
@@ -146,7 +149,7 @@ class ReadBookController extends ReaderProviderBase
       committedLocation: () => committedLocation,
       updateCommittedLocation: _sessionCoordinator.updateCommittedLocation,
       updateVisibleLocation: _sessionCoordinator.updateVisibleLocation,
-      persistLocation: _sessionCoordinator.persistLocation,
+      persistLocation: _persistSessionLocation,
       dispatchViewportCommand: _dispatchViewportCommand,
     );
     _bootstrapRuntime = ReaderBootstrapRuntime(
@@ -994,11 +997,9 @@ class ReadBookController extends ReaderProviderBase
           );
           return true;
         }
-        jumpToChapterCharOffset(
+        _restoreInitialSlideLocation(
           chapterIndex: chapterIndex,
           charOffset: charOffset,
-          reason: ReaderCommandReason.restore,
-          isRestoringJump: false,
         );
         return false;
       },
@@ -1542,7 +1543,126 @@ class ReadBookController extends ReaderProviderBase
   }
 
   Future<void> _persistSessionLocation(ReaderLocation location) {
-    return _sessionCoordinator.persistLocation(location);
+    return _sessionCoordinator.persistAnchor(_buildPersistedAnchor(location));
+  }
+
+  ReaderAnchor _buildPersistedAnchor(
+    ReaderLocation location, {
+    ReaderAnchor? sourceAnchor,
+    int? globalPageIndex,
+  }) {
+    final normalized = location.normalized();
+    final baseAnchor = (sourceAnchor ?? ReaderAnchor.location(normalized))
+        .normalized()
+        .copyWith(
+          location: normalized,
+          contentHash: _contentHashForChapter(normalized.chapterIndex),
+          layoutSignature: _currentLayoutSignature(),
+        );
+    final resolvedAnchor =
+        _runtimeController
+            .resolveViewportCommand(
+              isScrollMode: pageTurnMode == PageAnim.scroll,
+              anchor: baseAnchor.toPresentationAnchor(),
+              sourceAnchor: baseAnchor,
+              globalPageIndex: globalPageIndex,
+            )
+            .anchor;
+    if (pageTurnMode == PageAnim.scroll) {
+      return resolvedAnchor;
+    }
+    return resolvedAnchor.copyWith(
+      localOffsetSnapshot: _runtimeController.localOffsetForLocation(
+        normalized,
+      ),
+    );
+  }
+
+  String _currentLayoutSignature() {
+    String fmt(double value) => value.toStringAsFixed(2);
+
+    final size = viewSize;
+    final width = size == null ? 'na' : size.width.toStringAsFixed(1);
+    final height = size == null ? 'na' : size.height.toStringAsFixed(1);
+    final mode = pageTurnMode == PageAnim.scroll ? 'scroll' : 'slide';
+    return '$mode:$width:$height:${fmt(fontSize)}:${fmt(lineHeight)}:${fmt(paragraphSpacing)}:${fmt(letterSpacing)}:$textIndent:${textFullJustify ? 1 : 0}:${fmt(contentTopInset)}:${fmt(contentBottomInset)}';
+  }
+
+  String? _contentHashForChapter(int chapterIndex) {
+    final runtimeChapter = chapterAt(chapterIndex);
+    final pages = runtimeChapter?.pages ?? pagesForChapter(chapterIndex);
+    return ReaderChapterFingerprint.structureDigest(
+      chapterIndex: chapterIndex,
+      pages: pages,
+    );
+  }
+
+  bool _matchesPreciseRestoreAnchor(
+    ReaderAnchor anchor,
+    ReaderLocation location, {
+    required bool requiresPageIndex,
+    required bool requiresLocalOffset,
+  }) {
+    if (anchor.location.chapterIndex != location.chapterIndex) return false;
+    if (requiresPageIndex && anchor.pageIndexSnapshot == null) return false;
+    if (requiresLocalOffset && anchor.localOffsetSnapshot == null) return false;
+
+    final layoutSignature = anchor.layoutSignature;
+    if (layoutSignature == null ||
+        layoutSignature != _currentLayoutSignature()) {
+      return false;
+    }
+
+    final storedContentHash = anchor.contentHash;
+    final currentContentHash = _contentHashForChapter(location.chapterIndex);
+    if (storedContentHash == null || currentContentHash == null) return false;
+    return storedContentHash == currentContentHash;
+  }
+
+  ReaderAnchor _buildInitialScrollRestoreAnchor(
+    ReaderLocation location,
+    ReaderAnchor baseAnchor,
+  ) {
+    if (!_matchesPreciseRestoreAnchor(
+      baseAnchor,
+      location,
+      requiresPageIndex: false,
+      requiresLocalOffset: true,
+    )) {
+      return _buildPersistedAnchor(location, sourceAnchor: baseAnchor);
+    }
+    return baseAnchor.normalized().copyWith(
+      location: location,
+      contentHash: _contentHashForChapter(location.chapterIndex),
+      layoutSignature: _currentLayoutSignature(),
+      pageIndexSnapshot:
+          baseAnchor.pageIndexSnapshot ??
+          _runtimeController.pageIndexForLocation(location),
+      localOffsetSnapshot: baseAnchor.localOffsetSnapshot,
+    );
+  }
+
+  ReaderAnchor _buildInitialSlideRestoreAnchor(
+    ReaderLocation location,
+    ReaderAnchor baseAnchor,
+  ) {
+    final globalPageIndex =
+        _matchesPreciseRestoreAnchor(
+              baseAnchor,
+              location,
+              requiresPageIndex: true,
+              requiresLocalOffset: false,
+            )
+            ? _runtimeController.matchingSlidePageIndexSnapshot(
+              location: location,
+              pageIndexSnapshot: baseAnchor.pageIndexSnapshot,
+            )
+            : null;
+    return _buildPersistedAnchor(
+      location,
+      sourceAnchor: baseAnchor,
+      globalPageIndex: globalPageIndex,
+    );
   }
 
   void _prepareSettingsRepaginateAnchor() {
@@ -1776,12 +1896,13 @@ class ReadBookController extends ReaderProviderBase
         _initialAnchor.location == location
             ? _initialAnchor
             : ReaderAnchor.location(location);
-    final localOffset = _runtimeController.localOffsetForLocation(location);
-    final restoreAnchor = baseAnchor.copyWith(
-      location: location,
-      pageIndexSnapshot: _runtimeController.pageIndexForLocation(location),
-      localOffsetSnapshot: localOffset,
+    final restoreAnchor = _buildInitialScrollRestoreAnchor(
+      location,
+      baseAnchor,
     );
+    final localOffset =
+        restoreAnchor.localOffsetSnapshot ??
+        _runtimeController.localOffsetForLocation(location);
     final transaction = _dispatchNavigationCommand(
       ReaderNavigationCommand.chapter(
         reason: ReaderCommandReason.restore,
@@ -1806,6 +1927,40 @@ class ReadBookController extends ReaderProviderBase
     _sessionCoordinator.updateVisibleConfirmed(false);
     _updateCommittedLocation(location);
     _sessionCoordinator.updateVisibleLocation(location);
+    notifyListeners();
+  }
+
+  void _restoreInitialSlideLocation({
+    required int chapterIndex,
+    required int charOffset,
+  }) {
+    final location =
+        ReaderLocation(
+          chapterIndex: chapterIndex,
+          charOffset: charOffset,
+        ).normalized();
+    final baseAnchor =
+        _initialAnchor.location == location
+            ? _initialAnchor
+            : ReaderAnchor.location(location);
+    final restoreAnchor = _buildInitialSlideRestoreAnchor(location, baseAnchor);
+    final targetPageIndex =
+        restoreAnchor.pageIndexSnapshot?.clamp(
+          0,
+          slidePages.isEmpty ? 0 : slidePages.length - 1,
+        ) ??
+        0;
+
+    currentChapterIndex = location.chapterIndex;
+    visibleChapterIndex = location.chapterIndex;
+    visibleChapterLocalOffset =
+        restoreAnchor.localOffsetSnapshot ??
+        _runtimeController.localOffsetForLocation(location);
+    visibleChapterAlignment = 0.0;
+    currentPageIndex = targetPageIndex;
+    _updateCommittedLocation(location);
+    _sessionCoordinator.updateVisibleLocation(location);
+    requestControllerReset(targetPageIndex);
     notifyListeners();
   }
 

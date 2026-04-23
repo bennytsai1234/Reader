@@ -80,7 +80,8 @@ class ReaderDisplayCoordinator {
     }
 
     if (request.previousMappedIndex != null &&
-        request.previousMappedIndex! >= 0) {
+        request.previousMappedIndex! >= 0 &&
+        request.resolutionMode == ReaderSlideTargetResolutionMode.recenter) {
       return request.previousMappedIndex!;
     }
 

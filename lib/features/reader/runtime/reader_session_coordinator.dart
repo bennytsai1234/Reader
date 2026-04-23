@@ -10,7 +10,12 @@ class ReaderSessionCoordinator {
   final ReaderProgressStore _store;
   final Book Function() _book;
   final List<BookChapter> Function() _chapters;
-  final Future<void> Function(int chapterIndex, String title, int charOffset)
+  final Future<void> Function(
+    int chapterIndex,
+    String title,
+    int charOffset,
+    String? readerAnchorJson,
+  )
   _writeProgress;
 
   ReaderSessionCoordinator({
@@ -22,6 +27,7 @@ class ReaderSessionCoordinator {
       int chapterIndex,
       String title,
       int charOffset,
+      String? readerAnchorJson,
     )
     writeProgress,
   }) : _state = state,

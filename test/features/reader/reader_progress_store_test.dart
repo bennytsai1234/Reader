@@ -31,12 +31,14 @@ void main() {
       int? savedChapter;
       String? savedTitle;
       int? savedOffset;
+      String? savedAnchorJson;
 
       await store.persistCharOffset(
-        write: (chapterIndex, title, charOffset) async {
+        write: (chapterIndex, title, charOffset, readerAnchorJson) async {
           savedChapter = chapterIndex;
           savedTitle = title;
           savedOffset = charOffset;
+          savedAnchorJson = readerAnchorJson;
         },
         book: book,
         chapters: chapters,
@@ -60,6 +62,7 @@ void main() {
       expect(savedChapter, 1);
       expect(savedTitle, 'c1');
       expect(savedOffset, 345);
+      expect(savedAnchorJson, isNotNull);
     });
 
     test('persistCharOffset 會保留提供的 anchor snapshot', () async {
@@ -68,7 +71,7 @@ void main() {
       final chapters = [BookChapter(title: 'c0', index: 0)];
 
       await store.persistCharOffset(
-        write: (_, __, ___) async {},
+        write: (_, __, ___, ____) async {},
         book: book,
         chapters: chapters,
         chapterIndex: 0,
@@ -92,12 +95,35 @@ void main() {
       );
     });
 
+    test('updateBookProgress 未提供 anchor 時會保留既有 readerAnchorJson', () {
+      final store = ReaderProgressStore();
+      final book = Book(name: 'book', author: 'author', bookUrl: 'url')
+        ..readerAnchorJson = '{"chapterIndex":1,"charOffset":88}';
+
+      store.updateBookProgress(
+        book: book,
+        chapterIndex: 1,
+        charOffset: 120,
+        title: 'c1',
+      );
+
+      expect(book.durChapterIndex, 1);
+      expect(book.durChapterPos, 120);
+      expect(book.durChapterTitle, 'c1');
+      expect(book.readerAnchorJson, '{"chapterIndex":1,"charOffset":88}');
+    });
+
     test('persistCharOffset 寫入失敗時不拋出例外（並靜默記錄）', () async {
       final store = ReaderProgressStore();
       final book = Book(name: 'book', author: 'author', bookUrl: 'url');
       final chapters = [BookChapter(title: 'c0', index: 0)];
 
-      Future<void> failingWrite(int ci, String title, int charOffset) async {
+      Future<void> failingWrite(
+        int ci,
+        String title,
+        int charOffset,
+        String? readerAnchorJson,
+      ) async {
         throw Exception('DB write failed');
       }
 
@@ -152,7 +178,7 @@ void main() {
       final chapters = [BookChapter(title: 'c0', index: 0)];
 
       await store.persistCharOffset(
-        write: (_, __, ___) async {},
+        write: (_, __, ___, ____) async {},
         book: book,
         chapters: chapters,
         chapterIndex: 2,

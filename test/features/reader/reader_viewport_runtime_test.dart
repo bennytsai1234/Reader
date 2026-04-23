@@ -23,8 +23,9 @@ class _FakeBookDao implements BookDao {
     String bookUrl,
     int chapterIndex,
     String chapterTitle,
-    int pos,
-  ) async {}
+    int pos, {
+    String? readerAnchorJson,
+  }) async {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -254,7 +255,7 @@ void main() {
 
         final update = runtime.handleProviderStateChanged(provider);
 
-        expect(update.shouldHoldScrollUntilRestore, isTrue);
+        expect(update.shouldHoldScrollUntilRestore, isFalse);
         expect(update.shouldFollowTts, isFalse);
         expect(
           update.viewportSettleState.phase,
@@ -371,38 +372,41 @@ void main() {
       provider.dispose();
     });
 
-    test('settingsRepaginate pending navigation 結束後會重放被 suppress 的 TTS follow', () {
-      final provider =
-          _FakeReaderProvider()
-            ..pageTurnMode = PageAnim.scroll
-            ..fakeHasActiveNavigation = true
-            ..fakeActiveCommandReason = ReaderCommandReason.settingsRepaginate
-            ..fakeCurrentTtsPosition = const ReaderTtsPosition(
-              chapterIndex: 0,
-              pageIndex: 0,
-              lineIndex: 0,
-              highlightStart: 100,
-              highlightEnd: 110,
-              wordStart: 108,
-              wordEnd: 109,
-              localOffset: 120,
-              followKey: 8002,
-            );
-      final runtime = ReaderViewportRuntime(
-        initialPageTurnMode: provider.pageTurnMode,
-      );
+    test(
+      'settingsRepaginate pending navigation 結束後會重放被 suppress 的 TTS follow',
+      () {
+        final provider =
+            _FakeReaderProvider()
+              ..pageTurnMode = PageAnim.scroll
+              ..fakeHasActiveNavigation = true
+              ..fakeActiveCommandReason = ReaderCommandReason.settingsRepaginate
+              ..fakeCurrentTtsPosition = const ReaderTtsPosition(
+                chapterIndex: 0,
+                pageIndex: 0,
+                lineIndex: 0,
+                highlightStart: 100,
+                highlightEnd: 110,
+                wordStart: 108,
+                wordEnd: 109,
+                localOffset: 120,
+                followKey: 8002,
+              );
+        final runtime = ReaderViewportRuntime(
+          initialPageTurnMode: provider.pageTurnMode,
+        );
 
-      final suppressedUpdate = runtime.handleProviderStateChanged(provider);
-      provider.fakeHasActiveNavigation = false;
-      final resumedUpdate = runtime.handleProviderStateChanged(provider);
+        final suppressedUpdate = runtime.handleProviderStateChanged(provider);
+        provider.fakeHasActiveNavigation = false;
+        final resumedUpdate = runtime.handleProviderStateChanged(provider);
 
-      expect(suppressedUpdate.shouldFollowTts, isFalse);
-      expect(
-        suppressedUpdate.viewportSettleState.shouldReplaySuppressedTtsFollow,
-        isTrue,
-      );
-      expect(resumedUpdate.shouldFollowTts, isTrue);
-      provider.dispose();
-    });
+        expect(suppressedUpdate.shouldFollowTts, isFalse);
+        expect(
+          suppressedUpdate.viewportSettleState.shouldReplaySuppressedTtsFollow,
+          isTrue,
+        );
+        expect(resumedUpdate.shouldFollowTts, isTrue);
+        provider.dispose();
+      },
+    );
   });
 }

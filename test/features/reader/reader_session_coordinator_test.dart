@@ -9,7 +9,15 @@ import 'package:inkpage_reader/features/reader/runtime/reader_session_coordinato
 void main() {
   group('ReaderSessionCoordinator', () {
     test('persistLocation 會同步 session/durable state 與 book progress', () async {
-      final writes = <({int chapterIndex, String title, int charOffset})>[];
+      final writes =
+          <
+            ({
+              int chapterIndex,
+              String title,
+              int charOffset,
+              String? readerAnchorJson,
+            })
+          >[];
       final book = Book(
         bookUrl: 'book',
         name: 'Book',
@@ -28,11 +36,17 @@ void main() {
               BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
               BookChapter(title: 'c1', index: 1, bookUrl: 'book'),
             ],
-        writeProgress: (chapterIndex, title, charOffset) async {
+        writeProgress: (
+          chapterIndex,
+          title,
+          charOffset,
+          readerAnchorJson,
+        ) async {
           writes.add((
             chapterIndex: chapterIndex,
             title: title,
             charOffset: charOffset,
+            readerAnchorJson: readerAnchorJson,
           ));
         },
       );
@@ -51,8 +65,10 @@ void main() {
       );
       expect(book.durChapterIndex, 1);
       expect(book.durChapterPos, 24);
+      expect(book.readerAnchorJson, isNotNull);
       expect(writes.single.chapterIndex, 1);
       expect(writes.single.charOffset, 24);
+      expect(writes.single.readerAnchorJson, isNotNull);
     });
 
     test('updatePhase 會推進 session state machine', () {
@@ -63,7 +79,7 @@ void main() {
         store: ReaderProgressStore(),
         book: () => Book(bookUrl: 'book', name: 'Book'),
         chapters: () => const [],
-        writeProgress: (_, __, ___) async {},
+        writeProgress: (_, __, ___, ____) async {},
       );
 
       coordinator.updatePhase(ReaderSessionPhase.contentLoading);

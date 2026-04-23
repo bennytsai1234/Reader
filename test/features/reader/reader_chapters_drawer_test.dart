@@ -24,8 +24,9 @@ class _FakeBookDao implements BookDao {
     String bookUrl,
     int chapterIndex,
     String chapterTitle,
-    int pos,
-  ) async {}
+    int pos, {
+    String? readerAnchorJson,
+  }) async {}
 
   @override
   Future<void> upsert(Book book) async {}

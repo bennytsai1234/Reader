@@ -35,6 +35,7 @@ class Book extends BookBase implements RuleDataInterface {
     super.durChapterTitle,
     super.durChapterIndex,
     super.durChapterPos,
+    super.readerAnchorJson,
     super.durChapterTime,
     super.wordCount,
     super.canUpdate,
@@ -51,7 +52,9 @@ class Book extends BookBase implements RuleDataInterface {
     if (variable == null || variable!.isEmpty) return {};
     try {
       final decoded = jsonDecode(variable!);
-      return (decoded as Map).map((k, v) => MapEntry(k.toString(), v.toString()));
+      return (decoded as Map).map(
+        (k, v) => MapEntry(k.toString(), v.toString()),
+      );
     } catch (_) {
       return {};
     }
@@ -96,15 +99,24 @@ class Book extends BookBase implements RuleDataInterface {
       durChapterTitle: json['durChapterTitle'],
       durChapterIndex: BookSerialization.toInt(json['durChapterIndex']),
       durChapterPos: BookSerialization.toInt(json['durChapterPos']),
+      readerAnchorJson: json['readerAnchorJson'],
       durChapterTime: BookSerialization.toInt(json['durChapterTime']),
       wordCount: json['wordCount'],
       canUpdate: json['canUpdate'] == 1 || json['canUpdate'] == true,
       order: BookSerialization.toInt(json['order']),
       originOrder: BookSerialization.toInt(json['originOrder']),
       variable: json['variable'],
-      readConfig: json['readConfig'] != null ? ReadConfig.fromJson(json['readConfig'] is String ? jsonDecode(json['readConfig']) : json['readConfig']) : null,
+      readConfig:
+          json['readConfig'] != null
+              ? ReadConfig.fromJson(
+                json['readConfig'] is String
+                    ? jsonDecode(json['readConfig'])
+                    : json['readConfig'],
+              )
+              : null,
       syncTime: BookSerialization.toInt(json['syncTime']),
-      isInBookshelf: json['isInBookshelf'] == 1 || json['isInBookshelf'] == true,
+      isInBookshelf:
+          json['isInBookshelf'] == 1 || json['isInBookshelf'] == true,
     );
   }
 
@@ -134,6 +146,7 @@ class Book extends BookBase implements RuleDataInterface {
     String? durChapterTitle,
     int? durChapterIndex,
     int? durChapterPos,
+    String? readerAnchorJson,
     int? durChapterTime,
     String? wordCount,
     bool? canUpdate,
@@ -168,6 +181,7 @@ class Book extends BookBase implements RuleDataInterface {
       durChapterTitle: durChapterTitle ?? this.durChapterTitle,
       durChapterIndex: durChapterIndex ?? this.durChapterIndex,
       durChapterPos: durChapterPos ?? this.durChapterPos,
+      readerAnchorJson: readerAnchorJson ?? this.readerAnchorJson,
       durChapterTime: durChapterTime ?? this.durChapterTime,
       wordCount: wordCount ?? this.wordCount,
       canUpdate: canUpdate ?? this.canUpdate,
@@ -180,4 +194,3 @@ class Book extends BookBase implements RuleDataInterface {
     );
   }
 }
-

@@ -32,6 +32,35 @@ class ReaderAnchor {
     );
   }
 
+  factory ReaderAnchor.fromJson(Map<String, dynamic> json) {
+    int asInt(dynamic value) {
+      if (value is int) return value;
+      if (value is double) return value.round();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+
+    double? asDouble(dynamic value) {
+      if (value is double) return value;
+      if (value is int) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
+    final hasPageIndex = json.containsKey('pageIndexSnapshot');
+    return ReaderAnchor(
+      location:
+          ReaderLocation(
+            chapterIndex: asInt(json['chapterIndex']),
+            charOffset: asInt(json['charOffset']),
+          ).normalized(),
+      contentHash: json['contentHash'] as String?,
+      layoutSignature: json['layoutSignature'] as String?,
+      pageIndexSnapshot: hasPageIndex ? asInt(json['pageIndexSnapshot']) : null,
+      localOffsetSnapshot: asDouble(json['localOffsetSnapshot']),
+    );
+  }
+
   ReaderAnchor normalized() {
     return ReaderAnchor(
       location: location.normalized(),
@@ -56,6 +85,18 @@ class ReaderAnchor {
       pageIndexSnapshot: pageIndexSnapshot ?? this.pageIndexSnapshot,
       localOffsetSnapshot: localOffsetSnapshot ?? this.localOffsetSnapshot,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'chapterIndex': location.chapterIndex,
+      'charOffset': location.charOffset,
+      if (contentHash != null) 'contentHash': contentHash,
+      if (layoutSignature != null) 'layoutSignature': layoutSignature,
+      if (pageIndexSnapshot != null) 'pageIndexSnapshot': pageIndexSnapshot,
+      if (localOffsetSnapshot != null)
+        'localOffsetSnapshot': localOffsetSnapshot,
+    };
   }
 
   ReaderPresentationAnchor toPresentationAnchor({bool fromEnd = false}) {

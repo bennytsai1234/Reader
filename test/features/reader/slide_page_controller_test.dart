@@ -11,13 +11,38 @@ void main() {
       final slideController = SlidePageController(pageController);
       var callbackCalled = false;
 
-      slideController.jumpTo(
-        1,
-        onWillJump: () => callbackCalled = true,
-      );
+      slideController.jumpTo(1, onWillJump: () => callbackCalled = true);
       await tester.pump();
 
       expect(callbackCalled, isFalse);
+
+      slideController.dispose();
+      pageController.dispose();
+    });
+
+    testWidgets('clients attach 後會補上先前延後的 jump', (tester) async {
+      final pageController = PageController();
+      final slideController = SlidePageController(pageController);
+      var callbackCalled = false;
+
+      slideController.jumpTo(1, onWillJump: () => callbackCalled = true);
+      await tester.pump();
+
+      expect(callbackCalled, isFalse);
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: PageView(
+            controller: pageController,
+            children: const [SizedBox.expand(), SizedBox.expand()],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(callbackCalled, isTrue);
+      expect(pageController.page, 1);
 
       slideController.dispose();
       pageController.dispose();
@@ -33,18 +58,12 @@ void main() {
           textDirection: TextDirection.ltr,
           child: PageView(
             controller: pageController,
-            children: const [
-              SizedBox.expand(),
-              SizedBox.expand(),
-            ],
+            children: const [SizedBox.expand(), SizedBox.expand()],
           ),
         ),
       );
 
-      slideController.jumpTo(
-        1,
-        onWillJump: () => callbackCalled = true,
-      );
+      slideController.jumpTo(1, onWillJump: () => callbackCalled = true);
 
       expect(callbackCalled, isFalse);
       await tester.pump();

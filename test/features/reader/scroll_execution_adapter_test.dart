@@ -22,8 +22,9 @@ class _FakeBookDao implements BookDao {
     String bookUrl,
     int chapterIndex,
     String chapterTitle,
-    int pos,
-  ) async {}
+    int pos, {
+    String? readerAnchorJson,
+  }) async {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;

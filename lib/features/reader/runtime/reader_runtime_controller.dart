@@ -152,6 +152,25 @@ class ReaderRuntimeController {
     );
   }
 
+  int? matchingSlidePageIndexSnapshot({
+    required ReaderLocation location,
+    required int? pageIndexSnapshot,
+  }) {
+    if (pageIndexSnapshot == null) return null;
+    final slidePages = _slidePages();
+    if (pageIndexSnapshot < 0 || pageIndexSnapshot >= slidePages.length) {
+      return null;
+    }
+    final chapterPageIndex = pageIndexForLocation(location);
+    if (chapterPageIndex == null) return null;
+    final page = slidePages[pageIndexSnapshot];
+    if (page.chapterIndex != location.chapterIndex ||
+        page.index != chapterPageIndex) {
+      return null;
+    }
+    return pageIndexSnapshot;
+  }
+
   ReaderViewportCommand resolveViewportCommand({
     required bool isScrollMode,
     required ReaderPresentationAnchor anchor,

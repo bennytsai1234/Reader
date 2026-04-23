@@ -172,6 +172,10 @@ class ReaderContentPipeline {
             display.mappedIndex >= 0 ? display.mappedIndex : null,
         durableLocation: durableLocation.normalized(),
         slidePages: display.slidePages,
+        resolutionMode:
+            currentPage == null
+                ? ReaderSlideTargetResolutionMode.startupRestore
+                : ReaderSlideTargetResolutionMode.recenter,
         chapterAt: chapterAt,
         pagesForChapter: pagesForChapter,
       ),
@@ -236,6 +240,7 @@ class ReaderContentPipeline {
         previousMappedIndex: null,
         durableLocation: pinnedAnchor.location,
         slidePages: slidePages,
+        resolutionMode: ReaderSlideTargetResolutionMode.startupRestore,
         chapterAt: chapterAt,
         pagesForChapter: pagesForChapter,
       ),

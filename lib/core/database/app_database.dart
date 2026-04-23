@@ -99,7 +99,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase._internal() : super(_openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -122,6 +122,11 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement(
           'ALTER TABLE download_tasks ADD COLUMN "endChapterIndex" INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (from < 9) {
+        await customStatement(
+          'ALTER TABLE books ADD COLUMN "readerAnchorJson" TEXT',
         );
       }
     },

@@ -29,6 +29,7 @@ extension BookLogic on Book {
     durChapterTitle = other.durChapterTitle;
     durChapterIndex = other.durChapterIndex;
     durChapterPos = other.durChapterPos;
+    readerAnchorJson = other.readerAnchorJson;
     durChapterTime = other.durChapterTime;
     wordCount = other.wordCount;
     canUpdate = other.canUpdate;
@@ -87,6 +88,7 @@ extension BookLogic on Book {
               ? toc[alignedIndex].title
               : durChapterTitle,
       durChapterPos: durChapterPos,
+      readerAnchorJson: readerAnchorJson,
       durChapterTime: durChapterTime,
       group: group,
       order: order,

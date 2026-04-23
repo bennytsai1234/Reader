@@ -97,7 +97,8 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           widget.provider,
           hasVisibleData: _hasVisibleData(widget.provider),
         );
-    if (widget.provider.isReady && !initialViewportSettleState.shouldHoldContent) {
+    if (widget.provider.isReady &&
+        !initialViewportSettleState.shouldHoldContent) {
       _contentRevealed = true;
       _fadeCtrl.value = 1.0;
     }
@@ -242,8 +243,15 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           );
         }
 
+        final hasVisibleData = _hasVisibleData(provider);
+        final settleState = _coordinator.resolveScrollViewportSettleState(
+          provider,
+          hasVisibleData: hasVisibleData,
+        );
+
         // Show theme-colored placeholder during init
         if (!_contentRevealed &&
+            !hasVisibleData &&
             (provider.lifecycle == ReaderLifecycle.loading ||
                 provider.sessionPhase == ReaderSessionPhase.restoring ||
                 _holdContentUntilScrollRestore)) {
@@ -256,11 +264,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
         if (blockingViewportState != null) {
           return _buildViewportState(provider, blockingViewportState);
         }
-
-        final hasVisibleData =
-            provider.pageTurnMode == PageAnim.scroll
-                ? provider.pageFactory.orderedChapters.isNotEmpty
-                : provider.slidePages.isNotEmpty;
 
         final waitingForFirstContent = _coordinator.shouldWaitForFirstContent(
           provider,
@@ -315,12 +318,20 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           ),
         );
 
+        final decoratedContent =
+            hasVisibleData && settleState.shouldShowRestoreOverlay
+                ? Stack(
+                  fit: StackFit.expand,
+                  children: [content, _buildRestoreOverlay(provider)],
+                )
+                : content;
+
         return FadeTransition(
           opacity:
               _contentRevealed
                   ? _fadeAnimation
                   : const AlwaysStoppedAnimation(1.0),
-          child: content,
+          child: decoratedContent,
         );
       },
     );
@@ -371,6 +382,57 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
             ),
           if (state.message != null) Text(state.message!, style: textStyle),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRestoreOverlay(ReaderProvider provider) {
+    final textColor = provider.currentTheme.textColor.withValues(alpha: 0.72);
+    return IgnorePointer(
+      ignoring: true,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: provider.currentTheme.backgroundColor.withValues(
+                  alpha: 0.82,
+                ),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '定位中',
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: provider.fontSize * 0.72,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

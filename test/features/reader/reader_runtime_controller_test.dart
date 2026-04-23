@@ -178,6 +178,26 @@ void main() {
       expect(slideCommand.anchor.pageIndexSnapshot, 2);
     });
 
+    test('slide page snapshot 只有在目前視窗仍指向同一章頁時才會重用', () {
+      expect(
+        controller.matchingSlidePageIndexSnapshot(
+          location: const ReaderLocation(chapterIndex: 1, charOffset: 8),
+          pageIndexSnapshot: 2,
+        ),
+        2,
+      );
+
+      slidePages = [...chapter1.pages];
+
+      expect(
+        controller.matchingSlidePageIndexSnapshot(
+          location: const ReaderLocation(chapterIndex: 1, charOffset: 8),
+          pageIndexSnapshot: 2,
+        ),
+        isNull,
+      );
+    });
+
     test('viewport command 會保留 source anchor metadata', () {
       final command = controller.resolveViewportCommand(
         isScrollMode: true,

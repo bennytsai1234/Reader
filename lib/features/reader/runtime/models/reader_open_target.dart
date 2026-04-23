@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
@@ -14,14 +16,34 @@ class ReaderOpenTarget {
   ReaderLocation get location => anchor.location;
 
   factory ReaderOpenTarget.resume(Book book) {
-    return ReaderOpenTarget(
-      intent: ReaderOpenIntent.resume,
-      anchor: ReaderAnchor.location(
+    final location =
         ReaderLocation(
           chapterIndex: book.durChapterIndex,
           charOffset: book.durChapterPos,
-        ).normalized(),
-      ),
+        ).normalized();
+    ReaderAnchor? persistedAnchor;
+    final rawAnchorJson = book.readerAnchorJson;
+    if (rawAnchorJson != null && rawAnchorJson.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawAnchorJson);
+        if (decoded is Map<String, dynamic>) {
+          persistedAnchor = ReaderAnchor.fromJson(decoded);
+        } else if (decoded is Map) {
+          persistedAnchor = ReaderAnchor.fromJson(
+            decoded.map((key, value) => MapEntry(key.toString(), value)),
+          );
+        }
+      } catch (_) {
+        persistedAnchor = null;
+      }
+    }
+    final normalizedAnchor = persistedAnchor?.normalized();
+    return ReaderOpenTarget(
+      intent: ReaderOpenIntent.resume,
+      anchor:
+          normalizedAnchor == null || normalizedAnchor.location != location
+              ? ReaderAnchor.location(location)
+              : normalizedAnchor,
     );
   }
 

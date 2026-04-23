@@ -137,7 +137,7 @@ void main() {
             ..durChapterPos = 20;
       final store = ReaderProgressStore();
       await store.persistCharOffset(
-        write: (_, __, ___) async {},
+        write: (_, __, ___, ____) async {},
         book: book,
         chapters: [
           BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),

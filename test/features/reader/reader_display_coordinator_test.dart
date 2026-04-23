@@ -115,6 +115,7 @@ void main() {
               charOffset: 0,
             ),
             slidePages: slidePages,
+            resolutionMode: ReaderSlideTargetResolutionMode.recenter,
             chapterAt: (index) => index == 0 ? chapter0 : chapter1,
             pagesForChapter:
                 (index) => index == 0 ? chapter0.pages : chapter1.pages,
@@ -129,6 +130,7 @@ void main() {
               charOffset: 8,
             ),
             slidePages: slidePages,
+            resolutionMode: ReaderSlideTargetResolutionMode.startupRestore,
             chapterAt: (index) => index == 0 ? chapter0 : chapter1,
             pagesForChapter:
                 (index) => index == 0 ? chapter0.pages : chapter1.pages,
@@ -139,5 +141,26 @@ void main() {
         expect(fallback, 2);
       },
     );
+
+    test('startup restore 不會優先沿用 previous mapped index', () {
+      final chapter0 = _chapter(0, [0]);
+      final chapter1 = _chapter(1, [0, 8, 16]);
+      final slidePages = [...chapter0.pages, ...chapter1.pages];
+
+      final targetIndex = coordinator.resolveSlideTargetIndex(
+        ReaderSlideTargetRequest(
+          pinnedAnchor: null,
+          previousMappedIndex: 0,
+          durableLocation: const ReaderLocation(chapterIndex: 1, charOffset: 8),
+          slidePages: slidePages,
+          resolutionMode: ReaderSlideTargetResolutionMode.startupRestore,
+          chapterAt: (index) => index == 0 ? chapter0 : chapter1,
+          pagesForChapter:
+              (index) => index == 0 ? chapter0.pages : chapter1.pages,
+        ),
+      );
+
+      expect(targetIndex, 2);
+    });
   });
 }
