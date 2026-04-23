@@ -323,18 +323,10 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
   ) {
     return Padding(
       padding: const EdgeInsets.all(8),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          mainAxisExtent: 56,
-        ),
-        itemCount: provider.expandedKinds.length,
-        itemBuilder: (context, index) {
-          final kind = provider.expandedKinds[index];
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: provider.expandedKinds.map((kind) {
           final isError = kind.title.startsWith('ERROR:');
           final background =
               isError
@@ -360,29 +352,32 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
                 if (kind.url == null || kind.url!.isEmpty) return;
                 _navigateToExploreShow(source, kind);
               },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: borderColor),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  kind.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontSize: 11,
-                    height: 1.15,
-                    color: textColor,
-                    fontWeight: FontWeight.w600,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 40, maxWidth: 140),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: borderColor),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    kind.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontSize: 11,
+                      height: 1.15,
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
             ),
           );
-        },
+        }).toList(),
       ),
     );
   }

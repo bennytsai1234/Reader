@@ -76,12 +76,7 @@ class ExploreProvider extends ChangeNotifier {
 
     _allSources =
         sources
-            .where(
-              (source) =>
-                  source.enabled &&
-                  source.enabledExplore &&
-                  source.hasExploreUrl,
-            )
+            .where((source) => source.canParticipateInDiscovery)
             .toList()
           ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
 

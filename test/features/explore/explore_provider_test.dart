@@ -175,4 +175,36 @@ void main() {
       ]);
     },
   );
+
+  test('filters out imported unsupported discovery sources', () async {
+    fakeSourceDao.sources = [
+      BookSource(
+        bookSourceUrl: 'source://novel',
+        bookSourceName: '小說源',
+        enabled: true,
+        enabledExplore: true,
+        exploreUrl: '最新::https://example.com/novel',
+      ),
+      BookSource(
+        bookSourceUrl: 'source://audio',
+        bookSourceName: '有聲源',
+        bookSourceType: 1,
+        enabled: true,
+        enabledExplore: true,
+        exploreUrl: '最新::https://example.com/audio',
+      )..addGroup(nonNovelSourceGroupTag),
+    ];
+
+    final provider = ExploreProvider(
+      sourceDao: fakeSourceDao,
+      kindsLoader: (exploreUrl, {source}) async => const [],
+    );
+    addTearDown(provider.dispose);
+
+    await _settleAsync();
+
+    expect(provider.sources.map((source) => source.bookSourceUrl), [
+      'source://novel',
+    ]);
+  });
 }
