@@ -53,114 +53,119 @@ class ChapterListParser {
       source: source,
       ruleData: book,
     ).setContent(body, baseUrl: baseUrl);
-    final listRuleNeedsAsync = _ruleNeedsAsync(listRule);
-    final chapterNameRule = tocRule.chapterName ?? '';
-    final chapterUrlRule = tocRule.chapterUrl ?? '';
-    final updateTimeRule = tocRule.updateTime ?? '';
-    final isVolumeRule = tocRule.isVolume ?? '';
-    final isVipRule = tocRule.isVip ?? '';
-    final isPayRule = tocRule.isPay ?? '';
-    final nextTocUrlRule = tocRule.nextTocUrl ?? '';
-    final chapterNameRuleNeedsAsync = _ruleNeedsAsync(chapterNameRule);
-    final chapterUrlRuleNeedsAsync = _ruleNeedsAsync(chapterUrlRule);
-    final updateTimeRuleNeedsAsync = _ruleNeedsAsync(updateTimeRule);
-    final isVolumeRuleNeedsAsync = _ruleNeedsAsync(isVolumeRule);
-    final isVipRuleNeedsAsync = _ruleNeedsAsync(isVipRule);
-    final isPayRuleNeedsAsync = _ruleNeedsAsync(isPayRule);
-    final nextTocUrlRuleNeedsAsync = _ruleNeedsAsync(nextTocUrlRule);
-    final elements =
-        listRuleNeedsAsync ? await rule.getElementsAsync(listRule) : rule.getElements(listRule);
+    try {
+      final listRuleNeedsAsync = _ruleNeedsAsync(listRule);
+      final chapterNameRule = tocRule.chapterName ?? '';
+      final chapterUrlRule = tocRule.chapterUrl ?? '';
+      final updateTimeRule = tocRule.updateTime ?? '';
+      final isVolumeRule = tocRule.isVolume ?? '';
+      final isVipRule = tocRule.isVip ?? '';
+      final isPayRule = tocRule.isPay ?? '';
+      final nextTocUrlRule = tocRule.nextTocUrl ?? '';
+      final chapterNameRuleNeedsAsync = _ruleNeedsAsync(chapterNameRule);
+      final chapterUrlRuleNeedsAsync = _ruleNeedsAsync(chapterUrlRule);
+      final updateTimeRuleNeedsAsync = _ruleNeedsAsync(updateTimeRule);
+      final isVolumeRuleNeedsAsync = _ruleNeedsAsync(isVolumeRule);
+      final isVipRuleNeedsAsync = _ruleNeedsAsync(isVipRule);
+      final isPayRuleNeedsAsync = _ruleNeedsAsync(isPayRule);
+      final nextTocUrlRuleNeedsAsync = _ruleNeedsAsync(nextTocUrlRule);
+      final elements =
+          listRuleNeedsAsync ? await rule.getElementsAsync(listRule) : rule.getElements(listRule);
 
-    final chapters = <BookChapter>[];
-    for (var i = 0; i < elements.length; i++) {
-      final itemRule = AnalyzeRule(
-        source: source,
-        ruleData: book,
-      ).setContent(elements[i], baseUrl: baseUrl);
-      final chapter = BookChapter(
-        baseUrl: baseUrl,
-        bookUrl: book.bookUrl,
-        index: i,
-      );
-      itemRule.setChapter(chapter);
+      final chapters = <BookChapter>[];
+      for (var i = 0; i < elements.length; i++) {
+        final itemRule = AnalyzeRule(
+          source: source,
+          ruleData: book,
+        ).setContent(elements[i], baseUrl: baseUrl);
+        final chapter = BookChapter(
+          baseUrl: baseUrl,
+          bookUrl: book.bookUrl,
+          index: i,
+        );
+        itemRule.setChapter(chapter);
 
-      chapter.title = await _readString(
-        itemRule,
-        chapterNameRule,
-        needsAsync: chapterNameRuleNeedsAsync,
-      );
-      if (chapter.title.isEmpty) continue;
+        try {
+          chapter.title = await _readString(
+            itemRule,
+            chapterNameRule,
+            needsAsync: chapterNameRuleNeedsAsync,
+          );
+          if (chapter.title.isEmpty) continue;
 
-      chapter.url = await _readString(
-        itemRule,
-        chapterUrlRule,
-        needsAsync: chapterUrlRuleNeedsAsync,
-        isUrl: true,
-      );
-      chapter.tag = await _readString(
-        itemRule,
-        updateTimeRule,
-        needsAsync: updateTimeRuleNeedsAsync,
-      );
-      chapter.isVolume = _isTrue(
-        await _readString(
-          itemRule,
-          isVolumeRule,
-          needsAsync: isVolumeRuleNeedsAsync,
-        ),
-      );
+          chapter.url = await _readString(
+            itemRule,
+            chapterUrlRule,
+            needsAsync: chapterUrlRuleNeedsAsync,
+            isUrl: true,
+          );
+          chapter.tag = await _readString(
+            itemRule,
+            updateTimeRule,
+            needsAsync: updateTimeRuleNeedsAsync,
+          );
+          chapter.isVolume = _isTrue(
+            await _readString(
+              itemRule,
+              isVolumeRule,
+              needsAsync: isVolumeRuleNeedsAsync,
+            ),
+          );
 
-      // 空 URL 後備處理 (對標 Android 邏輯)
-      if (chapter.url.isEmpty) {
-        if (chapter.isVolume) {
-          // 卷標題若無 url，使用 "title + index" 構造唯一標識避免 LinkedHashSet 去重誤判
-          chapter.url = '${chapter.title}$i';
-        } else {
-          chapter.url = baseUrl;
+          if (chapter.url.isEmpty) {
+            if (chapter.isVolume) {
+              chapter.url = '${chapter.title}$i';
+            } else {
+              chapter.url = baseUrl;
+            }
+          }
+
+          chapter.isVip = _isTrue(
+            await _readString(
+              itemRule,
+              isVipRule,
+              needsAsync: isVipRuleNeedsAsync,
+            ),
+          );
+          chapter.isPay = _isTrue(
+            await _readString(
+              itemRule,
+              isPayRule,
+              needsAsync: isPayRuleNeedsAsync,
+            ),
+          );
+
+          chapters.add(chapter);
+          if (maxChapters != null && chapters.length >= maxChapters) {
+            return ChapterListResult(
+              chapters: chapters,
+              nextUrls: const <String>[],
+              isReverse: isReverse,
+            );
+          }
+        } finally {
+          itemRule.dispose();
         }
       }
 
-      chapter.isVip = _isTrue(
-        await _readString(
-          itemRule,
-          isVipRule,
-          needsAsync: isVipRuleNeedsAsync,
-        ),
-      );
-      chapter.isPay = _isTrue(
-        await _readString(
-          itemRule,
-          isPayRule,
-          needsAsync: isPayRuleNeedsAsync,
-        ),
-      );
-
-      chapters.add(chapter);
-      if (maxChapters != null && chapters.length >= maxChapters) {
-        return ChapterListResult(
-          chapters: chapters,
-          nextUrls: const <String>[],
-          isReverse: isReverse,
-        );
+      final nextUrls = <String>[];
+      if (nextTocUrlRule.isNotEmpty) {
+        final list = nextTocUrlRuleNeedsAsync
+            ? await rule.getStringListAsync(nextTocUrlRule, isUrl: true)
+            : rule.getStringList(nextTocUrlRule, isUrl: true);
+        for (final u in list) {
+          if (u.isNotEmpty && u != baseUrl) nextUrls.add(u);
+        }
       }
-    }
 
-    // 解析下一頁目錄 URL 清單 (對標 Android nextTocUrl, getStringList)
-    final nextUrls = <String>[];
-    if (nextTocUrlRule.isNotEmpty) {
-      final list = nextTocUrlRuleNeedsAsync
-          ? await rule.getStringListAsync(nextTocUrlRule, isUrl: true)
-          : rule.getStringList(nextTocUrlRule, isUrl: true);
-      for (final u in list) {
-        if (u.isNotEmpty && u != baseUrl) nextUrls.add(u);
-      }
+      return ChapterListResult(
+        chapters: chapters,
+        nextUrls: nextUrls,
+        isReverse: isReverse,
+      );
+    } finally {
+      rule.dispose();
     }
-
-    return ChapterListResult(
-      chapters: chapters,
-      nextUrls: nextUrls,
-      isReverse: isReverse,
-    );
   }
 
   /// 解析布林字串 (對標 Android String.isTrue)
