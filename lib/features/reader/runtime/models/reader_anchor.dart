@@ -87,6 +87,16 @@ class ReaderAnchor {
     );
   }
 
+  ReaderAnchor withLocalOffsetSnapshot(double? localOffsetSnapshot) {
+    return ReaderAnchor(
+      location: location,
+      contentHash: contentHash,
+      layoutSignature: layoutSignature,
+      pageIndexSnapshot: pageIndexSnapshot,
+      localOffsetSnapshot: localOffsetSnapshot,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'chapterIndex': location.chapterIndex,

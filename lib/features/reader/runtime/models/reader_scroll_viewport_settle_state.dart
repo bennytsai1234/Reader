@@ -45,9 +45,9 @@ class ReaderScrollViewportSettleState {
       phase == ReaderScrollViewportSettlePhase.pendingRestore ||
       phase == ReaderScrollViewportSettlePhase.awaitingVisibleConfirmation;
 
-  bool get shouldHoldContent => false;
+  bool get shouldHoldContent => isRestoreDriven;
 
-  bool get shouldShowRestoreOverlay => isRestoreDriven;
+  bool get shouldShowRestoreOverlay => false;
 
   bool get shouldSuppressTtsFollow =>
       phase != ReaderScrollViewportSettlePhase.settled;

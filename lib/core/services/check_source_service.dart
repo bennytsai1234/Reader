@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -190,6 +191,22 @@ class SourceCheckConfig {
 
   Duration get timeoutDuration => Duration(seconds: timeoutSeconds);
 
+  /// Upper bound for one source check.
+  ///
+  /// Stage-level checks still use [timeoutDuration]. This budget prevents a
+  /// single source from occupying a worker for the full sum of every stage.
+  Duration get sourceTimeoutDuration {
+    final activeFlows = (checkSearch ? 1 : 0) + (checkDiscovery ? 1 : 0);
+    final stageBudget =
+        activeFlows +
+        (checkInfo ? activeFlows : 0) +
+        (checkCategory ? activeFlows : 0) +
+        (checkContent ? activeFlows : 0);
+    final multiplier = math.max(2, math.min(stageBudget, 6));
+    final seconds = math.min(timeoutSeconds * multiplier, 90);
+    return Duration(seconds: math.max(timeoutSeconds, seconds));
+  }
+
   String get summary {
     final parts = <String>[
       if (checkSearch) '搜尋',
@@ -225,6 +242,8 @@ extension on _SourceCheckMode {
 /// 讓來源管理、搜尋池與執行期策略共用同一套狀態。
 class CheckSourceService extends ChangeNotifier {
   static const int _validationPageConcurrency = 1;
+  static const int _sourceCheckConcurrency = 6;
+  static const Duration _notifyThrottleInterval = Duration(milliseconds: 120);
   final BookSourceService _service;
   final BookSourceDao _sourceDao;
   final AppEventBus _eventBus;
@@ -240,6 +259,8 @@ class CheckSourceService extends ChangeNotifier {
   final List<SourceCheckLogEntry> _logs = <SourceCheckLogEntry>[];
   final Map<String, SourceCheckProgress> _sourceProgress =
       <String, SourceCheckProgress>{};
+  final Set<String> _timedOutSourceUrls = <String>{};
+  Timer? _notifyTimer;
   bool _isDisposed = false;
 
   CheckSourceService({
@@ -304,41 +325,54 @@ class CheckSourceService extends ChangeNotifier {
   Future<SourceCheckReport> check(List<String> urls) async {
     if (_isChecking) return _lastReport;
 
+    final normalizedUrls = LinkedHashSet<String>.from(
+      urls.map((url) => url.trim()).where((url) => url.isNotEmpty),
+    ).toList(growable: false);
     final config = _config.normalized();
     _isChecking = true;
-    _totalCount = urls.length;
+    _totalCount = normalizedUrls.length;
     _currentCount = 0;
     _statusMsg = '準備校驗';
     _lastReport = SourceCheckReport.empty;
     _logs.clear();
     _sourceProgress.clear();
+    _timedOutSourceUrls.clear();
     _appendLog('開始校驗，共 $_totalCount 個書源 (${config.summary})');
     _notifyIfAlive();
 
-    const maxConcurrent = 5;
-    final tasks = <Future<void>>[];
-    final queue = List<String>.from(urls);
     final entries = <SourceCheckEntry>[];
+    var nextIndex = 0;
+    final workerCount = math.min(
+      _sourceCheckConcurrency,
+      math.max(1, normalizedUrls.length),
+    );
 
-    while (queue.isNotEmpty || tasks.isNotEmpty) {
-      if (!_isChecking) break;
+    Future<void> worker() async {
+      while (_isChecking) {
+        final cursor = nextIndex;
+        if (cursor >= normalizedUrls.length) break;
+        nextIndex = cursor + 1;
+        final url = normalizedUrls[cursor];
 
-      while (queue.isNotEmpty && tasks.length < maxConcurrent) {
-        final url = queue.removeAt(0);
-        final task = _checkSingleSource(url, config).then((entry) {
+        try {
+          final entry = await _checkSingleSourceWithBudget(url, config);
           if (entry != null) {
             entries.add(entry);
           }
+        } catch (error, stack) {
+          AppLog.e('書源校驗任務失敗: $url', error: error, stackTrace: stack);
+          final entry = await _recordUnexpectedSourceFailure(url, error);
+          if (entry != null) {
+            entries.add(entry);
+          }
+        } finally {
           _currentCount++;
           _notifyIfAlive();
-        });
-        tasks.add(task);
-        task.whenComplete(() => tasks.remove(task));
-      }
-      if (tasks.isNotEmpty) {
-        await Future.wait(List<Future<void>>.from(tasks));
+        }
       }
     }
+
+    await Future.wait(List.generate(workerCount, (_) => worker()));
 
     if (!_isChecking) {
       _appendLog('校驗已取消，已完成 $_currentCount / $_totalCount');
@@ -353,15 +387,101 @@ class CheckSourceService extends ChangeNotifier {
     return _lastReport;
   }
 
+  Future<SourceCheckEntry?> _checkSingleSourceWithBudget(
+    String url,
+    SourceCheckConfig config,
+  ) {
+    return _checkSingleSource(url, config).timeout(
+      config.sourceTimeoutDuration,
+      onTimeout: () => _recordSourceTimeout(url, config),
+    );
+  }
+
+  Future<SourceCheckEntry?> _recordSourceTimeout(
+    String url,
+    SourceCheckConfig config,
+  ) async {
+    if (_isDisposed || !_isChecking) return null;
+    _timedOutSourceUrls.add(url);
+    final source = await _sourceDao.getByUrl(url);
+    if (source == null) return null;
+
+    final message =
+        '整體校驗超時 (${config.sourceTimeoutDuration.inSeconds}s)，已停止此書源後續步驟';
+    const health = SourceRuntimeHealth(
+      category: SourceHealthCategory.upstreamUnstable,
+      label: timeoutSourceGroupTag,
+      description: '來源響應過慢或上游阻擋，先隔離避免拖慢批次校驗',
+      allowsSearch: false,
+      allowsReading: false,
+      cleanupCandidate: false,
+      quarantined: true,
+    );
+
+    await _persistStatus(source, health, message, force: true);
+    _appendLog(
+      '  ✕ [${source.bookSourceName}] $message',
+      sourceUrl: url,
+      force: true,
+    );
+    _setSourceProgress(
+      source,
+      message,
+      isFinal: true,
+      hasIssue: true,
+      force: true,
+    );
+    return SourceCheckEntry(
+      sourceUrl: source.bookSourceUrl,
+      sourceName: source.bookSourceName,
+      stage: 'timeout',
+      message: message,
+      health: source.runtimeHealth,
+    );
+  }
+
+  Future<SourceCheckEntry?> _recordUnexpectedSourceFailure(
+    String url,
+    Object error,
+  ) async {
+    if (_shouldIgnoreSourceUpdate(url)) return null;
+    final source = await _sourceDao.getByUrl(url);
+    if (source == null || _shouldIgnoreSourceUpdate(url)) return null;
+
+    final message = _compactMessage(
+      error.toString().trim().isEmpty ? '校驗失敗' : error.toString(),
+    );
+    const health = SourceRuntimeHealth(
+      category: SourceHealthCategory.upstreamUnstable,
+      label: quarantineSourceGroupTag,
+      description: '校驗流程異常，先隔離避免影響其他書源',
+      allowsSearch: false,
+      allowsReading: false,
+      cleanupCandidate: false,
+      quarantined: true,
+    );
+
+    await _persistStatus(source, health, message);
+    _appendLog('  ✕ [${source.bookSourceName}] $message', sourceUrl: url);
+    _setSourceProgress(source, message, isFinal: true, hasIssue: true);
+    return SourceCheckEntry(
+      sourceUrl: source.bookSourceUrl,
+      sourceName: source.bookSourceName,
+      stage: 'error',
+      message: message,
+      health: source.runtimeHealth,
+    );
+  }
+
   Future<SourceCheckEntry?> _checkSingleSource(
     String url,
     SourceCheckConfig config,
   ) async {
     final source = await _sourceDao.getByUrl(url);
-    if (source == null) return null;
+    if (source == null || _shouldIgnoreSourceUpdate(url)) return null;
 
     _statusMsg = '正在校驗: ${source.bookSourceName}';
-    _appendLog('⇒ 正在校驗 [${source.bookSourceName}] ...');
+    _appendLog('⇒ 正在校驗 [${source.bookSourceName}] ...', sourceUrl: url);
     _setSourceProgress(source, '等待校驗', isFinal: false, hasIssue: false);
     _notifyIfAlive();
 
@@ -371,9 +491,13 @@ class CheckSourceService extends ChangeNotifier {
     source.lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
 
     final preflight = _resolvePreflightStatus(source);
+    if (_shouldIgnoreSourceUpdate(url)) return null;
     if (preflight != null) {
       await _persistStatus(source, preflight.health, preflight.message);
-      _appendLog('  ✕ [${source.bookSourceName}] ${preflight.message}');
+      _appendLog(
+        '  ✕ [${source.bookSourceName}] ${preflight.message}',
+        sourceUrl: url,
+      );
       _setSourceProgress(
         source,
         preflight.message,
@@ -387,19 +511,22 @@ class CheckSourceService extends ChangeNotifier {
 
     if (config.checkSearch) {
       await _runSearchCheck(source, config, issues);
+      if (_shouldIgnoreSourceUpdate(url)) return null;
     } else {
-      _appendLog('  ≡ 跳過搜尋檢查');
+      _appendLog('  ≡ 跳過搜尋檢查', sourceUrl: url);
     }
 
     if (config.checkDiscovery) {
       await _runDiscoveryCheck(source, config, issues);
+      if (_shouldIgnoreSourceUpdate(url)) return null;
     } else {
-      _appendLog('  ≡ 跳過發現檢查');
+      _appendLog('  ≡ 跳過發現檢查', sourceUrl: url);
     }
 
+    if (_shouldIgnoreSourceUpdate(url)) return null;
     if (issues.isEmpty) {
       await _persistStatus(source, SourceRuntimeHealth.healthy, '');
-      _appendLog('  ✓ [${source.bookSourceName}] 校驗成功');
+      _appendLog('  ✓ [${source.bookSourceName}] 校驗成功', sourceUrl: url);
       _setSourceProgress(source, '校驗成功', isFinal: true, hasIssue: false);
       return SourceCheckEntry(
         sourceUrl: source.bookSourceUrl,
@@ -422,6 +549,7 @@ class CheckSourceService extends ChangeNotifier {
     );
     _appendLog(
       '  ✕ [${source.bookSourceName}] ${source.runtimeHealth.label}: $mergedMessage',
+      sourceUrl: url,
     );
     _setSourceProgress(
       source,
@@ -472,11 +600,12 @@ class CheckSourceService extends ChangeNotifier {
       isFinal: false,
       hasIssue: false,
     );
-    _appendLog('  ◇ 測試搜尋: $searchWord');
+    _appendLog('  ◇ 測試搜尋: $searchWord', sourceUrl: source.bookSourceUrl);
     try {
       final searchResults = await _service
           .searchBooks(source, searchWord)
           .timeout(config.timeoutDuration);
+      if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       if (searchResults.isEmpty) {
         _recordIssue(
           source,
@@ -542,18 +671,19 @@ class CheckSourceService extends ChangeNotifier {
   ) async {
     final exploreUrl = source.exploreUrl?.trim() ?? '';
     if (exploreUrl.isEmpty) {
-      _appendLog('  ≡ 跳過發現檢查: 未配置發現網址');
+      _appendLog('  ≡ 跳過發現檢查: 未配置發現網址', sourceUrl: source.bookSourceUrl);
       return;
     }
 
     _setSourceProgress(source, '發現: 解析入口', isFinal: false, hasIssue: false);
-    _appendLog('  ◇ 解析發現規則');
+    _appendLog('  ◇ 解析發現規則', sourceUrl: source.bookSourceUrl);
     try {
       final kinds = await ExploreUrlParser.parseAsync(
         exploreUrl,
         source: source,
         jsTimeout: config.timeoutDuration,
       ).timeout(config.timeoutDuration);
+      if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
 
       String? targetUrl;
       for (final kind in kinds) {
@@ -595,10 +725,11 @@ class CheckSourceService extends ChangeNotifier {
         isFinal: false,
         hasIssue: false,
       );
-      _appendLog('  ◇ 測試發現: $targetUrl');
+      _appendLog('  ◇ 測試發現: $targetUrl', sourceUrl: source.bookSourceUrl);
       final books = await _service
           .exploreBooks(source, targetUrl)
           .timeout(config.timeoutDuration);
+      if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       if (books.isEmpty) {
         _recordIssue(
           source,
@@ -676,10 +807,14 @@ class CheckSourceService extends ChangeNotifier {
         isFinal: false,
         hasIssue: false,
       );
-      _appendLog('  ◇ 測試${mode.label}詳情: ${book.name}');
+      _appendLog(
+        '  ◇ 測試${mode.label}詳情: ${book.name}',
+        sourceUrl: source.bookSourceUrl,
+      );
       book = await _service
           .getBookInfo(source, book)
           .timeout(config.timeoutDuration);
+      if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       if (book.name.trim().isEmpty || book.bookUrl.trim().isEmpty) {
         _recordIssue(
           source,
@@ -731,7 +866,10 @@ class CheckSourceService extends ChangeNotifier {
         isFinal: false,
         hasIssue: false,
       );
-      _appendLog('  ◇ 測試${mode.label}目錄: ${book.name}');
+      _appendLog(
+        '  ◇ 測試${mode.label}目錄: ${book.name}',
+        sourceUrl: source.bookSourceUrl,
+      );
       final chapters = await _service
           .getChapterList(
             source,
@@ -739,6 +877,7 @@ class CheckSourceService extends ChangeNotifier {
             pageConcurrency: _validationPageConcurrency,
           )
           .timeout(config.timeoutDuration);
+      if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       readableChapters =
           chapters.where((chapter) => !chapter.isVolume).toList();
     } on TimeoutException catch (error) {
@@ -836,7 +975,10 @@ class CheckSourceService extends ChangeNotifier {
         isFinal: false,
         hasIssue: false,
       );
-      _appendLog('  ◇ 測試${mode.label}正文: ${firstChapter.title}');
+      _appendLog(
+        '  ◇ 測試${mode.label}正文: ${firstChapter.title}',
+        sourceUrl: source.bookSourceUrl,
+      );
       final content = await _service
           .getContent(
             source,
@@ -846,6 +988,7 @@ class CheckSourceService extends ChangeNotifier {
             pageConcurrency: _validationPageConcurrency,
           )
           .timeout(config.timeoutDuration);
+      if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
 
       if (looksLikeLoginRequiredContent(content)) {
         _recordIssue(
@@ -1102,7 +1245,9 @@ class CheckSourceService extends ChangeNotifier {
     SourceRuntimeHealth health,
     String message, {
     Iterable<SourceRuntimeHealth> extraHealths = const <SourceRuntimeHealth>[],
+    bool force = false,
   }) async {
+    if (!force && _shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
     source.removeInvalidGroups();
     source.removeErrorComment();
     source.respondTime = 0;
@@ -1176,6 +1321,7 @@ class CheckSourceService extends ChangeNotifier {
     List<_SourceCheckIssue> issues,
     _SourceCheckIssue issue,
   ) {
+    if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
     issues.add(issue);
     _setSourceProgress(
       source,
@@ -1185,6 +1331,7 @@ class CheckSourceService extends ChangeNotifier {
     );
     _appendLog(
       '  ! [${source.bookSourceName}] ${_stageLabel(issue.stage)}: ${issue.message}',
+      sourceUrl: source.bookSourceUrl,
     );
   }
 
@@ -1254,8 +1401,8 @@ class CheckSourceService extends ChangeNotifier {
   void cancel() {
     if (!_isChecking) return;
     _isChecking = false;
-    _appendLog('收到取消指令，等待目前批次結束');
-    _notifyIfAlive();
+    _appendLog('收到取消指令，停止派發新校驗任務');
+    _notifyIfAlive(immediate: true);
   }
 
   Future<SharedPreferences?> _safeGetPreferences() async {
@@ -1266,8 +1413,14 @@ class CheckSourceService extends ChangeNotifier {
     }
   }
 
-  void _appendLog(String msg) {
+  bool _shouldIgnoreSourceUpdate(String sourceUrl) =>
+      _isDisposed || !_isChecking || _timedOutSourceUrls.contains(sourceUrl);
+
+  void _appendLog(String msg, {String? sourceUrl, bool force = false}) {
     if (_isDisposed) return;
+    if (!force && sourceUrl != null && _shouldIgnoreSourceUpdate(sourceUrl)) {
+      return;
+    }
     _logs.add(SourceCheckLogEntry(time: DateTime.now(), message: msg));
     if (_logs.length > 400) {
       _logs.removeAt(0);
@@ -1281,8 +1434,10 @@ class CheckSourceService extends ChangeNotifier {
     String message, {
     required bool isFinal,
     required bool hasIssue,
+    bool force = false,
   }) {
     if (_isDisposed) return;
+    if (!force && _shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
     _sourceProgress[source.bookSourceUrl] = SourceCheckProgress(
       sourceName: source.bookSourceName,
       message: message,
@@ -1291,9 +1446,19 @@ class CheckSourceService extends ChangeNotifier {
     );
   }
 
-  void _notifyIfAlive() {
+  void _notifyIfAlive({bool immediate = false}) {
     if (_isDisposed) return;
-    notifyListeners();
+    if (immediate || !_isChecking) {
+      _notifyTimer?.cancel();
+      _notifyTimer = null;
+      notifyListeners();
+      return;
+    }
+    if (_notifyTimer?.isActive ?? false) return;
+    _notifyTimer = Timer(_notifyThrottleInterval, () {
+      if (_isDisposed) return;
+      notifyListeners();
+    });
   }
 
   @override
@@ -1301,6 +1466,8 @@ class CheckSourceService extends ChangeNotifier {
     if (_isDisposed) return;
     _isDisposed = true;
     _isChecking = false;
+    _notifyTimer?.cancel();
+    _notifyTimer = null;
     super.dispose();
   }
 

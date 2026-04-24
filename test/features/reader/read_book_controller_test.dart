@@ -1024,6 +1024,31 @@ void main() {
       controller.dispose();
     });
 
+    test('使用者拖動會取消 pending scroll restore target', () async {
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: List.generate(
+          3,
+          (index) => BookChapter(
+            title: 'c$index',
+            index: index,
+            bookUrl: 'http://test.com/book',
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.registerPendingScrollRestore(chapterIndex: 2, localOffset: 42);
+
+      expect(controller.hasPendingScrollRestore, isTrue);
+
+      controller.cancelPendingScrollRestoreFromUserScroll();
+
+      expect(controller.hasPendingScrollRestore, isFalse);
+      controller.dispose();
+    });
+
     test('retainedChapterIndexes 會保留 TTS 目前章與下一章', () async {
       final controller = ReadBookController(
         book: _makeBook(),

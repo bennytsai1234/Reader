@@ -64,6 +64,7 @@ class _FakeReaderProvider extends ReaderProvider {
   ReaderCommandReason? fakeActiveCommandReason;
   int pauseCalls = 0;
   int resumeCalls = 0;
+  int cancelPendingRestoreCalls = 0;
   final List<bool> scrollInteractionStates = <bool>[];
 
   _FakeReaderProvider()
@@ -95,6 +96,11 @@ class _FakeReaderProvider extends ReaderProvider {
   @override
   void setScrollInteractionActive(bool active) {
     scrollInteractionStates.add(active);
+  }
+
+  @override
+  void cancelPendingScrollRestoreFromUserScroll() {
+    cancelPendingRestoreCalls += 1;
   }
 }
 
@@ -148,6 +154,7 @@ void main() {
       expect(runtime.isUserScrolling, isFalse);
       expect(provider.pauseCalls, 1);
       expect(provider.resumeCalls, 1);
+      expect(provider.cancelPendingRestoreCalls, 1);
       expect(provider.autoPageProgressNotifier.value, 0.0);
       expect(provider.scrollInteractionStates, [true, false]);
       provider.dispose();
@@ -255,7 +262,7 @@ void main() {
 
         final update = runtime.handleProviderStateChanged(provider);
 
-        expect(update.shouldHoldScrollUntilRestore, isFalse);
+        expect(update.shouldHoldScrollUntilRestore, isTrue);
         expect(update.shouldFollowTts, isFalse);
         expect(
           update.viewportSettleState.phase,

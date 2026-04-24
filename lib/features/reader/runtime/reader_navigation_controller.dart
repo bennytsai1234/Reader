@@ -283,7 +283,8 @@ class ReaderNavigationController {
     if (active == null) return null;
     if (active.token != token || active.reason != reason) return null;
     if (active.completionPolicy ==
-        ReaderNavigationCompletionPolicy.visibleLocationMatch) {
+            ReaderNavigationCompletionPolicy.visibleLocationMatch &&
+        reason != ReaderCommandReason.restore) {
       return null;
     }
     return _completeActiveNavigation();

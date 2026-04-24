@@ -412,10 +412,26 @@ class ReadBookController extends ReaderProviderBase
     if (targetLocation != null &&
         reason != null &&
         targetLocation.chapterIndex == chapterIndex) {
+      final localOffset =
+          reason == ReaderCommandReason.restore
+              ? _resolveScrollRestoreLocalOffset(
+                ReaderAnchor.location(targetLocation),
+              )
+              : _runtimeController.localOffsetForLocation(targetLocation);
+      if (localOffset == null) return;
+      if (reason == ReaderCommandReason.restore) {
+        _navigation.retargetActiveNavigation(
+          reason: reason,
+          targetLocation: targetLocation,
+          targetScrollLocalOffset: localOffset,
+          completionPolicy:
+              ReaderNavigationCompletionPolicy.visibleLocationMatch,
+        );
+      }
       requestJumpToChapter(
         chapterIndex: chapterIndex,
         alignment: 0.0,
-        localOffset: _runtimeController.localOffsetForLocation(targetLocation),
+        localOffset: localOffset,
         reason: reason,
       );
       if (!isDisposed) {
@@ -601,7 +617,11 @@ class ReadBookController extends ReaderProviderBase
         ).normalized();
     final targetScrollLocalOffset =
         pageTurnMode == PageAnim.scroll
-            ? _runtimeController.localOffsetForLocation(targetLocation)
+            ? (reason == ReaderCommandReason.restore
+                ? _resolveScrollRestoreLocalOffset(
+                  ReaderAnchor.location(targetLocation),
+                )
+                : _runtimeController.localOffsetForLocation(targetLocation))
             : null;
     final shouldReuse =
         reuseActiveNavigation &&
@@ -820,11 +840,7 @@ class ReadBookController extends ReaderProviderBase
   }) {
     final resolvedAnchor = anchor?.normalized();
     final resolvedLocalOffset =
-        localOffset ??
-        resolvedAnchor?.localOffsetSnapshot ??
-        (resolvedAnchor != null
-            ? _runtimeController.localOffsetForLocation(resolvedAnchor.location)
-            : 0.0);
+        localOffset ?? resolvedAnchor?.localOffsetSnapshot;
     return _restore.registerPendingScrollRestore(
       anchor: resolvedAnchor,
       chapterIndex: chapterIndex,
@@ -848,11 +864,26 @@ class ReadBookController extends ReaderProviderBase
 
   ({int token, ReaderAnchor anchor, int chapterIndex, double localOffset})?
   dispatchPendingScrollRestore() {
-    return _restore.dispatchPendingScrollRestore();
+    return _restore.dispatchPendingScrollRestore(
+      resolveLocalOffset: _resolveScrollRestoreLocalOffset,
+    );
   }
 
   void deferPendingScrollRestore(int token) {
     _restore.deferPendingScrollRestore(token);
+  }
+
+  void cancelPendingScrollRestoreFromUserScroll() {
+    if (!hasPendingScrollRestore &&
+        sessionPhase != ReaderSessionPhase.restoring &&
+        activeCommandReason != ReaderCommandReason.restore) {
+      return;
+    }
+    _navigation.clear(ReaderCommandReason.restore);
+    _cancelInitialScrollRestore();
+    if (!isDisposed) {
+      notifyListeners();
+    }
   }
 
   void markInitialRestoreCompleted() {
@@ -1623,23 +1654,55 @@ class ReadBookController extends ReaderProviderBase
     ReaderLocation location,
     ReaderAnchor baseAnchor,
   ) {
-    if (!_matchesPreciseRestoreAnchor(
-      baseAnchor,
-      location,
-      requiresPageIndex: false,
-      requiresLocalOffset: true,
-    )) {
-      return _buildPersistedAnchor(location, sourceAnchor: baseAnchor);
+    final anchor =
+        !_matchesPreciseRestoreAnchor(
+              baseAnchor,
+              location,
+              requiresPageIndex: false,
+              requiresLocalOffset: true,
+            )
+            ? _buildPersistedAnchor(location, sourceAnchor: baseAnchor)
+            : baseAnchor.normalized().copyWith(
+              location: location,
+              contentHash: _contentHashForChapter(location.chapterIndex),
+              layoutSignature: _currentLayoutSignature(),
+              pageIndexSnapshot:
+                  baseAnchor.pageIndexSnapshot ??
+                  _runtimeController.pageIndexForLocation(location),
+              localOffsetSnapshot: baseAnchor.localOffsetSnapshot,
+            );
+    return _dropUnresolvedZeroScrollSnapshot(anchor, location);
+  }
+
+  ReaderAnchor _dropUnresolvedZeroScrollSnapshot(
+    ReaderAnchor anchor,
+    ReaderLocation location,
+  ) {
+    if (location.charOffset <= 0) return anchor;
+    if (_hasResolvedScrollLayoutForChapter(location.chapterIndex)) {
+      return anchor;
     }
-    return baseAnchor.normalized().copyWith(
-      location: location,
-      contentHash: _contentHashForChapter(location.chapterIndex),
-      layoutSignature: _currentLayoutSignature(),
-      pageIndexSnapshot:
-          baseAnchor.pageIndexSnapshot ??
-          _runtimeController.pageIndexForLocation(location),
-      localOffsetSnapshot: baseAnchor.localOffsetSnapshot,
+    final snapshot = anchor.localOffsetSnapshot;
+    if (snapshot == null || snapshot > 0) return anchor;
+    return anchor.withLocalOffsetSnapshot(null);
+  }
+
+  bool _hasResolvedScrollLayoutForChapter(int chapterIndex) {
+    final runtimeChapter = chapterAt(chapterIndex);
+    if (runtimeChapter != null && !runtimeChapter.isEmpty) return true;
+    return pagesForChapter(chapterIndex).isNotEmpty;
+  }
+
+  double? _resolveScrollRestoreLocalOffset(ReaderAnchor anchor) {
+    final location = anchor.location.normalized();
+    final hasResolvedLayout = _hasResolvedScrollLayoutForChapter(
+      location.chapterIndex,
     );
+    final snapshot = anchor.localOffsetSnapshot;
+    if (!hasResolvedLayout && location.charOffset > 0) {
+      return snapshot != null && snapshot > 0 ? snapshot : null;
+    }
+    return _runtimeController.localOffsetForLocation(location);
   }
 
   ReaderAnchor _buildInitialSlideRestoreAnchor(
@@ -1900,9 +1963,7 @@ class ReadBookController extends ReaderProviderBase
       location,
       baseAnchor,
     );
-    final localOffset =
-        restoreAnchor.localOffsetSnapshot ??
-        _runtimeController.localOffsetForLocation(location);
+    final localOffset = _resolveScrollRestoreLocalOffset(restoreAnchor);
     final transaction = _dispatchNavigationCommand(
       ReaderNavigationCommand.chapter(
         reason: ReaderCommandReason.restore,
@@ -1922,7 +1983,8 @@ class ReadBookController extends ReaderProviderBase
     );
     currentChapterIndex = location.chapterIndex;
     visibleChapterIndex = location.chapterIndex;
-    visibleChapterLocalOffset = localOffset;
+    visibleChapterLocalOffset =
+        localOffset ?? restoreAnchor.localOffsetSnapshot ?? 0.0;
     visibleChapterAlignment = 0.0;
     _sessionCoordinator.updateVisibleConfirmed(false);
     _updateCommittedLocation(location);

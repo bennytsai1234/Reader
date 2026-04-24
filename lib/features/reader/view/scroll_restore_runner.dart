@@ -13,6 +13,8 @@ class ScrollRestoreRunner {
     required bool Function() isScrollControllerAttached,
     required void Function() ensureChapterVisible,
     required void Function() deferRestore,
+    required VoidCallback cancelRestore,
+    required VoidCallback onCompleted,
     required void Function({
       required int chapterIndex,
       required double localOffset,
@@ -26,7 +28,7 @@ class ScrollRestoreRunner {
     if (!isMounted() || !provider.matchesPendingScrollRestore(token)) return;
     if (!isScrollControllerAttached()) {
       if (retries <= 0) {
-        deferRestore();
+        cancelRestore();
         return;
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -39,6 +41,8 @@ class ScrollRestoreRunner {
           isScrollControllerAttached: isScrollControllerAttached,
           ensureChapterVisible: ensureChapterVisible,
           deferRestore: deferRestore,
+          cancelRestore: cancelRestore,
+          onCompleted: onCompleted,
           scrollToChapterLocalOffset: scrollToChapterLocalOffset,
           ensureChapterCached: ensureChapterCached,
           hasTargetPageContext: hasTargetPageContext,
@@ -63,6 +67,8 @@ class ScrollRestoreRunner {
             isScrollControllerAttached: isScrollControllerAttached,
             ensureChapterVisible: ensureChapterVisible,
             deferRestore: deferRestore,
+            cancelRestore: cancelRestore,
+            onCompleted: onCompleted,
             scrollToChapterLocalOffset: scrollToChapterLocalOffset,
             ensureChapterCached: ensureChapterCached,
             hasTargetPageContext: hasTargetPageContext,
@@ -72,7 +78,11 @@ class ScrollRestoreRunner {
         return;
       }
       if (retries <= 0) {
-        deferRestore();
+        if (provider.loadingChapters.contains(chapterIndex)) {
+          deferRestore();
+        } else {
+          cancelRestore();
+        }
         return;
       }
       ensureChapterCached(chapterIndex);
@@ -87,6 +97,8 @@ class ScrollRestoreRunner {
             isScrollControllerAttached: isScrollControllerAttached,
             ensureChapterVisible: ensureChapterVisible,
             deferRestore: deferRestore,
+            cancelRestore: cancelRestore,
+            onCompleted: onCompleted,
             scrollToChapterLocalOffset: scrollToChapterLocalOffset,
             ensureChapterCached: ensureChapterCached,
             hasTargetPageContext: hasTargetPageContext,
@@ -112,13 +124,17 @@ class ScrollRestoreRunner {
             isScrollControllerAttached: isScrollControllerAttached,
             ensureChapterVisible: ensureChapterVisible,
             deferRestore: deferRestore,
+            cancelRestore: cancelRestore,
+            onCompleted: onCompleted,
             scrollToChapterLocalOffset: scrollToChapterLocalOffset,
             ensureChapterCached: ensureChapterCached,
             hasTargetPageContext: hasTargetPageContext,
             retries: retries - 1,
           );
-        } else {
+        } else if (provider.loadingChapters.contains(chapterIndex)) {
           deferRestore();
+        } else {
+          cancelRestore();
         }
         return;
       }
@@ -127,6 +143,12 @@ class ScrollRestoreRunner {
         localOffset: localOffset,
         animate: false,
       );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!isMounted() || !provider.matchesPendingScrollRestore(token)) {
+          return;
+        }
+        onCompleted();
+      });
     });
   }
 }

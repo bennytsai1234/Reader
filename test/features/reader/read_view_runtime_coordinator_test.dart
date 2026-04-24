@@ -314,7 +314,7 @@ void main() {
       );
 
       expect(settleState.phase, ReaderScrollViewportSettlePhase.pendingRestore);
-      expect(shouldHold, isFalse);
+      expect(shouldHold, isTrue);
       provider.dispose();
     });
 
@@ -335,8 +335,8 @@ void main() {
           settleState.phase,
           ReaderScrollViewportSettlePhase.awaitingVisibleConfirmation,
         );
-        expect(settleState.shouldHoldContent, isFalse);
-        expect(settleState.shouldShowRestoreOverlay, isTrue);
+        expect(settleState.shouldHoldContent, isTrue);
+        expect(settleState.shouldShowRestoreOverlay, isFalse);
         expect(settleState.shouldSuppressTtsFollow, isTrue);
         provider.dispose();
       },

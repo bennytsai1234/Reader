@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
@@ -24,6 +26,10 @@ class _FakeBookSourceDao extends Fake implements BookSourceDao {
 
 class _FakeBookSourceService extends Fake implements BookSourceService {
   List<SearchBook> searchResults = [];
+  final Map<String, List<SearchBook>> searchResultsBySource = {};
+  final Map<String, Completer<List<SearchBook>>> searchCompleters = {};
+  final Map<String, Duration> searchDelays = {};
+  final List<String> searchOrder = [];
   List<SearchBook> exploreResults = [];
   Book? hydratedBook;
   List<BookChapter> chapters = [];
@@ -49,10 +55,16 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     bool Function(int size)? shouldBreak,
     dynamic cancelToken,
   }) async {
-    if (searchDelay > Duration.zero) {
-      await Future<void>.delayed(searchDelay);
+    searchOrder.add(source.bookSourceUrl);
+    final completer = searchCompleters[source.bookSourceUrl];
+    if (completer != null) {
+      return completer.future;
     }
-    return searchResults;
+    final delay = searchDelays[source.bookSourceUrl] ?? searchDelay;
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    return searchResultsBySource[source.bookSourceUrl] ?? searchResults;
   }
 
   @override
@@ -280,6 +292,62 @@ void main() {
     expect(service.config.checkCategory, isFalse);
     expect(service.config.checkContent, isFalse);
   });
+
+  test('source timeout budget scales with enabled checks and caps at 90s', () {
+    expect(
+      SourceCheckConfig.defaults.sourceTimeoutDuration,
+      const Duration(seconds: 90),
+    );
+    expect(
+      SourceCheckConfig.defaults
+          .copyWith(
+            timeoutSeconds: 10,
+            checkDiscovery: false,
+            checkInfo: false,
+            checkCategory: false,
+            checkContent: false,
+          )
+          .normalized()
+          .sourceTimeoutDuration,
+      const Duration(seconds: 20),
+    );
+  });
+
+  test(
+    'check normalizes urls by trimming blanks and removing duplicates',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'source://normalized',
+        bookSourceName: '正規化來源',
+        searchUrl: '/search?key={{key}}',
+      );
+      final fakeDao =
+          _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+      final fakeService = _FakeBookSourceService();
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+      await service.updateConfig(
+        SourceCheckConfig.defaults.copyWith(
+          checkDiscovery: false,
+          checkInfo: false,
+          checkCategory: false,
+          checkContent: false,
+        ),
+      );
+
+      await service.check([
+        '',
+        '  ${source.bookSourceUrl}  ',
+        source.bookSourceUrl,
+      ]);
+
+      expect(service.totalCount, 1);
+      expect(fakeService.searchOrder, [source.bookSourceUrl]);
+    },
+  );
 
   test(
     'discovery-only check marks discovery failures without disabling search',
@@ -516,6 +584,108 @@ void main() {
       expect(saved.isReadingEnabledByRuntime, isTrue);
     },
   );
+
+  test(
+    'worker pool starts new sources before the slowest active source ends',
+    () async {
+      final sources = List.generate(
+        8,
+        (index) => BookSource(
+          bookSourceUrl: 'source://pool-$index',
+          bookSourceName: '併發源 $index',
+          searchUrl: '/search?key={{key}}',
+        ),
+      );
+      final fakeDao = _FakeBookSourceDao();
+      for (final source in sources) {
+        fakeDao.store[source.bookSourceUrl] = source;
+      }
+
+      final slowSearch = Completer<List<SearchBook>>();
+      final fakeService =
+          _FakeBookSourceService()
+            ..searchCompleters[sources.first.bookSourceUrl] = slowSearch;
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+      await service.updateConfig(
+        SourceCheckConfig.defaults.copyWith(
+          checkDiscovery: false,
+          checkInfo: false,
+          checkCategory: false,
+          checkContent: false,
+        ),
+      );
+
+      final future = service.check(
+        sources.map((source) => source.bookSourceUrl).toList(),
+      );
+
+      for (var i = 0; i < 50; i++) {
+        if (fakeService.searchOrder.contains(sources[7].bookSourceUrl)) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      expect(fakeService.searchOrder, contains(sources[7].bookSourceUrl));
+      expect(slowSearch.isCompleted, isFalse);
+      slowSearch.complete(<SearchBook>[]);
+      await future;
+    },
+  );
+
+  test('cancel suppresses late source updates from in-flight checks', () async {
+    final source = BookSource(
+      bookSourceUrl: 'source://cancel-late',
+      bookSourceName: '取消延遲源',
+      searchUrl: '/search?key={{key}}',
+    );
+    final fakeDao = _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+    final searchCompleter = Completer<List<SearchBook>>();
+    final fakeService =
+        _FakeBookSourceService()
+          ..searchCompleters[source.bookSourceUrl] = searchCompleter;
+    final service = CheckSourceService(
+      service: fakeService,
+      sourceDao: fakeDao,
+      eventBus: AppEventBus(),
+    );
+    await service.updateConfig(
+      SourceCheckConfig.defaults.copyWith(
+        checkDiscovery: false,
+        checkInfo: false,
+        checkCategory: false,
+        checkContent: false,
+      ),
+    );
+
+    final future = service.check([source.bookSourceUrl]);
+    for (var i = 0; i < 20; i++) {
+      if (fakeService.searchOrder.contains(source.bookSourceUrl)) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    service.cancel();
+    searchCompleter.complete([
+      SearchBook(
+        bookUrl: 'https://example.com/book/cancel',
+        name: '取消後才回來',
+        author: '作者甲',
+        origin: source.bookSourceUrl,
+        originName: source.bookSourceName,
+      ),
+    ]);
+
+    final report = await future;
+    expect(report.entries, isEmpty);
+    expect(service.progressOf(source.bookSourceUrl)?.message, isNot('校驗成功'));
+    expect(service.progressOf(source.bookSourceUrl)?.isFinal, isFalse);
+    expect(
+      fakeDao.store[source.bookSourceUrl]!.runtimeHealth.category,
+      SourceHealthCategory.healthy,
+    );
+  });
 
   test('dispose during in-flight check does not throw', () async {
     final source = BookSource(

@@ -77,8 +77,14 @@ class ScrollRuntimeExecutor {
       ensureChapterVisible: () {
         itemScrollController.jumpTo(index: chapterIndex, alignment: 0);
       },
-      deferRestore:
+      deferRestore: () => provider.deferPendingScrollRestore(token),
+      cancelRestore:
           () => provider.abortNavigation(
+            navigationToken,
+            ReaderCommandReason.restore,
+          ),
+      onCompleted:
+          () => provider.completeNavigation(
             navigationToken,
             ReaderCommandReason.restore,
           ),

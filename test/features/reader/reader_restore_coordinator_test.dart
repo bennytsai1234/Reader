@@ -88,6 +88,34 @@ void main() {
       expect(coordinator.pendingScrollRestoreLocalOffset, isNull);
     });
 
+    test('missing local offset 不會預設成 0，會等待 resolver', () {
+      final coordinator = ReaderRestoreCoordinator();
+
+      final token = coordinator.registerPendingScrollRestore(
+        chapterIndex: 1,
+        charOffset: 88,
+      );
+
+      expect(coordinator.pendingScrollRestoreLocalOffset, isNull);
+      expect(coordinator.dispatchPendingScrollRestore(), isNull);
+
+      final resolved = coordinator.dispatchPendingScrollRestore(
+        resolveLocalOffset: (anchor) {
+          expect(
+            anchor.location,
+            const ReaderLocation(chapterIndex: 1, charOffset: 88),
+          );
+          return 144;
+        },
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.token, token);
+      expect(resolved.localOffset, 144);
+      expect(resolved.anchor.localOffsetSnapshot, 144);
+      expect(coordinator.pendingScrollRestoreLocalOffset, 144);
+    });
+
     test('clear 會清空 target 但保留 token 序列', () {
       final coordinator = ReaderRestoreCoordinator();
 

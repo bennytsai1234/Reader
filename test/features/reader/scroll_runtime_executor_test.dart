@@ -162,4 +162,43 @@ void main() {
       provider.dispose();
     },
   );
+
+  test('restore exhaustion defers while target chapter is still loading', () {
+    final provider = _RecordingReaderProvider()..loadingChapters.add(0);
+    var didDefer = false;
+    var didCancel = false;
+
+    const ScrollRestoreRunner().run(
+      provider: provider,
+      chapterIndex: 0,
+      localOffset: 120,
+      token: 99,
+      retries: 0,
+      isMounted: () => true,
+      isScrollControllerAttached: () => true,
+      ensureChapterVisible: () {},
+      deferRestore: () {
+        didDefer = true;
+      },
+      cancelRestore: () {
+        didCancel = true;
+      },
+      onCompleted: () {
+        fail('restore should not complete without content');
+      },
+      scrollToChapterLocalOffset: ({
+        required int chapterIndex,
+        required double localOffset,
+        required bool animate,
+      }) {
+        fail('restore should not scroll without content');
+      },
+      ensureChapterCached: (_) async {},
+      hasTargetPageContext: (_) => false,
+    );
+
+    expect(didDefer, isTrue);
+    expect(didCancel, isFalse);
+    provider.dispose();
+  });
 }

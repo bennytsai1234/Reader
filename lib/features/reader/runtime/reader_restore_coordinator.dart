@@ -1,6 +1,9 @@
 import 'package:inkpage_reader/features/reader/runtime/models/reader_anchor.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 
+typedef ReaderScrollRestoreOffsetResolver =
+    double? Function(ReaderAnchor anchor);
+
 class ReaderRestoreCoordinator {
   int _pendingScrollRestoreToken = 0;
   ReaderAnchor? _pendingScrollRestoreAnchor;
@@ -12,17 +15,20 @@ class ReaderRestoreCoordinator {
     int charOffset = 0,
     double? localOffset,
   }) {
-    final resolvedLocalOffset =
-        localOffset ?? anchor?.localOffsetSnapshot ?? 0.0;
-    final resolvedAnchor = (anchor ??
-            ReaderAnchor.location(
-              ReaderLocation(
-                chapterIndex: chapterIndex ?? 0,
-                charOffset: charOffset,
-              ),
-            ))
-        .normalized()
-        .copyWith(localOffsetSnapshot: resolvedLocalOffset);
+    final baseAnchor =
+        (anchor ??
+                ReaderAnchor.location(
+                  ReaderLocation(
+                    chapterIndex: chapterIndex ?? 0,
+                    charOffset: charOffset,
+                  ),
+                ))
+            .normalized();
+    final resolvedLocalOffset = localOffset ?? baseAnchor.localOffsetSnapshot;
+    final resolvedAnchor =
+        resolvedLocalOffset == null
+            ? baseAnchor
+            : baseAnchor.copyWith(localOffsetSnapshot: resolvedLocalOffset);
     _pendingScrollRestoreToken++;
     _pendingScrollRestoreAnchor = resolvedAnchor;
     _pendingScrollRestoreDispatched = false;
@@ -43,19 +49,23 @@ class ReaderRestoreCoordinator {
       hasPendingScrollRestore && token == _pendingScrollRestoreToken;
 
   ({int token, ReaderAnchor anchor, int chapterIndex, double localOffset})?
-  dispatchPendingScrollRestore() {
+  dispatchPendingScrollRestore({
+    ReaderScrollRestoreOffsetResolver? resolveLocalOffset,
+  }) {
     final anchor = _pendingScrollRestoreAnchor;
-    final localOffset = anchor?.localOffsetSnapshot;
-    if (anchor == null ||
-        localOffset == null ||
-        _pendingScrollRestoreDispatched) {
+    if (anchor == null || _pendingScrollRestoreDispatched) {
       return null;
     }
+    final localOffset =
+        anchor.localOffsetSnapshot ?? resolveLocalOffset?.call(anchor);
+    if (localOffset == null) return null;
+    final resolvedAnchor = anchor.copyWith(localOffsetSnapshot: localOffset);
+    _pendingScrollRestoreAnchor = resolvedAnchor;
     _pendingScrollRestoreDispatched = true;
     return (
       token: _pendingScrollRestoreToken,
-      anchor: anchor,
-      chapterIndex: anchor.location.chapterIndex,
+      anchor: resolvedAnchor,
+      chapterIndex: resolvedAnchor.location.chapterIndex,
       localOffset: localOffset,
     );
   }

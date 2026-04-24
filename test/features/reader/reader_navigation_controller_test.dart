@@ -172,6 +172,32 @@ void main() {
       expect(token, isNotNull);
     });
 
+    test(
+      'restore visible target 型 transaction 可在 scroll 完成後 explicit complete',
+      () {
+        final nav = ReaderNavigationController();
+
+        expect(
+          nav.beginChapterJump(
+            ReaderCommandReason.restore,
+            targetLocation: const ReaderLocation(
+              chapterIndex: 0,
+              charOffset: 40,
+            ),
+            targetScrollLocalOffset: 120,
+            completionPolicy:
+                ReaderNavigationCompletionPolicy.visibleLocationMatch,
+          ),
+          isTrue,
+        );
+        final token = nav.activeNavigationToken;
+
+        nav.completeNavigation(token!, reason: ReaderCommandReason.restore);
+
+        expect(nav.shouldPersistVisiblePosition(), isTrue);
+      },
+    );
+
     test('scroll transaction 會等待預期 anchor localOffset 才完成', () {
       final nav = ReaderNavigationController();
 

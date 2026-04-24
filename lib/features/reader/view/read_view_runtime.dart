@@ -249,12 +249,13 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           hasVisibleData: hasVisibleData,
         );
 
-        // Show theme-colored placeholder during init
+        // Keep the viewport quiet while restoring the initial scroll anchor.
         if (!_contentRevealed &&
-            !hasVisibleData &&
-            (provider.lifecycle == ReaderLifecycle.loading ||
-                provider.sessionPhase == ReaderSessionPhase.restoring ||
-                _holdContentUntilScrollRestore)) {
+            (settleState.shouldHoldContent ||
+                (!hasVisibleData &&
+                    (provider.lifecycle == ReaderLifecycle.loading ||
+                        provider.sessionPhase == ReaderSessionPhase.restoring ||
+                        _holdContentUntilScrollRestore)))) {
           return Container(color: provider.currentTheme.backgroundColor);
         }
 
@@ -318,20 +319,12 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
           ),
         );
 
-        final decoratedContent =
-            hasVisibleData && settleState.shouldShowRestoreOverlay
-                ? Stack(
-                  fit: StackFit.expand,
-                  children: [content, _buildRestoreOverlay(provider)],
-                )
-                : content;
-
         return FadeTransition(
           opacity:
               _contentRevealed
                   ? _fadeAnimation
                   : const AlwaysStoppedAnimation(1.0),
-          child: decoratedContent,
+          child: content,
         );
       },
     );
@@ -382,57 +375,6 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
             ),
           if (state.message != null) Text(state.message!, style: textStyle),
         ],
-      ),
-    );
-  }
-
-  Widget _buildRestoreOverlay(ReaderProvider provider) {
-    final textColor = provider.currentTheme.textColor.withValues(alpha: 0.72);
-    return IgnorePointer(
-      ignoring: true,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: provider.currentTheme.backgroundColor.withValues(
-                  alpha: 0.82,
-                ),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '定位中',
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: provider.fontSize * 0.72,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
