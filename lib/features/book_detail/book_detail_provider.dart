@@ -4,6 +4,7 @@ import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
 import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
+import 'package:inkpage_reader/core/database/dao/reader_temp_chapter_cache_dao.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
@@ -12,6 +13,7 @@ import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/core/services/download_service.dart';
 import 'package:inkpage_reader/core/engine/app_event_bus.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_cache_repository.dart';
 
 class OfflineCacheQueueResult {
   const OfflineCacheQueueResult._({
@@ -38,6 +40,7 @@ class BookDetailProvider extends ChangeNotifier {
   final BookDao _bookDao;
   final ChapterDao _chapterDao;
   final BookSourceDao _sourceDao;
+  final ReaderTempChapterCacheDao? _tempChapterCacheDao;
   final BookSourceService _service;
   DownloadService? _downloadService;
 
@@ -72,11 +75,17 @@ class BookDetailProvider extends ChangeNotifier {
     BookDao? bookDao,
     ChapterDao? chapterDao,
     BookSourceDao? sourceDao,
+    ReaderTempChapterCacheDao? tempChapterCacheDao,
     BookSourceService? service,
     DownloadService? downloadService,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
        _chapterDao = chapterDao ?? getIt<ChapterDao>(),
        _sourceDao = sourceDao ?? getIt<BookSourceDao>(),
+       _tempChapterCacheDao =
+           tempChapterCacheDao ??
+           (getIt.isRegistered<ReaderTempChapterCacheDao>()
+               ? getIt<ReaderTempChapterCacheDao>()
+               : null),
        _service = service ?? BookSourceService(),
        _downloadService = downloadService {
     _book =
@@ -244,7 +253,7 @@ class BookDetailProvider extends ChangeNotifier {
     }
 
     await _bookDao.upsert(_book);
-    await _chapterDao.insertChapters(_allChapters);
+    await _promoteTransientCacheIfPossible();
 
     if (bookshelfChanged) {
       AppEventBus().fire(AppEventBus.upBookshelf);
@@ -328,7 +337,7 @@ class BookDetailProvider extends ChangeNotifier {
         }
         await _bookDao.upsert(_book);
         if (_allChapters.isNotEmpty) {
-          await _chapterDao.insertChapters(_allChapters);
+          await _promoteTransientCacheIfPossible();
         }
       } catch (e) {
         AppLog.e('加入書架失敗: $e', error: e);
@@ -367,6 +376,18 @@ class BookDetailProvider extends ChangeNotifier {
 
   void clearCache() {
     _chapterDao.deleteContentByBook(_book.bookUrl);
+  }
+
+  Future<void> _promoteTransientCacheIfPossible() {
+    if (_allChapters.isEmpty) return Future<void>.value();
+    final tempChapterCacheDao = _tempChapterCacheDao;
+    if (tempChapterCacheDao == null) {
+      return _chapterDao.insertChapters(_allChapters);
+    }
+    return ReaderChapterContentCacheRepository(
+      chapterDao: _chapterDao,
+      tempCacheDao: tempChapterCacheDao,
+    ).promoteTransientCacheToBookshelf(book: _book, chapters: _allChapters);
   }
 
   @override

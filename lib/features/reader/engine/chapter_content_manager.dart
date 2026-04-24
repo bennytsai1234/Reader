@@ -29,6 +29,33 @@ class PaginationConfig {
     this.contentPaddingTop = 0.0,
     this.contentPaddingBottom = 0.0,
   });
+
+  @override
+  bool operator ==(Object other) {
+    return other is PaginationConfig &&
+        other.viewSize == viewSize &&
+        other.titleStyle == titleStyle &&
+        other.contentStyle == contentStyle &&
+        other.paragraphSpacing == paragraphSpacing &&
+        other.textIndent == textIndent &&
+        other.textFullJustify == textFullJustify &&
+        other.padding == padding &&
+        other.contentPaddingTop == contentPaddingTop &&
+        other.contentPaddingBottom == contentPaddingBottom;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    viewSize,
+    titleStyle,
+    contentStyle,
+    paragraphSpacing,
+    textIndent,
+    textFullJustify,
+    padding,
+    contentPaddingTop,
+    contentPaddingBottom,
+  );
 }
 
 /// 章節內容取得結果
@@ -67,6 +94,7 @@ class ChapterContentManager {
   final Map<int, List<TextPage>> _paginatedCache = {};
   final Map<int, List<TextPage>> _pendingDisplayRepaginatedPages = {};
   final Set<int> _pendingDisplayRepaginatedIndexes = <int>{};
+  final Set<int> _pendingRawRepaginateIndexes = <int>{};
   final Map<int, String> _displayTitleCache = {};
 
   /// 目標預載視窗
@@ -75,6 +103,8 @@ class ChapterContentManager {
   /// 預載佇列
   final List<int> _preloadQueue = [];
   bool _isPreloadingQueueActive = false;
+  int _activeSilentPreloadCount = 0;
+  int _maxConcurrentPreloads = 1;
   final Set<int> _priorityChapters = {};
   bool _userInteractionActive = false;
 
@@ -149,9 +179,13 @@ class ChapterContentManager {
     // 已知空內容章節，直接回傳空列表，不重試
     if (_emptyContentChapters.contains(index)) return [];
 
-    // 快取命中
     final cached = _paginatedCache[index];
     if (cached != null && cached.isNotEmpty) return cached;
+
+    if (_contentCache.containsKey(index)) {
+      final repaginated = await _cachedPagesOrRepaginate(index);
+      if (repaginated.isNotEmpty) return repaginated;
+    }
 
     // 任一載入流程已經保留了此章節：等待完成，避免主動/靜默雙重抓取
     final existingLoad = _loadCompleters[index];
@@ -160,8 +194,7 @@ class ChapterContentManager {
       await existingLoad.future;
       _activeLoadingChapters.remove(index);
       if (_disposed) return [];
-      final loaded = _paginatedCache[index];
-      return (loaded != null && loaded.isNotEmpty) ? loaded : [];
+      return _cachedPagesOrRepaginate(index);
     }
 
     // 正在靜默預載中：等待其完成
@@ -172,8 +205,8 @@ class ChapterContentManager {
         await completer.future;
         _activeLoadingChapters.remove(index);
         if (_disposed) return [];
-        final result = _paginatedCache[index];
-        if (result != null && result.isNotEmpty) return result;
+        final result = await _cachedPagesOrRepaginate(index);
+        if (result.isNotEmpty) return result;
       }
     }
 
@@ -185,7 +218,7 @@ class ChapterContentManager {
     try {
       await _fetchAndPaginate(index);
       if (_disposed) return [];
-      return _paginatedCache[index] ?? [];
+      return _cachedPagesOrRepaginate(index);
     } catch (e) {
       AppLog.e('ChapterContentManager: Load chapter $index failed: $e');
       return [];
@@ -225,15 +258,12 @@ class ChapterContentManager {
     final content = _contentCache[index];
     if (content == null) return [];
 
-    final pages = await _doPaginate(index, content);
-    if (pages.isNotEmpty) {
-      _paginatedCache[index] = pages;
-    }
-    return pages;
+    return _paginateCachedContent(index);
   }
 
   /// 更新分頁設定；active paginated cache 會保留到 staged repaginate commit。
   void updateConfig(PaginationConfig config) {
+    if (_config == config) return;
     _config = config;
     _configVersion++; // invalidate in-flight paginations
     _clearPendingDisplayRepagination();
@@ -259,6 +289,11 @@ class ChapterContentManager {
 
   void setProgressivePaginationEnabled(bool enabled) {
     _progressivePaginationEnabled = enabled;
+  }
+
+  void setPreloadConcurrency(int concurrency) {
+    _maxConcurrentPreloads = concurrency.clamp(1, 4).toInt();
+    _processPreloadQueue();
   }
 
   /// 啟用整本書背景預載
@@ -487,6 +522,7 @@ class ChapterContentManager {
     _preloadQueue.clear();
     _loadCompleters.clear();
     _emptyContentChapters.clear();
+    _pendingRawRepaginateIndexes.clear();
     _clearPendingDisplayRepagination();
   }
 
@@ -540,6 +576,8 @@ class ChapterContentManager {
           AppLog.d(
             'ChapterContentManager: Chapter $index pagination discarded (config changed)',
           );
+          _pendingRawRepaginateIndexes.add(index);
+          await _paginateCachedContent(index);
           return;
         }
         if (pages.isNotEmpty) {
@@ -683,6 +721,57 @@ class ChapterContentManager {
     _pendingDisplayRepaginatedIndexes.clear();
   }
 
+  Future<List<TextPage>> _paginateCachedContent(
+    int index, {
+    bool notifyReady = false,
+  }) async {
+    final content = _contentCache[index];
+    if (content == null || _config == null || _disposed) return [];
+    if (index < 0 || index >= _chapters.length) return [];
+    final capturedConfigVersion = _configVersion;
+    final pages = await _doPaginate(index, content);
+    if (_disposed || _configVersion != capturedConfigVersion) {
+      _pendingRawRepaginateIndexes.add(index);
+      return [];
+    }
+    if (pages.isNotEmpty) {
+      _paginatedCache[index] = pages;
+      _pendingRawRepaginateIndexes.remove(index);
+      if (notifyReady && !_disposed) {
+        _onChapterReadyController.add(index);
+      }
+      return pages;
+    }
+    _pendingRawRepaginateIndexes.add(index);
+    _paginatedCache.remove(index);
+    return [];
+  }
+
+  Future<List<TextPage>> _cachedPagesOrRepaginate(
+    int index, {
+    bool notifyReady = false,
+  }) async {
+    final cached = _paginatedCache[index];
+    if (cached != null && cached.isNotEmpty) return cached;
+    if (!_contentCache.containsKey(index)) return const <TextPage>[];
+
+    // Viewport/inset changes can invalidate pagination exactly while network
+    // content returns. Retry against the latest config before reporting "empty"
+    // to the UI, otherwise the reader can sit on a blank placeholder until an
+    // unrelated system redraw happens.
+    for (var attempt = 0; attempt < 3 && !_disposed; attempt++) {
+      final versionBefore = _configVersion;
+      final pages = await _paginateCachedContent(
+        index,
+        notifyReady: notifyReady,
+      );
+      if (pages.isNotEmpty) return pages;
+      if (_configVersion == versionBefore) break;
+      await Future<void>.delayed(Duration.zero);
+    }
+    return _paginatedCache[index] ?? const <TextPage>[];
+  }
+
   Future<Map<int, List<TextPage>>> _repaginateIntoMap(
     Iterable<int> chapterIndexes, {
     required int capturedConfigVersion,
@@ -769,11 +858,12 @@ class ChapterContentManager {
     _processPreloadQueue();
   }
 
-  Future<void> _processPreloadQueue() async {
+  void _processPreloadQueue() {
     if (_isPreloadingQueueActive || _preloadQueue.isEmpty) return;
     _isPreloadingQueueActive = true;
 
-    while (_preloadQueue.isNotEmpty) {
+    while (_preloadQueue.isNotEmpty &&
+        _activeSilentPreloadCount < _maxConcurrentPreloads) {
       if (_disposed) break;
       if (_userInteractionActive &&
           _priorityChapters.isNotEmpty &&
@@ -795,11 +885,27 @@ class ChapterContentManager {
       _silentLoadingChapters.add(target);
       final completer = Completer<void>();
       _loadCompleters[target] = completer;
-      await _preloadChapterSilently(target, completer);
+      _activeSilentPreloadCount++;
+      unawaited(
+        _preloadChapterSilently(target, completer).whenComplete(() {
+          _activeSilentPreloadCount =
+              (_activeSilentPreloadCount - 1)
+                  .clamp(0, _maxConcurrentPreloads)
+                  .toInt();
+          if (!_disposed &&
+              !_userInteractionActive &&
+              _preloadQueue.isNotEmpty) {
+            _processPreloadQueue();
+          }
+        }),
+      );
     }
 
     _isPreloadingQueueActive = false;
-    if (!_disposed && !_userInteractionActive && _preloadQueue.isNotEmpty) {
+    if (!_disposed &&
+        !_userInteractionActive &&
+        _preloadQueue.isNotEmpty &&
+        _activeSilentPreloadCount < _maxConcurrentPreloads) {
       _processPreloadQueue();
     }
   }
@@ -848,6 +954,8 @@ class ChapterContentManager {
           AppLog.d(
             'ChapterContentManager: Chapter $index silent preload discarded (config changed)',
           );
+          _pendingRawRepaginateIndexes.add(index);
+          await _cachedPagesOrRepaginate(index, notifyReady: true);
           return;
         }
 

@@ -40,6 +40,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   late final Animation<double> _fadeAnimation;
   bool _contentRevealed = false;
   bool _holdContentUntilScrollRestore = false;
+  bool _blankRecoveryScheduled = false;
 
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
@@ -244,6 +245,10 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
         }
 
         final hasVisibleData = _hasVisibleData(provider);
+        _scheduleBlankViewportRecovery(
+          provider,
+          hasVisibleData: hasVisibleData,
+        );
         final settleState = _coordinator.resolveScrollViewportSettleState(
           provider,
           hasVisibleData: hasVisibleData,
@@ -256,7 +261,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
                     (provider.lifecycle == ReaderLifecycle.loading ||
                         provider.sessionPhase == ReaderSessionPhase.restoring ||
                         _holdContentUntilScrollRestore)))) {
-          return Container(color: provider.currentTheme.backgroundColor);
+          return _buildTappablePlaceholder(provider);
         }
 
         final blockingViewportState = _coordinator.resolveBlockingViewportState(
@@ -351,6 +356,23 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
     });
   }
 
+  void _scheduleBlankViewportRecovery(
+    ReaderProvider provider, {
+    required bool hasVisibleData,
+  }) {
+    if (hasVisibleData ||
+        _blankRecoveryScheduled ||
+        !provider.shouldRecoverBlankVisibleContent) {
+      return;
+    }
+    _blankRecoveryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _blankRecoveryScheduled = false;
+      if (!mounted) return;
+      widget.provider.recoverBlankVisibleContent();
+    });
+  }
+
   Widget _buildViewportState(
     ReaderProvider provider,
     ReaderViewportState state,
@@ -359,23 +381,37 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       color: provider.currentTheme.textColor.withAlpha(160),
       fontSize: provider.fontSize,
     );
-    return Container(
-      color: provider.currentTheme.backgroundColor,
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (state.showLoading)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: provider.currentTheme.textColor.withValues(alpha: 0.35),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: widget.onContentTapUp,
+      child: Container(
+        color: provider.currentTheme.backgroundColor,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (state.showLoading)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: provider.currentTheme.textColor.withValues(
+                    alpha: 0.35,
+                  ),
+                ),
               ),
-            ),
-          if (state.message != null) Text(state.message!, style: textStyle),
-        ],
+            if (state.message != null) Text(state.message!, style: textStyle),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildTappablePlaceholder(ReaderProvider provider) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: widget.onContentTapUp,
+      child: Container(color: provider.currentTheme.backgroundColor),
     );
   }
 }

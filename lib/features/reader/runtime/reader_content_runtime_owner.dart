@@ -1,5 +1,6 @@
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
+import 'package:inkpage_reader/core/database/dao/reader_temp_chapter_cache_dao.dart';
 import 'package:inkpage_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
@@ -163,6 +164,7 @@ class ReaderContentRuntimeOwner {
     required Map<int, List<TextPage>> chapterPagesCache,
     required Book book,
     required ChapterDao chapterDao,
+    required ReaderTempChapterCacheDao? tempChapterCacheDao,
     required ReplaceRuleDao replaceDao,
     required BookSourceDao sourceDao,
     required BookSourceService service,
@@ -175,6 +177,7 @@ class ReaderContentRuntimeOwner {
     _lifecycle.init(
       book: book,
       chapterDao: chapterDao,
+      tempChapterCacheDao: tempChapterCacheDao,
       replaceDao: replaceDao,
       sourceDao: sourceDao,
       service: service,

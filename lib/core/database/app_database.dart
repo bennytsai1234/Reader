@@ -44,6 +44,7 @@ import 'dao/source_subscription_dao.dart';
 import 'dao/search_book_dao.dart';
 import 'dao/download_dao.dart';
 import 'dao/search_keyword_dao.dart';
+import 'dao/reader_temp_chapter_cache_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -51,6 +52,7 @@ part 'app_database.g.dart';
   tables: [
     Books,
     Chapters,
+    ReaderTempChapterCaches,
     BookSources,
     BookGroups,
     SearchHistoryTable,
@@ -91,6 +93,7 @@ part 'app_database.g.dart';
     SearchBookDao,
     DownloadDao,
     SearchKeywordDao,
+    ReaderTempChapterCacheDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -99,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase._internal() : super(_openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -128,6 +131,9 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'ALTER TABLE books ADD COLUMN "readerAnchorJson" TEXT',
         );
+      }
+      if (from < 10) {
+        await m.createTable(readerTempChapterCaches);
       }
     },
     beforeOpen: (details) async {

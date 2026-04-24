@@ -273,6 +273,21 @@ class ReadBookController extends ReaderProviderBase
   @override
   int get currentNavigationGeneration => _sessionCoordinator.generation;
   ReaderSessionPhase get sessionPhase => _sessionCoordinator.phase;
+  bool get isScrollRestoreUnconfirmed =>
+      pageTurnMode == PageAnim.scroll &&
+      (hasPendingScrollRestore ||
+          activeCommandReason == ReaderCommandReason.restore ||
+          sessionPhase == ReaderSessionPhase.restoring);
+  bool get shouldBlockScrollInputForRestore => isScrollRestoreUnconfirmed;
+  double get scrollRestoreAnchorPadding {
+    final size = viewSize;
+    if (size == null) return 0.0;
+    return ReaderScrollLayout.anchorPadding(
+      viewportHeight: size.height,
+      topInset: scrollViewportTopInset,
+    );
+  }
+
   bool get hasActiveNavigation => _navigation.hasActiveNavigation;
   bool get hasPendingVisiblePlaceholderReanchor =>
       _pendingVisiblePlaceholderReanchorChapterIndex != null;
@@ -415,7 +430,7 @@ class ReadBookController extends ReaderProviderBase
       final localOffset =
           reason == ReaderCommandReason.restore
               ? _resolveScrollRestoreLocalOffset(
-                ReaderAnchor.location(targetLocation),
+                _restoreAnchorForLocation(targetLocation),
               )
               : _runtimeController.localOffsetForLocation(targetLocation);
       if (localOffset == null) return;
@@ -546,7 +561,9 @@ class ReadBookController extends ReaderProviderBase
       _navigation.retargetActiveNavigation(
         reason: reason,
         targetLocation: targetLocation,
-        targetScrollLocalOffset: localOffset,
+        targetScrollLocalOffset: _restoreNavigationTargetLocalOffset(
+          localOffset,
+        ),
         completionPolicy: ReaderNavigationCompletionPolicy.visibleLocationMatch,
       );
       _sessionCoordinator.updateVisibleConfirmed(false);
@@ -619,10 +636,14 @@ class ReadBookController extends ReaderProviderBase
         pageTurnMode == PageAnim.scroll
             ? (reason == ReaderCommandReason.restore
                 ? _resolveScrollRestoreLocalOffset(
-                  ReaderAnchor.location(targetLocation),
+                  _restoreAnchorForLocation(targetLocation),
                 )
                 : _runtimeController.localOffsetForLocation(targetLocation))
             : null;
+    final navigationScrollLocalOffset =
+        reason == ReaderCommandReason.restore
+            ? _restoreNavigationTargetLocalOffset(targetScrollLocalOffset)
+            : targetScrollLocalOffset;
     final shouldReuse =
         reuseActiveNavigation &&
         _navigation.hasActiveNavigation &&
@@ -631,7 +652,7 @@ class ReadBookController extends ReaderProviderBase
       _navigation.retargetActiveNavigation(
         reason: reason,
         targetLocation: targetLocation,
-        targetScrollLocalOffset: targetScrollLocalOffset,
+        targetScrollLocalOffset: navigationScrollLocalOffset,
         completionPolicy:
             pageTurnMode == PageAnim.scroll
                 ? ReaderNavigationCompletionPolicy.visibleLocationMatch
@@ -695,6 +716,55 @@ class ReadBookController extends ReaderProviderBase
 
   void reconcileVisibleScrollLoads() {
     _scrollVisibility.reconcile(hasRuntimeChapter);
+  }
+
+  bool get shouldRecoverBlankVisibleContent {
+    if (isDisposed ||
+        !hasContentManager ||
+        chapters.isEmpty ||
+        viewSize == null ||
+        isLoading) {
+      return false;
+    }
+    final targetChapterIndex =
+        pageTurnMode == PageAnim.scroll
+            ? visibleChapterIndex
+            : currentChapterIndex;
+    if (targetChapterIndex < 0 || targetChapterIndex >= chapters.length) {
+      return false;
+    }
+    if (chapterViewportStateFor(targetChapterIndex) != null) return false;
+    if (pageTurnMode == PageAnim.scroll) {
+      return pageFactory.orderedChapters.isEmpty &&
+          !hasRuntimeChapter(targetChapterIndex);
+    }
+    return slidePages.isEmpty;
+  }
+
+  void recoverBlankVisibleContent() {
+    if (!shouldRecoverBlankVisibleContent) return;
+    final targetChapterIndex =
+        pageTurnMode == PageAnim.scroll
+            ? visibleChapterIndex
+            : currentChapterIndex;
+    if (pageTurnMode == PageAnim.scroll) {
+      unawaited(
+        ensureChapterCached(
+          targetChapterIndex,
+          silent: false,
+          prioritize: true,
+          preloadRadius: 1,
+        ),
+      );
+      return;
+    }
+    unawaited(
+      loadChapterWithPreloadRadius(
+        targetChapterIndex,
+        preloadRadius: 1,
+        reason: ReaderCommandReason.system,
+      ),
+    );
   }
 
   void handleVisibleScrollState({
@@ -815,6 +885,7 @@ class ReadBookController extends ReaderProviderBase
   }
 
   void completeNavigation(int token, ReaderCommandReason reason) {
+    if (reason == ReaderCommandReason.restore) return;
     final completed = _navigation.completeNavigation(token, reason: reason);
     if (completed?.restoreToken case final restoreToken?) {
       _completeInitialScrollRestore(restoreToken);
@@ -1553,7 +1624,7 @@ class ReadBookController extends ReaderProviderBase
       return;
     }
     final flushedLocation = await _progressCoordinator.flushPendingProgress();
-    if (flushedLocation == null) {
+    if (flushedLocation == null && !isScrollRestoreUnconfirmed) {
       final exitLocation = _sessionRuntime.resolveExitLocation(
         _currentSessionContext(),
       );
@@ -1600,6 +1671,13 @@ class ReadBookController extends ReaderProviderBase
             )
             .anchor;
     if (pageTurnMode == PageAnim.scroll) {
+      final sourceSnapshot = sourceAnchor?.localOffsetSnapshot;
+      if (normalized.charOffset > 0 &&
+          sourceSnapshot != null &&
+          sourceSnapshot > 0 &&
+          !_hasResolvedScrollLayoutForChapter(normalized.chapterIndex)) {
+        return resolvedAnchor.copyWith(localOffsetSnapshot: sourceSnapshot);
+      }
       return resolvedAnchor;
     }
     return resolvedAnchor.copyWith(
@@ -1693,16 +1771,49 @@ class ReadBookController extends ReaderProviderBase
     return pagesForChapter(chapterIndex).isNotEmpty;
   }
 
+  ReaderAnchor _restoreAnchorForLocation(ReaderLocation location) {
+    final pendingAnchor = pendingScrollRestoreAnchor;
+    if (pendingAnchor != null &&
+        pendingAnchor.location.chapterIndex == location.chapterIndex) {
+      return pendingAnchor.normalized().copyWith(location: location);
+    }
+    return ReaderAnchor.location(location);
+  }
+
+  double? _restoreNavigationTargetLocalOffset(double? localOffset) {
+    if (localOffset == null) return null;
+    return (localOffset - scrollRestoreAnchorPadding)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+  }
+
   double? _resolveScrollRestoreLocalOffset(ReaderAnchor anchor) {
     final location = anchor.location.normalized();
     final hasResolvedLayout = _hasResolvedScrollLayoutForChapter(
       location.chapterIndex,
     );
     final snapshot = anchor.localOffsetSnapshot;
+    if (snapshot != null &&
+        snapshot > 0 &&
+        _matchesPreciseRestoreAnchor(
+          anchor,
+          location,
+          requiresPageIndex: false,
+          requiresLocalOffset: true,
+        )) {
+      return snapshot;
+    }
     if (!hasResolvedLayout && location.charOffset > 0) {
       return snapshot != null && snapshot > 0 ? snapshot : null;
     }
-    return _runtimeController.localOffsetForLocation(location);
+    final resolved = _runtimeController.localOffsetForLocation(location);
+    if (location.charOffset > 0 &&
+        resolved <= 0 &&
+        snapshot != null &&
+        snapshot > 0) {
+      return snapshot;
+    }
+    return resolved;
   }
 
   ReaderAnchor _buildInitialSlideRestoreAnchor(
@@ -1968,7 +2079,9 @@ class ReadBookController extends ReaderProviderBase
       ReaderNavigationCommand.chapter(
         reason: ReaderCommandReason.restore,
         targetLocation: location,
-        targetScrollLocalOffset: localOffset,
+        targetScrollLocalOffset: _restoreNavigationTargetLocalOffset(
+          localOffset,
+        ),
         completionPolicy: ReaderNavigationCompletionPolicy.visibleLocationMatch,
       ),
       clearVisibleConfirmation: true,

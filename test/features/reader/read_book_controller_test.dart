@@ -125,6 +125,41 @@ class _PendingNavigationReaderProvider extends ReaderProvider {
   }
 }
 
+class _BlankRecoveryReaderProvider extends ReaderProvider {
+  _BlankRecoveryReaderProvider({
+    required super.book,
+    required super.initialChapters,
+  });
+
+  final List<int> ensureRequests = [];
+  final List<int> loadRequests = [];
+
+  @override
+  bool get hasContentManager => true;
+
+  @override
+  Future<List<TextPage>> ensureChapterCached(
+    int index, {
+    bool silent = true,
+    bool prioritize = false,
+    int preloadRadius = 1,
+  }) async {
+    ensureRequests.add(index);
+    return _buildPages(index, [0]);
+  }
+
+  @override
+  Future<void> loadChapterWithPreloadRadius(
+    int index, {
+    bool fromEnd = false,
+    int preloadRadius = 2,
+    ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
+  }) async {
+    loadRequests.add(index);
+  }
+}
+
 void _setupDi() {
   for (final unregister in [
     () {
@@ -262,6 +297,57 @@ void main() {
     test('初始狀態：isReady 為 false', () {
       final controller = ReadBookController(book: _makeBook());
       expect(controller.isReady, isFalse);
+      controller.dispose();
+    });
+
+    test('scroll 模式空白 viewport 會自動補載目前章節', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'chapter-0', index: 0),
+        BookChapter(title: 'chapter-1', index: 1),
+      ];
+      final controller = _BlankRecoveryReaderProvider(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      controller
+        ..chapters = _fakeChaptersFromDao
+        ..pageTurnMode = PageAnim.scroll
+        ..lifecycle = ReaderLifecycle.ready
+        ..viewSize = const Size(400, 700)
+        ..visibleChapterIndex = 1
+        ..currentChapterIndex = 1;
+
+      expect(controller.shouldRecoverBlankVisibleContent, isTrue);
+      controller.recoverBlankVisibleContent();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.ensureRequests, [1]);
+      expect(controller.loadRequests, isEmpty);
+      controller.dispose();
+    });
+
+    test('slide 模式空白 viewport 會自動重新呈現目前章節', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'chapter-0', index: 0),
+        BookChapter(title: 'chapter-1', index: 1),
+      ];
+      final controller = _BlankRecoveryReaderProvider(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      controller
+        ..chapters = _fakeChaptersFromDao
+        ..pageTurnMode = PageAnim.slide
+        ..lifecycle = ReaderLifecycle.ready
+        ..viewSize = const Size(400, 700)
+        ..currentChapterIndex = 1;
+
+      expect(controller.shouldRecoverBlankVisibleContent, isTrue);
+      controller.recoverBlankVisibleContent();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.loadRequests, [1]);
+      expect(controller.ensureRequests, isEmpty);
       controller.dispose();
     });
 
@@ -1046,6 +1132,31 @@ void main() {
       controller.cancelPendingScrollRestoreFromUserScroll();
 
       expect(controller.hasPendingScrollRestore, isFalse);
+      controller.dispose();
+    });
+
+    test('restore 未完成時 flushNow 不會把暫態 scroll offset 寫成進度', () async {
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: List.generate(
+          3,
+          (index) => BookChapter(
+            title: 'c$index',
+            index: index,
+            bookUrl: 'http://test.com/book',
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.visibleChapterIndex = 1;
+      controller.visibleChapterLocalOffset = 0;
+      controller.registerPendingScrollRestore(chapterIndex: 1, localOffset: 0);
+
+      await controller.flushNow();
+
+      expect(_FakeBookDao.updates, isEmpty);
       controller.dispose();
     });
 

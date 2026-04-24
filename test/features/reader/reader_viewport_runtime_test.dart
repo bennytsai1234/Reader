@@ -62,6 +62,7 @@ class _FakeReaderProvider extends ReaderProvider {
   bool fakePendingVisiblePlaceholderReanchor = false;
   bool fakeHasActiveNavigation = false;
   ReaderCommandReason? fakeActiveCommandReason;
+  bool fakeShouldBlockScrollInputForRestore = false;
   int pauseCalls = 0;
   int resumeCalls = 0;
   int cancelPendingRestoreCalls = 0;
@@ -82,6 +83,10 @@ class _FakeReaderProvider extends ReaderProvider {
 
   @override
   ReaderCommandReason? get activeCommandReason => fakeActiveCommandReason;
+
+  @override
+  bool get shouldBlockScrollInputForRestore =>
+      fakeShouldBlockScrollInputForRestore;
 
   @override
   void pauseAutoPage() {
@@ -154,9 +159,26 @@ void main() {
       expect(runtime.isUserScrolling, isFalse);
       expect(provider.pauseCalls, 1);
       expect(provider.resumeCalls, 1);
-      expect(provider.cancelPendingRestoreCalls, 1);
+      expect(provider.cancelPendingRestoreCalls, 0);
       expect(provider.autoPageProgressNotifier.value, 0.0);
       expect(provider.scrollInteractionStates, [true, false]);
+      provider.dispose();
+    });
+
+    test('restore 未完成時 beginUserScroll 不會啟動互動狀態', () {
+      final provider =
+          _FakeReaderProvider()
+            ..pageTurnMode = PageAnim.scroll
+            ..fakeShouldBlockScrollInputForRestore = true;
+      final runtime = ReaderViewportRuntime(
+        initialPageTurnMode: provider.pageTurnMode,
+      );
+
+      runtime.beginUserScroll(provider);
+
+      expect(runtime.isUserScrolling, isFalse);
+      expect(provider.pauseCalls, 0);
+      expect(provider.scrollInteractionStates, isEmpty);
       provider.dispose();
     });
 

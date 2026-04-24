@@ -14,12 +14,14 @@ import 'package:inkpage_reader/core/models/replace_rule.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/core/services/local_book_service.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_cache_repository.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
 
 class ReaderChapterContentLoader {
   ReaderChapterContentLoader({
     required this.book,
     required this.chapterDao,
+    this.cacheRepository,
     required this.replaceDao,
     required this.sourceDao,
     required this.service,
@@ -31,6 +33,7 @@ class ReaderChapterContentLoader {
 
   final Book book;
   final ChapterDao chapterDao;
+  final ReaderChapterContentCacheRepository? cacheRepository;
   final ReplaceRuleDao replaceDao;
   final BookSourceDao sourceDao;
   final BookSourceService service;
@@ -43,6 +46,7 @@ class ReaderChapterContentLoader {
   List<Map<String, dynamic>>? _cachedRulesJson;
   final Map<String, String> _convertedContentCache = <String, String>{};
   final Map<String, String> _convertedTitleCache = <String, String>{};
+  final Map<String, Future<String>> _rawFetches = <String, Future<String>>{};
 
   Future<FetchResult> load(int chapterIndex, BookChapter chapter) async {
     final rawContent = await _loadRawContent(chapterIndex, chapter);
@@ -89,6 +93,7 @@ class ReaderChapterContentLoader {
     _cachedRulesJson = null;
     _convertedContentCache.clear();
     _convertedTitleCache.clear();
+    _rawFetches.clear();
   }
 
   Future<String> _loadRawContent(int chapterIndex, BookChapter chapter) async {
@@ -101,14 +106,24 @@ class ReaderChapterContentLoader {
       );
     }
 
-    final chapterContent = chapter.content;
-    if (chapterContent != null && chapterContent.isNotEmpty) {
-      return chapterContent;
-    }
-
-    final cachedContent = await chapterDao.getContent(chapter.url);
-    if (cachedContent != null && cachedContent.isNotEmpty) {
-      return cachedContent;
+    final repository = cacheRepository;
+    if (repository != null) {
+      final cachedContent = await repository.getRawContent(
+        book: book,
+        chapter: chapter,
+      );
+      if (cachedContent != null && cachedContent.isNotEmpty) {
+        return cachedContent;
+      }
+    } else {
+      final chapterContent = chapter.content;
+      if (chapterContent != null && chapterContent.isNotEmpty) {
+        return chapterContent;
+      }
+      final cachedContent = await chapterDao.getContent(chapter.url);
+      if (cachedContent != null && cachedContent.isNotEmpty) {
+        return cachedContent;
+      }
     }
 
     var source = getSource();
@@ -119,24 +134,58 @@ class ReaderChapterContentLoader {
     if (source == null) {
       return '加載章節失敗: 找不到書源';
     }
-    final resolvedSource = source;
+    final fetchKey =
+        repository == null
+            ? '${book.origin}\n${book.bookUrl}\n${chapter.url}'
+            : ReaderChapterContentCacheRepository.cacheKeyFor(
+              book: book,
+              chapter: chapter,
+            );
+    final existingFetch = _rawFetches[fetchKey];
+    if (existingFetch != null) return existingFetch;
+    final fetch = _fetchRemoteRawContent(
+      chapterIndex: chapterIndex,
+      chapter: chapter,
+      source: source,
+      nextChapterUrl: nextChapterUrl,
+    );
+    _rawFetches[fetchKey] = fetch;
+    return fetch.whenComplete(() => _rawFetches.remove(fetchKey));
+  }
+
+  Future<String> _fetchRemoteRawContent({
+    required int chapterIndex,
+    required BookChapter chapter,
+    required BookSource source,
+    required String? nextChapterUrl,
+  }) async {
     try {
       final raw = await ReaderPerfTrace.measureAsync(
         'remote content chapter $chapterIndex',
         () => service.getContent(
-          resolvedSource,
+          source,
           book,
           chapter,
           nextChapterUrl: nextChapterUrl,
         ),
       );
       if (raw.isNotEmpty) {
-        await chapterDao.insertChapters(<BookChapter>[chapter]);
-        await chapterDao.saveContent(chapter.url, raw);
+        final repository = cacheRepository;
+        if (repository != null) {
+          await repository.saveRawContent(
+            book: book,
+            chapter: chapter,
+            content: raw,
+          );
+        } else {
+          await chapterDao.insertChapters(<BookChapter>[chapter]);
+          await chapterDao.saveContent(chapter.url, raw);
+        }
         return raw;
       }
       return '章節內容為空 (可能解析規則有誤)';
     } catch (e) {
+      await cacheRepository?.recordFetchFailure(book: book, chapter: chapter);
       return '加載章節失敗: $e';
     }
   }

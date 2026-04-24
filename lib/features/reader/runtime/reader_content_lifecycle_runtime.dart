@@ -9,14 +9,17 @@ import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_position_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_loader.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_cache_repository.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
 import 'package:inkpage_reader/core/database/dao/replace_rule_dao.dart';
+import 'package:inkpage_reader/core/database/dao/reader_temp_chapter_cache_dao.dart';
 
 class ReaderContentLifecycleRuntime {
   static const int scrollPreloadRadius = 1;
+  static const int bookshelfNetworkScrollPreloadRadius = 5;
   static const int localScrollBaseAdjacentRadius = 1;
   static const int localScrollFastAdjacentRadius = 2;
 
@@ -26,6 +29,7 @@ class ReaderContentLifecycleRuntime {
   Timer? _extendedWindowWarmupTimer;
   Timer? _localAdjacentLoadTimer;
   ReaderChapterContentLoader? _chapterContentLoader;
+  int _scrollPreloadRadius = scrollPreloadRadius;
   int _lastVisibleScrollChapter = -1;
   final Map<int, String> _chapterFailureMessages = <int, String>{};
 
@@ -105,6 +109,7 @@ class ReaderContentLifecycleRuntime {
   void init({
     required Book book,
     required ChapterDao chapterDao,
+    required ReaderTempChapterCacheDao? tempChapterCacheDao,
     required ReplaceRuleDao replaceDao,
     required BookSourceDao sourceDao,
     required BookSourceService service,
@@ -126,12 +131,23 @@ class ReaderContentLifecycleRuntime {
     _contentManager?.dispose();
     _chapterFailureMessages.clear();
     _lastVisibleScrollChapter = -1;
+    _scrollPreloadRadius =
+        book.origin != 'local' && book.isInBookshelf
+            ? bookshelfNetworkScrollPreloadRadius
+            : scrollPreloadRadius;
     chapterPagesCache.clear();
     setSlidePages(const <TextPage>[]);
     resetPresentationState();
     _chapterContentLoader = ReaderChapterContentLoader(
       book: book,
       chapterDao: chapterDao,
+      cacheRepository:
+          tempChapterCacheDao == null
+              ? null
+              : ReaderChapterContentCacheRepository(
+                chapterDao: chapterDao,
+                tempCacheDao: tempChapterCacheDao,
+              ),
       replaceDao: replaceDao,
       sourceDao: sourceDao,
       service: service,
@@ -145,6 +161,9 @@ class ReaderContentLifecycleRuntime {
       chapters: chapters,
     );
     _contentManager!.setProgressivePaginationEnabled(false);
+    _contentManager!.setPreloadConcurrency(
+      book.origin != 'local' && book.isInBookshelf ? 2 : 1,
+    );
     _chapterReadySub = _contentManager!.onChapterReady.listen(onChapterReady);
   }
 
@@ -223,7 +242,7 @@ class ReaderContentLifecycleRuntime {
     if (hasContentManager && isScrollMode) {
       activateScrollWindow(
         centerIndex: index,
-        preloadRadius: scrollPreloadRadius,
+        preloadRadius: _scrollPreloadRadius,
         preload: !isLocalScrollMode,
         chapterPagesCache: chapterPagesCache,
         refreshChapterRuntime: refreshChapterRuntime,
@@ -256,7 +275,7 @@ class ReaderContentLifecycleRuntime {
     if (!hasContentManager) return;
     prepareChapterDisplayWindow(
       chapterIndex: centerIndex,
-      preloadRadius: isScrollMode ? scrollPreloadRadius : 1,
+      preloadRadius: isScrollMode ? _scrollPreloadRadius : 1,
       isScrollMode: isScrollMode,
       isLocalScrollMode: isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
@@ -305,7 +324,7 @@ class ReaderContentLifecycleRuntime {
       if (isScrollMode) {
         _contentManager!.warmupWindow(
           warmupCenter,
-          preloadRadius: scrollPreloadRadius,
+          preloadRadius: _scrollPreloadRadius,
         );
         if (isLocalScrollMode) {
           unawaited(
@@ -381,7 +400,7 @@ class ReaderContentLifecycleRuntime {
     );
     activateScrollWindow(
       centerIndex: visibleChapter,
-      preloadRadius: scrollPreloadRadius,
+      preloadRadius: _scrollPreloadRadius,
       preload: !isLocalScrollMode,
       chapterPagesCache: chapterPagesCache,
       refreshChapterRuntime: refreshChapterRuntime,
@@ -546,7 +565,7 @@ class ReaderContentLifecycleRuntime {
       if (isScrollMode) {
         activateScrollWindow(
           centerIndex: visibleChapterIndex,
-          preloadRadius: scrollPreloadRadius,
+          preloadRadius: _scrollPreloadRadius,
           preload: !isLocalScrollMode,
           chapterPagesCache: chapterPagesCache,
           refreshChapterRuntime: refreshChapterRuntime,
@@ -577,7 +596,7 @@ class ReaderContentLifecycleRuntime {
   }) {
     if (isLocalBook && isScrollMode) return 1;
     if (isScrollMode) {
-      return requestedRadius.clamp(0, scrollPreloadRadius).toInt();
+      return requestedRadius.clamp(0, _scrollPreloadRadius).toInt();
     }
     return requestedRadius;
   }
@@ -762,8 +781,8 @@ class ReaderContentLifecycleRuntime {
     if (_contentManager!.activeLoadingChapters.contains(chapterIndex)) {
       return true;
     }
-    return (chapterIndex - visibleChapterIndex).abs() <= scrollPreloadRadius ||
-        (chapterIndex - currentChapterIndex).abs() <= scrollPreloadRadius;
+    return (chapterIndex - visibleChapterIndex).abs() <= _scrollPreloadRadius ||
+        (chapterIndex - currentChapterIndex).abs() <= _scrollPreloadRadius;
   }
 
   void _scheduleAdjacentScrollLoad({

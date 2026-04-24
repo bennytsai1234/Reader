@@ -79,7 +79,7 @@ class ReaderViewportRuntime {
   }
 
   void beginUserScroll(ReaderProvider provider) {
-    provider.cancelPendingScrollRestoreFromUserScroll();
+    if (provider.shouldBlockScrollInputForRestore) return;
     _isUserScrolling = true;
     provider.autoPageProgressNotifier.value = 0.0;
     provider.pauseAutoPage();

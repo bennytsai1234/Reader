@@ -56,7 +56,10 @@ class ScrollModeDelegate extends PageModeDelegate {
                     .toInt(),
         initialAlignment:
             provider.visibleChapterAlignment.clamp(0.0, 1.0).toDouble(),
-        physics: const BouncingScrollPhysics(),
+        physics:
+            provider.shouldBlockScrollInputForRestore
+                ? const NeverScrollableScrollPhysics()
+                : const BouncingScrollPhysics(),
         itemBuilder: (_, chapterIndex) {
           final runtimeChapter = provider.chapterAt(chapterIndex);
           var pages = runtimeChapter?.pages;
@@ -66,16 +69,22 @@ class ScrollModeDelegate extends PageModeDelegate {
               provider,
               chapterIndex,
             );
-            return Container(
-              color: provider.currentTheme.backgroundColor,
-              height: estimatedHeight,
-              alignment: Alignment.center,
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: provider.currentTheme.textColor.withValues(alpha: 0.3),
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: onContentTapUp,
+              child: Container(
+                color: provider.currentTheme.backgroundColor,
+                height: estimatedHeight,
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: provider.currentTheme.textColor.withValues(
+                      alpha: 0.3,
+                    ),
+                  ),
                 ),
               ),
             );

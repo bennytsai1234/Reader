@@ -311,7 +311,7 @@ void main() {
       manager.dispose();
     });
 
-    test('updateConfig 清除快取後，進行中的分頁結果不應覆蓋快取', () async {
+    test('updateConfig 期間抓到 raw content 會用新設定重新分頁', () async {
       final fetchStarted = Completer<void>();
       final fetchCanProceed = Completer<void>();
 
@@ -330,18 +330,53 @@ void main() {
 
       // Wait for fetch to start, then change config while fetch is in progress
       await fetchStarted.future;
-      manager.updateConfig(makeConfig()); // version bump + cache clear
+      manager.updateConfig(
+        const PaginationConfig(
+          viewSize: Size(220, 260),
+          titleStyle: TextStyle(fontSize: 16, height: 1.5),
+          contentStyle: TextStyle(fontSize: 16, height: 1.5),
+        ),
+      );
 
       // Allow fetch to complete
       fetchCanProceed.complete();
       await fetchFuture;
 
-      // Result from old config should NOT be in cache after updateConfig cleared it
       expect(
         manager.getCachedPages(0),
-        isNull,
-        reason: 'updateConfig 後快取應被清除，進行中的舊分頁結果不應寫回',
+        isNotNull,
+        reason: '抓取完成但舊分頁被丟棄時，應使用已快取 raw content 重新分頁',
       );
+
+      manager.dispose();
+    });
+
+    test('raw content 已存在但頁面為空時，主動載入會補分頁不重新抓取', () async {
+      var fetchCount = 0;
+      final manager = ChapterContentManager(
+        fetchFn: (index) async {
+          fetchCount++;
+          return FetchResult(content: 'content-$index');
+        },
+        chapters: makeChapters(3),
+      );
+      manager.updateConfig(
+        const PaginationConfig(
+          viewSize: Size.zero,
+          titleStyle: TextStyle(fontSize: 16, height: 1.5),
+          contentStyle: TextStyle(fontSize: 16, height: 1.5),
+        ),
+      );
+
+      final first = await manager.getChapterPages(0);
+      expect(first, isEmpty);
+      expect(fetchCount, 1);
+
+      manager.updateConfig(makeConfig());
+      final second = await manager.getChapterPages(0);
+
+      expect(second, isNotEmpty);
+      expect(fetchCount, 1, reason: '已有 raw content 時不應重新打網路，只需用最新 layout 分頁');
 
       manager.dispose();
     });

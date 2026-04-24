@@ -19,8 +19,6 @@ import 'reader_provider_base.dart';
 import 'reader_settings_mixin.dart';
 
 mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
-  static const int _scrollPreloadRadius =
-      ReaderContentLifecycleRuntime.scrollPreloadRadius;
   final ReaderContentRuntimeOwner _contentOwner = ReaderContentRuntimeOwner();
   int get currentNavigationGeneration => 0;
   double estimatedChapterContentHeight(
@@ -161,6 +159,10 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       pageTurnMode == PageAnim.scroll && book.origin == 'local';
   bool get _isLocalBook => book.origin == 'local';
   bool get _isScrollMode => pageTurnMode == PageAnim.scroll;
+  int get _effectiveScrollPreloadRadius =>
+      !_isLocalBook && book.isInBookshelf
+          ? ReaderContentLifecycleRuntime.bookshelfNetworkScrollPreloadRadius
+          : ReaderContentLifecycleRuntime.scrollPreloadRadius;
   // 本地書 slide 模式的 warmup 半徑與網路書相同（disk I/O 無額外成本）。
   // 僅 scroll 模式維持 1 避免過多章節同時持在記憶體中。
   int get _defaultSlideWarmupRadius => 2;
@@ -215,6 +217,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       chapterPagesCache: chapterPagesCache,
       book: book,
       chapterDao: chapterDao,
+      tempChapterCacheDao: readerTempChapterCacheDao,
       replaceDao: replaceDao,
       sourceDao: sourceDao,
       service: service,
@@ -278,7 +281,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       await _contentOwner.repaginateForDisplay(
         centerChapterIndex: targetChapter,
         isScrollMode: _isScrollMode,
-        scrollRadius: _scrollPreloadRadius,
+        scrollRadius: _effectiveScrollPreloadRadius,
       );
       _syncChapterPagesCacheFromContentManager();
       _refreshSlidePages();

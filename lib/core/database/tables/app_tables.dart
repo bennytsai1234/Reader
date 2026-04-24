@@ -254,6 +254,22 @@ class Chapters extends Table {
   Set<Column> get primaryKey => {url};
 }
 
+// ───────────── Reader transient chapter content cache ─────────────
+class ReaderTempChapterCaches extends Table {
+  TextColumn get cacheKey => text().named('cacheKey')();
+  TextColumn get origin => text()();
+  TextColumn get bookUrl => text().named('bookUrl')();
+  TextColumn get chapterUrl => text().named('chapterUrl')();
+  IntColumn get chapterIndex => integer().named('chapterIndex')();
+  TextColumn get content => text().nullable()();
+  IntColumn get updatedAt => integer().named('updatedAt')();
+  IntColumn get failureCount =>
+      integer().named('failureCount').withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {cacheKey};
+}
+
 // ───────────── BookSources ─────────────
 @UseRowClass(BookSource, generateInsertable: true)
 class BookSources extends Table {

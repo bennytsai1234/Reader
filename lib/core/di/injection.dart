@@ -22,6 +22,7 @@ import '../database/dao/txt_toc_rule_dao.dart';
 import '../database/dao/keyboard_assist_dao.dart';
 import '../database/dao/server_dao.dart';
 import '../database/dao/source_subscription_dao.dart';
+import '../database/dao/reader_temp_chapter_cache_dao.dart';
 import '../services/tts_service.dart';
 import '../services/crash_handler.dart';
 
@@ -51,30 +52,65 @@ Future<void> configureDependencies() async {
 
   // 3. DAO 註冊 (統一使用 SQLite 實作)
   getIt.registerLazySingleton<BookDao>(() => BookDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<BookSourceDao>(() => BookSourceDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<ChapterDao>(() => ChapterDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<BookGroupDao>(() => BookGroupDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<BookmarkDao>(() => BookmarkDao(getIt<AppDatabase>()));
+  getIt.registerLazySingleton<BookSourceDao>(
+    () => BookSourceDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<ChapterDao>(
+    () => ChapterDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<BookGroupDao>(
+    () => BookGroupDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<BookmarkDao>(
+    () => BookmarkDao(getIt<AppDatabase>()),
+  );
   getIt.registerLazySingleton<CacheDao>(() => CacheDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<CookieDao>(() => CookieDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<DictRuleDao>(() => DictRuleDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<DownloadDao>(() => DownloadDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<HttpTtsDao>(() => HttpTtsDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<ReadRecordDao>(() => ReadRecordDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<ReplaceRuleDao>(() => ReplaceRuleDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<RuleSubDao>(() => RuleSubDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<SearchBookDao>(() => SearchBookDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<SearchHistoryDao>(() => SearchHistoryDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<SearchKeywordDao>(() => SearchKeywordDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<TxtTocRuleDao>(() => TxtTocRuleDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<KeyboardAssistDao>(() => KeyboardAssistDao(getIt<AppDatabase>()));
+  getIt.registerLazySingleton<DictRuleDao>(
+    () => DictRuleDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<DownloadDao>(
+    () => DownloadDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<HttpTtsDao>(
+    () => HttpTtsDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<ReadRecordDao>(
+    () => ReadRecordDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<ReplaceRuleDao>(
+    () => ReplaceRuleDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<RuleSubDao>(
+    () => RuleSubDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<SearchBookDao>(
+    () => SearchBookDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<SearchHistoryDao>(
+    () => SearchHistoryDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<SearchKeywordDao>(
+    () => SearchKeywordDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<TxtTocRuleDao>(
+    () => TxtTocRuleDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<KeyboardAssistDao>(
+    () => KeyboardAssistDao(getIt<AppDatabase>()),
+  );
   getIt.registerLazySingleton<ServerDao>(() => ServerDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<SourceSubscriptionDao>(() => SourceSubscriptionDao(getIt<AppDatabase>()));
+  getIt.registerLazySingleton<SourceSubscriptionDao>(
+    () => SourceSubscriptionDao(getIt<AppDatabase>()),
+  );
+  getIt.registerLazySingleton<ReaderTempChapterCacheDao>(
+    () => ReaderTempChapterCacheDao(getIt<AppDatabase>()),
+  );
 
   // 4. 其它核心服務註冊
   getIt.registerSingleton<NetworkService>(NetworkService());
   getIt.registerSingleton<TTSService>(TTSService());
-  
+
   // 5. 初始化所有服務
   await Future.wait([
     CrashHandler.init(),

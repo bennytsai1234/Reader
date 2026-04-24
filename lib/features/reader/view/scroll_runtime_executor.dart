@@ -83,11 +83,7 @@ class ScrollRuntimeExecutor {
             navigationToken,
             ReaderCommandReason.restore,
           ),
-      onCompleted:
-          () => provider.completeNavigation(
-            navigationToken,
-            ReaderCommandReason.restore,
-          ),
+      onCompleted: () {},
       scrollToChapterLocalOffset: ({
         required int chapterIndex,
         required double localOffset,
@@ -97,7 +93,7 @@ class ScrollRuntimeExecutor {
           chapterIndex: chapterIndex,
           localOffset: localOffset,
           animate: animate,
-          topPadding: 0.0,
+          topPadding: provider.scrollRestoreAnchorPadding,
         );
       },
       ensureChapterCached: (targetChapterIndex) {

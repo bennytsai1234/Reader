@@ -1980,6 +1980,545 @@ extension BookChapterToInsertable on BookChapter {
   }
 }
 
+class $ReaderTempChapterCachesTable extends ReaderTempChapterCaches
+    with TableInfo<$ReaderTempChapterCachesTable, ReaderTempChapterCache> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReaderTempChapterCachesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _cacheKeyMeta = const VerificationMeta(
+    'cacheKey',
+  );
+  @override
+  late final GeneratedColumn<String> cacheKey = GeneratedColumn<String>(
+    'cacheKey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bookUrlMeta = const VerificationMeta(
+    'bookUrl',
+  );
+  @override
+  late final GeneratedColumn<String> bookUrl = GeneratedColumn<String>(
+    'bookUrl',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chapterUrlMeta = const VerificationMeta(
+    'chapterUrl',
+  );
+  @override
+  late final GeneratedColumn<String> chapterUrl = GeneratedColumn<String>(
+    'chapterUrl',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chapterIndexMeta = const VerificationMeta(
+    'chapterIndex',
+  );
+  @override
+  late final GeneratedColumn<int> chapterIndex = GeneratedColumn<int>(
+    'chapterIndex',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updatedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _failureCountMeta = const VerificationMeta(
+    'failureCount',
+  );
+  @override
+  late final GeneratedColumn<int> failureCount = GeneratedColumn<int>(
+    'failureCount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    cacheKey,
+    origin,
+    bookUrl,
+    chapterUrl,
+    chapterIndex,
+    content,
+    updatedAt,
+    failureCount,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'reader_temp_chapter_caches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ReaderTempChapterCache> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('cacheKey')) {
+      context.handle(
+        _cacheKeyMeta,
+        cacheKey.isAcceptableOrUnknown(data['cacheKey']!, _cacheKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_cacheKeyMeta);
+    }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_originMeta);
+    }
+    if (data.containsKey('bookUrl')) {
+      context.handle(
+        _bookUrlMeta,
+        bookUrl.isAcceptableOrUnknown(data['bookUrl']!, _bookUrlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bookUrlMeta);
+    }
+    if (data.containsKey('chapterUrl')) {
+      context.handle(
+        _chapterUrlMeta,
+        chapterUrl.isAcceptableOrUnknown(data['chapterUrl']!, _chapterUrlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chapterUrlMeta);
+    }
+    if (data.containsKey('chapterIndex')) {
+      context.handle(
+        _chapterIndexMeta,
+        chapterIndex.isAcceptableOrUnknown(
+          data['chapterIndex']!,
+          _chapterIndexMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_chapterIndexMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    }
+    if (data.containsKey('updatedAt')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updatedAt']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('failureCount')) {
+      context.handle(
+        _failureCountMeta,
+        failureCount.isAcceptableOrUnknown(
+          data['failureCount']!,
+          _failureCountMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {cacheKey};
+  @override
+  ReaderTempChapterCache map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReaderTempChapterCache(
+      cacheKey:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}cacheKey'],
+          )!,
+      origin:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}origin'],
+          )!,
+      bookUrl:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}bookUrl'],
+          )!,
+      chapterUrl:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}chapterUrl'],
+          )!,
+      chapterIndex:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.int,
+            data['${effectivePrefix}chapterIndex'],
+          )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      ),
+      updatedAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.int,
+            data['${effectivePrefix}updatedAt'],
+          )!,
+      failureCount:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.int,
+            data['${effectivePrefix}failureCount'],
+          )!,
+    );
+  }
+
+  @override
+  $ReaderTempChapterCachesTable createAlias(String alias) {
+    return $ReaderTempChapterCachesTable(attachedDatabase, alias);
+  }
+}
+
+class ReaderTempChapterCache extends DataClass
+    implements Insertable<ReaderTempChapterCache> {
+  final String cacheKey;
+  final String origin;
+  final String bookUrl;
+  final String chapterUrl;
+  final int chapterIndex;
+  final String? content;
+  final int updatedAt;
+  final int failureCount;
+  const ReaderTempChapterCache({
+    required this.cacheKey,
+    required this.origin,
+    required this.bookUrl,
+    required this.chapterUrl,
+    required this.chapterIndex,
+    this.content,
+    required this.updatedAt,
+    required this.failureCount,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['cacheKey'] = Variable<String>(cacheKey);
+    map['origin'] = Variable<String>(origin);
+    map['bookUrl'] = Variable<String>(bookUrl);
+    map['chapterUrl'] = Variable<String>(chapterUrl);
+    map['chapterIndex'] = Variable<int>(chapterIndex);
+    if (!nullToAbsent || content != null) {
+      map['content'] = Variable<String>(content);
+    }
+    map['updatedAt'] = Variable<int>(updatedAt);
+    map['failureCount'] = Variable<int>(failureCount);
+    return map;
+  }
+
+  ReaderTempChapterCachesCompanion toCompanion(bool nullToAbsent) {
+    return ReaderTempChapterCachesCompanion(
+      cacheKey: Value(cacheKey),
+      origin: Value(origin),
+      bookUrl: Value(bookUrl),
+      chapterUrl: Value(chapterUrl),
+      chapterIndex: Value(chapterIndex),
+      content:
+          content == null && nullToAbsent
+              ? const Value.absent()
+              : Value(content),
+      updatedAt: Value(updatedAt),
+      failureCount: Value(failureCount),
+    );
+  }
+
+  factory ReaderTempChapterCache.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReaderTempChapterCache(
+      cacheKey: serializer.fromJson<String>(json['cacheKey']),
+      origin: serializer.fromJson<String>(json['origin']),
+      bookUrl: serializer.fromJson<String>(json['bookUrl']),
+      chapterUrl: serializer.fromJson<String>(json['chapterUrl']),
+      chapterIndex: serializer.fromJson<int>(json['chapterIndex']),
+      content: serializer.fromJson<String?>(json['content']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+      failureCount: serializer.fromJson<int>(json['failureCount']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'cacheKey': serializer.toJson<String>(cacheKey),
+      'origin': serializer.toJson<String>(origin),
+      'bookUrl': serializer.toJson<String>(bookUrl),
+      'chapterUrl': serializer.toJson<String>(chapterUrl),
+      'chapterIndex': serializer.toJson<int>(chapterIndex),
+      'content': serializer.toJson<String?>(content),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+      'failureCount': serializer.toJson<int>(failureCount),
+    };
+  }
+
+  ReaderTempChapterCache copyWith({
+    String? cacheKey,
+    String? origin,
+    String? bookUrl,
+    String? chapterUrl,
+    int? chapterIndex,
+    Value<String?> content = const Value.absent(),
+    int? updatedAt,
+    int? failureCount,
+  }) => ReaderTempChapterCache(
+    cacheKey: cacheKey ?? this.cacheKey,
+    origin: origin ?? this.origin,
+    bookUrl: bookUrl ?? this.bookUrl,
+    chapterUrl: chapterUrl ?? this.chapterUrl,
+    chapterIndex: chapterIndex ?? this.chapterIndex,
+    content: content.present ? content.value : this.content,
+    updatedAt: updatedAt ?? this.updatedAt,
+    failureCount: failureCount ?? this.failureCount,
+  );
+  ReaderTempChapterCache copyWithCompanion(
+    ReaderTempChapterCachesCompanion data,
+  ) {
+    return ReaderTempChapterCache(
+      cacheKey: data.cacheKey.present ? data.cacheKey.value : this.cacheKey,
+      origin: data.origin.present ? data.origin.value : this.origin,
+      bookUrl: data.bookUrl.present ? data.bookUrl.value : this.bookUrl,
+      chapterUrl:
+          data.chapterUrl.present ? data.chapterUrl.value : this.chapterUrl,
+      chapterIndex:
+          data.chapterIndex.present
+              ? data.chapterIndex.value
+              : this.chapterIndex,
+      content: data.content.present ? data.content.value : this.content,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      failureCount:
+          data.failureCount.present
+              ? data.failureCount.value
+              : this.failureCount,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReaderTempChapterCache(')
+          ..write('cacheKey: $cacheKey, ')
+          ..write('origin: $origin, ')
+          ..write('bookUrl: $bookUrl, ')
+          ..write('chapterUrl: $chapterUrl, ')
+          ..write('chapterIndex: $chapterIndex, ')
+          ..write('content: $content, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('failureCount: $failureCount')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    cacheKey,
+    origin,
+    bookUrl,
+    chapterUrl,
+    chapterIndex,
+    content,
+    updatedAt,
+    failureCount,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReaderTempChapterCache &&
+          other.cacheKey == this.cacheKey &&
+          other.origin == this.origin &&
+          other.bookUrl == this.bookUrl &&
+          other.chapterUrl == this.chapterUrl &&
+          other.chapterIndex == this.chapterIndex &&
+          other.content == this.content &&
+          other.updatedAt == this.updatedAt &&
+          other.failureCount == this.failureCount);
+}
+
+class ReaderTempChapterCachesCompanion
+    extends UpdateCompanion<ReaderTempChapterCache> {
+  final Value<String> cacheKey;
+  final Value<String> origin;
+  final Value<String> bookUrl;
+  final Value<String> chapterUrl;
+  final Value<int> chapterIndex;
+  final Value<String?> content;
+  final Value<int> updatedAt;
+  final Value<int> failureCount;
+  final Value<int> rowid;
+  const ReaderTempChapterCachesCompanion({
+    this.cacheKey = const Value.absent(),
+    this.origin = const Value.absent(),
+    this.bookUrl = const Value.absent(),
+    this.chapterUrl = const Value.absent(),
+    this.chapterIndex = const Value.absent(),
+    this.content = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.failureCount = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReaderTempChapterCachesCompanion.insert({
+    required String cacheKey,
+    required String origin,
+    required String bookUrl,
+    required String chapterUrl,
+    required int chapterIndex,
+    this.content = const Value.absent(),
+    required int updatedAt,
+    this.failureCount = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : cacheKey = Value(cacheKey),
+       origin = Value(origin),
+       bookUrl = Value(bookUrl),
+       chapterUrl = Value(chapterUrl),
+       chapterIndex = Value(chapterIndex),
+       updatedAt = Value(updatedAt);
+  static Insertable<ReaderTempChapterCache> custom({
+    Expression<String>? cacheKey,
+    Expression<String>? origin,
+    Expression<String>? bookUrl,
+    Expression<String>? chapterUrl,
+    Expression<int>? chapterIndex,
+    Expression<String>? content,
+    Expression<int>? updatedAt,
+    Expression<int>? failureCount,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (cacheKey != null) 'cacheKey': cacheKey,
+      if (origin != null) 'origin': origin,
+      if (bookUrl != null) 'bookUrl': bookUrl,
+      if (chapterUrl != null) 'chapterUrl': chapterUrl,
+      if (chapterIndex != null) 'chapterIndex': chapterIndex,
+      if (content != null) 'content': content,
+      if (updatedAt != null) 'updatedAt': updatedAt,
+      if (failureCount != null) 'failureCount': failureCount,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReaderTempChapterCachesCompanion copyWith({
+    Value<String>? cacheKey,
+    Value<String>? origin,
+    Value<String>? bookUrl,
+    Value<String>? chapterUrl,
+    Value<int>? chapterIndex,
+    Value<String?>? content,
+    Value<int>? updatedAt,
+    Value<int>? failureCount,
+    Value<int>? rowid,
+  }) {
+    return ReaderTempChapterCachesCompanion(
+      cacheKey: cacheKey ?? this.cacheKey,
+      origin: origin ?? this.origin,
+      bookUrl: bookUrl ?? this.bookUrl,
+      chapterUrl: chapterUrl ?? this.chapterUrl,
+      chapterIndex: chapterIndex ?? this.chapterIndex,
+      content: content ?? this.content,
+      updatedAt: updatedAt ?? this.updatedAt,
+      failureCount: failureCount ?? this.failureCount,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (cacheKey.present) {
+      map['cacheKey'] = Variable<String>(cacheKey.value);
+    }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
+    }
+    if (bookUrl.present) {
+      map['bookUrl'] = Variable<String>(bookUrl.value);
+    }
+    if (chapterUrl.present) {
+      map['chapterUrl'] = Variable<String>(chapterUrl.value);
+    }
+    if (chapterIndex.present) {
+      map['chapterIndex'] = Variable<int>(chapterIndex.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (updatedAt.present) {
+      map['updatedAt'] = Variable<int>(updatedAt.value);
+    }
+    if (failureCount.present) {
+      map['failureCount'] = Variable<int>(failureCount.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReaderTempChapterCachesCompanion(')
+          ..write('cacheKey: $cacheKey, ')
+          ..write('origin: $origin, ')
+          ..write('bookUrl: $bookUrl, ')
+          ..write('chapterUrl: $chapterUrl, ')
+          ..write('chapterIndex: $chapterIndex, ')
+          ..write('content: $content, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('failureCount: $failureCount, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $BookSourcesTable extends BookSources
     with TableInfo<$BookSourcesTable, BookSource> {
   @override
@@ -8821,6 +9360,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $BooksTable books = $BooksTable(this);
   late final $ChaptersTable chapters = $ChaptersTable(this);
+  late final $ReaderTempChapterCachesTable readerTempChapterCaches =
+      $ReaderTempChapterCachesTable(this);
   late final $BookSourcesTable bookSources = $BookSourcesTable(this);
   late final $BookGroupsTable bookGroups = $BookGroupsTable(this);
   late final $SearchHistoryTableTable searchHistoryTable =
@@ -8872,6 +9413,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final SearchKeywordDao searchKeywordDao = SearchKeywordDao(
     this as AppDatabase,
   );
+  late final ReaderTempChapterCacheDao readerTempChapterCacheDao =
+      ReaderTempChapterCacheDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8879,6 +9422,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     books,
     chapters,
+    readerTempChapterCaches,
     bookSources,
     bookGroups,
     searchHistoryTable,
@@ -10108,6 +10652,295 @@ typedef $$ChaptersTableProcessedTableManager =
       $$ChaptersTableUpdateCompanionBuilder,
       (BookChapter, BaseReferences<_$AppDatabase, $ChaptersTable, BookChapter>),
       BookChapter,
+      PrefetchHooks Function()
+    >;
+typedef $$ReaderTempChapterCachesTableCreateCompanionBuilder =
+    ReaderTempChapterCachesCompanion Function({
+      required String cacheKey,
+      required String origin,
+      required String bookUrl,
+      required String chapterUrl,
+      required int chapterIndex,
+      Value<String?> content,
+      required int updatedAt,
+      Value<int> failureCount,
+      Value<int> rowid,
+    });
+typedef $$ReaderTempChapterCachesTableUpdateCompanionBuilder =
+    ReaderTempChapterCachesCompanion Function({
+      Value<String> cacheKey,
+      Value<String> origin,
+      Value<String> bookUrl,
+      Value<String> chapterUrl,
+      Value<int> chapterIndex,
+      Value<String?> content,
+      Value<int> updatedAt,
+      Value<int> failureCount,
+      Value<int> rowid,
+    });
+
+class $$ReaderTempChapterCachesTableFilterComposer
+    extends Composer<_$AppDatabase, $ReaderTempChapterCachesTable> {
+  $$ReaderTempChapterCachesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get cacheKey => $composableBuilder(
+    column: $table.cacheKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bookUrl => $composableBuilder(
+    column: $table.bookUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chapterUrl => $composableBuilder(
+    column: $table.chapterUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get chapterIndex => $composableBuilder(
+    column: $table.chapterIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get failureCount => $composableBuilder(
+    column: $table.failureCount,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ReaderTempChapterCachesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReaderTempChapterCachesTable> {
+  $$ReaderTempChapterCachesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get cacheKey => $composableBuilder(
+    column: $table.cacheKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bookUrl => $composableBuilder(
+    column: $table.bookUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chapterUrl => $composableBuilder(
+    column: $table.chapterUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get chapterIndex => $composableBuilder(
+    column: $table.chapterIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get failureCount => $composableBuilder(
+    column: $table.failureCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ReaderTempChapterCachesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReaderTempChapterCachesTable> {
+  $$ReaderTempChapterCachesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get cacheKey =>
+      $composableBuilder(column: $table.cacheKey, builder: (column) => column);
+
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
+
+  GeneratedColumn<String> get bookUrl =>
+      $composableBuilder(column: $table.bookUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get chapterUrl => $composableBuilder(
+    column: $table.chapterUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get chapterIndex => $composableBuilder(
+    column: $table.chapterIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get failureCount => $composableBuilder(
+    column: $table.failureCount,
+    builder: (column) => column,
+  );
+}
+
+class $$ReaderTempChapterCachesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReaderTempChapterCachesTable,
+          ReaderTempChapterCache,
+          $$ReaderTempChapterCachesTableFilterComposer,
+          $$ReaderTempChapterCachesTableOrderingComposer,
+          $$ReaderTempChapterCachesTableAnnotationComposer,
+          $$ReaderTempChapterCachesTableCreateCompanionBuilder,
+          $$ReaderTempChapterCachesTableUpdateCompanionBuilder,
+          (
+            ReaderTempChapterCache,
+            BaseReferences<
+              _$AppDatabase,
+              $ReaderTempChapterCachesTable,
+              ReaderTempChapterCache
+            >,
+          ),
+          ReaderTempChapterCache,
+          PrefetchHooks Function()
+        > {
+  $$ReaderTempChapterCachesTableTableManager(
+    _$AppDatabase db,
+    $ReaderTempChapterCachesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer:
+              () => $$ReaderTempChapterCachesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer:
+              () => $$ReaderTempChapterCachesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer:
+              () => $$ReaderTempChapterCachesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> cacheKey = const Value.absent(),
+                Value<String> origin = const Value.absent(),
+                Value<String> bookUrl = const Value.absent(),
+                Value<String> chapterUrl = const Value.absent(),
+                Value<int> chapterIndex = const Value.absent(),
+                Value<String?> content = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<int> failureCount = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReaderTempChapterCachesCompanion(
+                cacheKey: cacheKey,
+                origin: origin,
+                bookUrl: bookUrl,
+                chapterUrl: chapterUrl,
+                chapterIndex: chapterIndex,
+                content: content,
+                updatedAt: updatedAt,
+                failureCount: failureCount,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String cacheKey,
+                required String origin,
+                required String bookUrl,
+                required String chapterUrl,
+                required int chapterIndex,
+                Value<String?> content = const Value.absent(),
+                required int updatedAt,
+                Value<int> failureCount = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReaderTempChapterCachesCompanion.insert(
+                cacheKey: cacheKey,
+                origin: origin,
+                bookUrl: bookUrl,
+                chapterUrl: chapterUrl,
+                chapterIndex: chapterIndex,
+                content: content,
+                updatedAt: updatedAt,
+                failureCount: failureCount,
+                rowid: rowid,
+              ),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ReaderTempChapterCachesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReaderTempChapterCachesTable,
+      ReaderTempChapterCache,
+      $$ReaderTempChapterCachesTableFilterComposer,
+      $$ReaderTempChapterCachesTableOrderingComposer,
+      $$ReaderTempChapterCachesTableAnnotationComposer,
+      $$ReaderTempChapterCachesTableCreateCompanionBuilder,
+      $$ReaderTempChapterCachesTableUpdateCompanionBuilder,
+      (
+        ReaderTempChapterCache,
+        BaseReferences<
+          _$AppDatabase,
+          $ReaderTempChapterCachesTable,
+          ReaderTempChapterCache
+        >,
+      ),
+      ReaderTempChapterCache,
       PrefetchHooks Function()
     >;
 typedef $$BookSourcesTableCreateCompanionBuilder =
@@ -14975,6 +15808,11 @@ class $AppDatabaseManager {
       $$BooksTableTableManager(_db, _db.books);
   $$ChaptersTableTableManager get chapters =>
       $$ChaptersTableTableManager(_db, _db.chapters);
+  $$ReaderTempChapterCachesTableTableManager get readerTempChapterCaches =>
+      $$ReaderTempChapterCachesTableTableManager(
+        _db,
+        _db.readerTempChapterCaches,
+      );
   $$BookSourcesTableTableManager get bookSources =>
       $$BookSourcesTableTableManager(_db, _db.bookSources);
   $$BookGroupsTableTableManager get bookGroups =>
