@@ -345,6 +345,7 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       pageTurnMode: pageTurnMode,
       isLoading: isLoading,
       currentPageIndex: currentPageIndex,
+      allowProgressCommit: persistVisiblePosition,
       updateVisible: (ci, lo, al) {
         visibleChapterIndex = ci;
         visibleChapterLocalOffset = lo;

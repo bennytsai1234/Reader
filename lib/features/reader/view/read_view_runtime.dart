@@ -42,6 +42,8 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   bool _holdContentUntilScrollRestore = false;
   bool _blankRecoveryScheduled = false;
   bool _firstVisibleDataRefreshScheduled = false;
+  bool _lastHadVisibleData = false;
+  int _visibleDataRefreshGeneration = 0;
 
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
@@ -378,11 +380,34 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   }
 
   void _scheduleFirstVisibleDataRefresh({required bool hasVisibleData}) {
-    if (!hasVisibleData || _firstVisibleDataRefreshScheduled) return;
+    if (!hasVisibleData) {
+      _lastHadVisibleData = false;
+      _firstVisibleDataRefreshScheduled = false;
+      _visibleDataRefreshGeneration++;
+      return;
+    }
+
+    if (_lastHadVisibleData || _firstVisibleDataRefreshScheduled) return;
+
+    _lastHadVisibleData = true;
     _firstVisibleDataRefreshScheduled = true;
+    final generation = ++_visibleDataRefreshGeneration;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || generation != _visibleDataRefreshGeneration) return;
+
+      if (!_contentRevealed) {
+        _contentRevealed = true;
+        _fadeCtrl.value = 1.0;
+      }
+
       setState(() {});
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || generation != _visibleDataRefreshGeneration) return;
+        _firstVisibleDataRefreshScheduled = false;
+        setState(() {});
+      });
     });
   }
 

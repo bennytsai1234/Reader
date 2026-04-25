@@ -9,6 +9,7 @@ class SlidePageController {
   static const int _maxClientAttachRetries = 8;
   int? _pendingJump;
   VoidCallback? _pendingOnWillJump;
+  VoidCallback? _pendingOnAlreadyAtTarget;
   bool _scheduled = false;
   bool _disposed = false;
   int _clientAttachRetries = 0;
@@ -17,38 +18,57 @@ class SlidePageController {
 
   /// Schedule a jump to [pageIndex]. Multiple calls before the next frame
   /// coalesce — only the last target is used.
-  void jumpTo(int pageIndex, {VoidCallback? onWillJump}) {
+  void jumpTo(
+    int pageIndex, {
+    VoidCallback? onWillJump,
+    VoidCallback? onAlreadyAtTarget,
+  }) {
     _pendingJump = pageIndex;
     _pendingOnWillJump = onWillJump;
+    _pendingOnAlreadyAtTarget = onAlreadyAtTarget;
     if (_scheduled || _disposed) return;
     _scheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scheduled = false;
       final target = _pendingJump;
       final pendingOnWillJump = _pendingOnWillJump;
+      final pendingOnAlreadyAtTarget = _pendingOnAlreadyAtTarget;
       if (_disposed || target == null) return;
       if (!pageController.hasClients) {
         if (_clientAttachRetries >= _maxClientAttachRetries) {
           _pendingJump = null;
           _pendingOnWillJump = null;
+          _pendingOnAlreadyAtTarget = null;
           return;
         }
         _clientAttachRetries += 1;
-        jumpTo(target, onWillJump: pendingOnWillJump);
+        jumpTo(
+          target,
+          onWillJump: pendingOnWillJump,
+          onAlreadyAtTarget: pendingOnAlreadyAtTarget,
+        );
         return;
       }
       _clientAttachRetries = 0;
       _pendingJump = null;
       _pendingOnWillJump = null;
+      _pendingOnAlreadyAtTarget = null;
       if (pageController.position.isScrollingNotifier.value) {
         // User is actively scrolling — retry next frame
-        jumpTo(target, onWillJump: pendingOnWillJump);
+        jumpTo(
+          target,
+          onWillJump: pendingOnWillJump,
+          onAlreadyAtTarget: pendingOnAlreadyAtTarget,
+        );
         return;
       }
-      if (pageController.page?.round() != target) {
-        pendingOnWillJump?.call();
-        pageController.jumpToPage(target);
+      final currentPage = pageController.page?.round();
+      if (currentPage == target) {
+        pendingOnAlreadyAtTarget?.call();
+        return;
       }
+      pendingOnWillJump?.call();
+      pageController.jumpToPage(target);
     });
   }
 
@@ -56,5 +76,6 @@ class SlidePageController {
     _disposed = true;
     _pendingJump = null;
     _pendingOnWillJump = null;
+    _pendingOnAlreadyAtTarget = null;
   }
 }

@@ -74,5 +74,37 @@ void main() {
       slideController.dispose();
       pageController.dispose();
     });
+
+    testWidgets('已在目標頁時會消費 already-at-target callback', (tester) async {
+      final pageController = PageController(initialPage: 1);
+      final slideController = SlidePageController(pageController);
+      var willJumpCalled = false;
+      var alreadyAtTargetCalled = false;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: PageView(
+            controller: pageController,
+            children: const [SizedBox.expand(), SizedBox.expand()],
+          ),
+        ),
+      );
+
+      slideController.jumpTo(
+        1,
+        onWillJump: () => willJumpCalled = true,
+        onAlreadyAtTarget: () => alreadyAtTargetCalled = true,
+      );
+
+      await tester.pump();
+
+      expect(willJumpCalled, isFalse);
+      expect(alreadyAtTargetCalled, isTrue);
+      expect(pageController.page, 1);
+
+      slideController.dispose();
+      pageController.dispose();
+    });
   });
 }

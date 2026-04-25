@@ -93,6 +93,7 @@ void main() {
           pageTurnMode: PageAnim.scroll,
           isLoading: false,
           currentPageIndex: 0,
+          allowProgressCommit: true,
           updateVisible: (_, __, ___) {},
           updateCurrentChapterIndex: (_) {},
         );
@@ -119,6 +120,7 @@ void main() {
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
         currentPageIndex: 0,
+        allowProgressCommit: true,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
       );
@@ -169,6 +171,7 @@ void main() {
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
         currentPageIndex: 0,
+        allowProgressCommit: true,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
       );
@@ -197,6 +200,7 @@ void main() {
         pageTurnMode: PageAnim.scroll,
         isLoading: true,
         currentPageIndex: 0,
+        allowProgressCommit: true,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
       );
@@ -221,6 +225,7 @@ void main() {
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
         currentPageIndex: 0,
+        allowProgressCommit: true,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
       );
@@ -229,7 +234,10 @@ void main() {
       coordinator.dispose();
     });
 
-    test('沒有 anchor confirmation 時仍使用 fallback 位置持久化', () async {
+    test('不允許 progress commit 時只更新 UI 暫態，不寫 session progress', () async {
+      int? transientChapterIndex;
+      double? transientLocalOffset;
+      double? transientAlignment;
       ReaderLocation? visibleLocation;
       ReaderLocation? committedLocation;
       ReaderLocation? persistedLocation;
@@ -257,19 +265,24 @@ void main() {
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
         currentPageIndex: 0,
-        updateVisible: (_, __, ___) {},
+        allowProgressCommit: false,
+        updateVisible: (chapterIndex, localOffset, alignment) {
+          transientChapterIndex = chapterIndex;
+          transientLocalOffset = localOffset;
+          transientAlignment = alignment;
+        },
         updateCurrentChapterIndex: (_) {},
       );
 
       await Future.delayed(const Duration(milliseconds: 600));
 
-      expect(visibleLocation, isNotNull);
-      expect(visibleLocation!.charOffset, 52);
-      expect(committedLocation, isNotNull);
-      expect(committedLocation!.charOffset, 52);
-      expect(persistedLocation, isNotNull);
-      expect(persistedLocation!.charOffset, 52);
-      expect(persistCalled, isTrue);
+      expect(transientChapterIndex, 0);
+      expect(transientLocalOffset, 50.0);
+      expect(transientAlignment, 0.0);
+      expect(visibleLocation, isNull);
+      expect(committedLocation, isNull);
+      expect(persistedLocation, isNull);
+      expect(persistCalled, isFalse);
       coordinator.dispose();
     });
 
@@ -305,6 +318,7 @@ void main() {
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
         currentPageIndex: 0,
+        allowProgressCommit: true,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
       );

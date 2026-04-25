@@ -145,6 +145,20 @@ void main() {
       expect(nav.activeCommandReason, ReaderCommandReason.autoPage);
     });
 
+    test('已在 slide 目標頁時可直接清除 pending jump transaction', () {
+      final nav = ReaderNavigationController();
+
+      expect(nav.beginSlideJump(ReaderCommandReason.restore), isTrue);
+      expect(nav.shouldPersistVisiblePosition(), isFalse);
+
+      final reason = nav.settlePendingSlideJumpWithoutPageChange();
+
+      expect(reason, ReaderCommandReason.restore);
+      expect(nav.shouldPersistVisiblePosition(), isTrue);
+      expect(nav.consumePageChangeReason(), ReaderCommandReason.user);
+      expect(nav.beginSlideJump(ReaderCommandReason.autoPage), isTrue);
+    });
+
     test('visible target 型 transaction 不會被 explicit callback 提前完成', () {
       final nav = ReaderNavigationController();
 

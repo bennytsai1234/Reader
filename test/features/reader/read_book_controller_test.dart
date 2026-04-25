@@ -699,6 +699,77 @@ void main() {
       },
     );
 
+    test('slide restore controller reset 到目標頁後會清除 pinned target', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.slide;
+      controller.chapterPagesCache[0] = _buildPages(0, [0], title: 'c0');
+      controller.chapterPagesCache[1] = _buildPages(1, [0, 8, 16], title: 'c1');
+      controller.refreshChapterRuntime(0);
+      controller.refreshChapterRuntime(1);
+      controller.slidePages = [
+        ...controller.chapterPagesCache[0]!,
+        ...controller.chapterPagesCache[1]!,
+      ];
+      controller.currentChapterIndex = 0;
+      controller.currentPageIndex = 0;
+
+      controller.restoreInitialSlideLocationForTesting(
+        chapterIndex: 1,
+        charOffset: 8,
+      );
+
+      final initialPage = controller.currentPageIndex;
+
+      expect(initialPage, 2);
+      expect(controller.consumeControllerReset(), 2);
+      expect(controller.consumePendingSlidePageIndex(), isNull);
+
+      controller.handleSlidePageChanged(initialPage + 1);
+
+      expect(controller.currentPageIndex, initialPage + 1);
+      expect(controller.consumePendingSlidePageIndex(), isNull);
+      controller.dispose();
+    });
+
+    test('slide restore 找不到 target 時不會 fallback 到全域 page 0', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.slide;
+      controller.chapterPagesCache[0] = _buildPages(0, [0], title: 'c0');
+      controller.chapterPagesCache[1] = _buildPages(1, [0, 8, 16], title: 'c1');
+      controller.refreshChapterRuntime(0);
+      controller.slidePages = [...controller.chapterPagesCache[0]!];
+      controller.currentChapterIndex = 0;
+      controller.currentPageIndex = 3;
+
+      controller.restoreInitialSlideLocationForTesting(
+        chapterIndex: 1,
+        charOffset: 8,
+      );
+
+      expect(controller.currentPageIndex, 3);
+      expect(controller.consumeControllerReset(), isNull);
+      expect(controller.consumePendingSlidePageIndex(), isNull);
+      controller.dispose();
+    });
+
     test('slide 模式跨章節 jump 會以目標章節作為 presentation anchor', () async {
       _fakeChaptersFromDao = [
         BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
@@ -1463,6 +1534,55 @@ void main() {
       expect(
         controller.durableLocation,
         const ReaderLocation(chapterIndex: 0, charOffset: 8),
+      );
+      controller.dispose();
+    });
+
+    test('scroll unconfirmed placeholder state 不會覆蓋已確認進度', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.scroll;
+      controller.chapterPagesCache[1] = _buildPages(1, [0, 8, 16], title: 'c1');
+      controller.refreshChapterRuntime(1);
+
+      final confirmedOffset = controller
+          .chapterAt(1)!
+          .localOffsetFromCharOffset(16);
+      controller.handleVisibleScrollState(
+        chapterIndex: 1,
+        localOffset: confirmedOffset,
+        alignment: 0.0,
+        visibleChapterIndexes: const [1],
+        isAnchorConfirmed: true,
+      );
+
+      await controller.flushNow();
+      expect(_FakeBookDao.updates.last.chapterIndex, 1);
+      expect(_FakeBookDao.updates.last.pos, 16);
+
+      controller.handleVisibleScrollState(
+        chapterIndex: 1,
+        localOffset: 0.0,
+        alignment: 0.0,
+        visibleChapterIndexes: const [1],
+        isAnchorConfirmed: false,
+      );
+
+      await controller.flushNow();
+
+      expect(_FakeBookDao.updates.last.chapterIndex, 1);
+      expect(_FakeBookDao.updates.last.pos, 16);
+      expect(
+        controller.durableLocation,
+        const ReaderLocation(chapterIndex: 1, charOffset: 16),
       );
       controller.dispose();
     });

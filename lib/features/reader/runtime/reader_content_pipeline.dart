@@ -226,6 +226,25 @@ class ReaderContentPipeline {
     );
   }
 
+  bool clearPinnedSlideTargetIfReached({
+    required int currentPageIndex,
+    required List<TextPage> slidePages,
+    required ReaderChapter? Function(int chapterIndex) chapterAt,
+    required List<TextPage> Function(int chapterIndex) pagesForChapter,
+  }) {
+    if (_pinnedSlideAnchor == null) return false;
+    if (_isPinnedSlideTargetReached(
+      currentPageIndex: currentPageIndex,
+      slidePages: slidePages,
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
+    )) {
+      _pinnedSlideAnchor = null;
+      return true;
+    }
+    return false;
+  }
+
   bool _isPinnedSlideTargetReached({
     required int currentPageIndex,
     required List<TextPage> slidePages,
@@ -233,18 +252,41 @@ class ReaderContentPipeline {
     required List<TextPage> Function(int chapterIndex) pagesForChapter,
   }) {
     final pinnedAnchor = _pinnedSlideAnchor;
-    if (pinnedAnchor == null || slidePages.isEmpty) return true;
-    final targetIndex = _contentCoordinator.resolveSlideTargetIndex(
-      ReaderSlideTargetRequest(
-        pinnedAnchor: pinnedAnchor,
-        previousMappedIndex: null,
-        durableLocation: pinnedAnchor.location,
-        slidePages: slidePages,
-        resolutionMode: ReaderSlideTargetResolutionMode.startupRestore,
-        chapterAt: chapterAt,
-        pagesForChapter: pagesForChapter,
-      ),
+    if (pinnedAnchor == null) return true;
+    if (slidePages.isEmpty) return false;
+    final targetIndex = _globalSlidePageIndexForLocation(
+      location: pinnedAnchor.location,
+      slidePages: slidePages,
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
     );
-    return currentPageIndex == targetIndex;
+    return targetIndex != null && currentPageIndex == targetIndex;
+  }
+
+  int? _globalSlidePageIndexForLocation({
+    required ReaderLocation location,
+    required List<TextPage> slidePages,
+    required ReaderChapter? Function(int chapterIndex) chapterAt,
+    required List<TextPage> Function(int chapterIndex) pagesForChapter,
+  }) {
+    final normalized = location.normalized();
+    final runtimeChapter = chapterAt(normalized.chapterIndex);
+    final chapterPages = pagesForChapter(normalized.chapterIndex);
+    final chapterPageIndex =
+        runtimeChapter != null
+            ? runtimeChapter.getPageIndexByCharIndex(normalized.charOffset)
+            : chapterPages.isEmpty
+            ? null
+            : ChapterPositionResolver.findPageIndexByCharOffset(
+              chapterPages,
+              normalized.charOffset,
+            );
+    if (chapterPageIndex == null) return null;
+    final globalIndex = slidePages.indexWhere(
+      (page) =>
+          page.chapterIndex == normalized.chapterIndex &&
+          page.index == chapterPageIndex,
+    );
+    return globalIndex >= 0 ? globalIndex : null;
   }
 }

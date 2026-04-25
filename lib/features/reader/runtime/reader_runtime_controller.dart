@@ -171,6 +171,20 @@ class ReaderRuntimeController {
     return pageIndexSnapshot;
   }
 
+  int? globalSlidePageIndexForLocation(ReaderLocation location) {
+    final normalized = location.normalized();
+    final chapterPageIndex = pageIndexForLocation(normalized);
+    if (chapterPageIndex == null) return null;
+
+    final slidePages = _slidePages();
+    final globalIndex = slidePages.indexWhere(
+      (page) =>
+          page.chapterIndex == normalized.chapterIndex &&
+          page.index == chapterPageIndex,
+    );
+    return globalIndex >= 0 ? globalIndex : null;
+  }
+
   ReaderViewportCommand resolveViewportCommand({
     required bool isScrollMode,
     required ReaderPresentationAnchor anchor,

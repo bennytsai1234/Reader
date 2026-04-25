@@ -118,6 +118,37 @@ void main() {
       expect(pipeline.hasPendingSlideRecenter, isTrue);
     });
 
+    test(
+      'clearPinnedSlideTargetIfReached 可在沒有 onPageChanged 時清掉 pinned target',
+      () {
+        final slidePages = [...chapter0.pages, ...chapter1.pages];
+        pipeline.pinSlideTarget(chapterIndex: 1, charOffset: 8);
+
+        final cleared = pipeline.clearPinnedSlideTargetIfReached(
+          currentPageIndex: 2,
+          slidePages: slidePages,
+          pagesForChapter: pagesForChapter,
+          chapterAt: chapterAt,
+        );
+
+        expect(cleared, isTrue);
+
+        final update = pipeline.rebuildSlidePages(
+          currentChapterIndex: 1,
+          currentPageIndex: 3,
+          currentSlidePages: slidePages,
+          runtimePages: slidePages,
+          chapterPagesCache: {0: chapter0.pages, 1: chapter1.pages},
+          totalChapters: 2,
+          durableLocation: const ReaderLocation(chapterIndex: 0, charOffset: 0),
+          chapterAt: chapterAt,
+          pagesForChapter: pagesForChapter,
+        );
+
+        expect(update.currentPageIndex, 3);
+      },
+    );
+
     test('applyPendingSlideRecenter 會重建以新章節為中心的 slide window', () {
       final slidePages = [
         ...chapter0.pages,

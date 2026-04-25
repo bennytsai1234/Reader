@@ -135,6 +135,7 @@ class _ReaderPageState extends State<ReaderPage> {
       _slideCtrl.jumpTo(
         pendingJump,
         onWillJump: p.consumePendingSlideJumpReason,
+        onAlreadyAtTarget: p.settlePendingSlideJumpWithoutPageChange,
       );
     }
 

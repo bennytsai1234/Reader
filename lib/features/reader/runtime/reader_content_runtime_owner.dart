@@ -151,6 +151,20 @@ class ReaderContentRuntimeOwner {
     );
   }
 
+  bool clearPinnedSlideTargetIfReached({
+    required int currentPageIndex,
+    required List<TextPage> slidePages,
+    required ReaderChapter? Function(int chapterIndex) chapterAt,
+    required List<TextPage> Function(int chapterIndex) pagesForChapter,
+  }) {
+    return _pipeline.clearPinnedSlideTargetIfReached(
+      currentPageIndex: currentPageIndex,
+      slidePages: slidePages,
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
+    );
+  }
+
   ReaderContentPresentation resolvePresentation(
     ReaderPresentationRequest request,
   ) {

@@ -221,6 +221,21 @@ class ReaderNavigationController {
     return reason;
   }
 
+  ReaderCommandReason settlePendingSlideJumpWithoutPageChange() {
+    final reason = _lastPendingSlideJumpReason;
+    final token = _lastPendingSlideJumpToken;
+    _lastPendingSlideJumpReason = ReaderCommandReason.system;
+    _lastPendingSlideJumpToken = null;
+    _nextPageChangeReason = ReaderCommandReason.user;
+    _nextPageChangeToken = null;
+    if (token != null) {
+      completeNavigation(token, reason: reason);
+    } else {
+      _commandGuard.clear(reason);
+    }
+    return reason;
+  }
+
   ReaderCommandReason consumePageChangeReason() {
     final reason = _nextPageChangeReason;
     final token = _nextPageChangeToken;

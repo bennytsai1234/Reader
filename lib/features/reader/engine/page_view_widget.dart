@@ -135,6 +135,7 @@ class PageViewWidget extends StatelessWidget {
                         paddingTop: currentPaddingTop,
                         isAutoPaging: false,
                         autoPageProgress: 0.0,
+                        pageBackgroundColor: pageBackgroundColor,
                         ttsPosition: ttsPosition,
                         ttsStart: effectiveTtsStart,
                         ttsEnd: effectiveTtsEnd,
@@ -339,6 +340,8 @@ class _TextPagePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = pageBackgroundColor);
+
     // 1. 繪製當前頁面 (底層)
     _drawPageLines(canvas, size, page);
 
@@ -485,6 +488,11 @@ class _TextPagePainter extends CustomPainter {
     return oldDelegate.autoPageProgress != autoPageProgress ||
         oldDelegate.page != page ||
         oldDelegate.nextPage != nextPage ||
+        oldDelegate.contentStyle != contentStyle ||
+        oldDelegate.titleStyle != titleStyle ||
+        oldDelegate.paddingLeft != paddingLeft ||
+        oldDelegate.paddingTop != paddingTop ||
+        oldDelegate.scanLineColor != scanLineColor ||
         oldDelegate.ttsPosition != ttsPosition ||
         oldDelegate.ttsStart != ttsStart ||
         oldDelegate.ttsEnd != ttsEnd ||

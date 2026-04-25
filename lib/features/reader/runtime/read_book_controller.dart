@@ -784,6 +784,10 @@ class ReadBookController extends ReaderProviderBase
     }
     final previousVisibleChapterIndex = visibleChapterIndex;
     final previousPageIndex = currentPageIndex;
+    ReaderPerfTrace.mark(
+      'scroll visible chapter=$chapterIndex localOffset=$localOffset '
+      'confirmed=$isAnchorConfirmed allowProgressCommit=$isAnchorConfirmed',
+    );
     _progressCoordinator.updateVisibleChapterPosition(
       chapterIndex: chapterIndex,
       localOffset: localOffset,
@@ -791,6 +795,7 @@ class ReadBookController extends ReaderProviderBase
       pageTurnMode: pageTurnMode,
       isLoading: isLoading,
       currentPageIndex: currentPageIndex,
+      allowProgressCommit: isAnchorConfirmed,
       updateVisible: (ci, lo, al) {
         visibleChapterIndex = ci;
         visibleChapterLocalOffset = lo;
@@ -873,6 +878,10 @@ class ReadBookController extends ReaderProviderBase
 
   ReaderCommandReason consumePendingSlideJumpReason() {
     return _navigation.consumePendingSlideJumpReason();
+  }
+
+  ReaderCommandReason settlePendingSlideJumpWithoutPageChange() {
+    return _navigation.settlePendingSlideJumpWithoutPageChange();
   }
 
   ReaderCommandReason consumePageChangeReason() {
@@ -1640,15 +1649,28 @@ class ReadBookController extends ReaderProviderBase
 
   Future<void> _persistCurrentScrollLocationNow() async {
     if (chapters.isEmpty) return;
+    if (!visibleConfirmed || !_lastVisibleScrollAnchorConfirmed) {
+      ReaderPerfTrace.mark(
+        'scroll persist skipped visibleConfirmed=$visibleConfirmed '
+        'anchorConfirmed=$_lastVisibleScrollAnchorConfirmed',
+      );
+      return;
+    }
 
     final chapterIndex =
         visibleChapterIndex.clamp(0, chapters.length - 1).toInt();
+    final runtimeChapter = chapterAt(chapterIndex);
+    final pages = pagesForChapter(chapterIndex);
+    if (runtimeChapter == null && pages.isEmpty) {
+      ReaderPerfTrace.mark(
+        'scroll persist skipped unresolved chapter=$chapterIndex',
+      );
+      return;
+    }
     final localOffset =
         visibleChapterLocalOffset.isFinite && visibleChapterLocalOffset > 0
             ? visibleChapterLocalOffset
             : 0.0;
-    final runtimeChapter = chapterAt(chapterIndex);
-    final pages = pagesForChapter(chapterIndex);
     final charOffset =
         runtimeChapter != null
             ? runtimeChapter.charOffsetFromLocalOffset(localOffset)
@@ -1665,7 +1687,15 @@ class ReadBookController extends ReaderProviderBase
     _updateCommittedLocation(location);
     _sessionCoordinator.updateVisibleLocation(location);
     if (location == durableLocation) return;
-    await _persistSessionLocation(location);
+    await _sessionCoordinator.persistAnchor(
+      _buildPersistedAnchor(
+        location,
+        sourceAnchor: ReaderAnchor.location(
+          location,
+          localOffsetSnapshot: localOffset,
+        ),
+      ),
+    );
   }
 
   @override
@@ -2152,12 +2182,35 @@ class ReadBookController extends ReaderProviderBase
             ? _initialAnchor
             : ReaderAnchor.location(location);
     final restoreAnchor = _buildInitialSlideRestoreAnchor(location, baseAnchor);
-    final targetPageIndex =
-        restoreAnchor.pageIndexSnapshot?.clamp(
-          0,
-          slidePages.isEmpty ? 0 : slidePages.length - 1,
-        ) ??
-        0;
+    clearNavigationReason(ReaderCommandReason.chapterChange);
+    final previousPageIndex = currentPageIndex;
+
+    refreshSlidePagesForAnchor(
+      anchorChapterIndex: location.chapterIndex,
+      charOffset: location.charOffset,
+      reason: ReaderCommandReason.restore,
+      requestJump: false,
+    );
+
+    final verifiedSnapshot = _runtimeController.matchingSlidePageIndexSnapshot(
+      location: location,
+      pageIndexSnapshot: restoreAnchor.pageIndexSnapshot,
+    );
+    final resolvedByLocation = _runtimeController
+        .globalSlidePageIndexForLocation(location);
+    final targetPageIndex = verifiedSnapshot ?? resolvedByLocation;
+
+    ReaderPerfTrace.mark(
+      'slide restore location=(${location.chapterIndex},${location.charOffset}) '
+      'snapshot=${restoreAnchor.pageIndexSnapshot} '
+      'verified=$verifiedSnapshot resolved=$resolvedByLocation '
+      'target=$targetPageIndex',
+    );
+
+    if (targetPageIndex == null) {
+      currentPageIndex = previousPageIndex;
+      return;
+    }
 
     currentChapterIndex = location.chapterIndex;
     visibleChapterIndex = location.chapterIndex;
@@ -2169,7 +2222,20 @@ class ReadBookController extends ReaderProviderBase
     _updateCommittedLocation(location);
     _sessionCoordinator.updateVisibleLocation(location);
     requestControllerReset(targetPageIndex);
+    if (clearPinnedSlideTargetIfReached(targetPageIndex)) {
+      ReaderPerfTrace.mark('slide pinned target cleared page=$targetPageIndex');
+    }
     notifyListeners();
+  }
+
+  void restoreInitialSlideLocationForTesting({
+    required int chapterIndex,
+    required int charOffset,
+  }) {
+    _restoreInitialSlideLocation(
+      chapterIndex: chapterIndex,
+      charOffset: charOffset,
+    );
   }
 
   void _completeInitialScrollRestore(int token) {

@@ -398,7 +398,10 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     );
   }
 
-  void _refreshSlidePages() {
+  void _refreshSlidePages({
+    ReaderCommandReason reason = ReaderCommandReason.system,
+    bool requestJump = true,
+  }) {
     final runtimePages = _contentCallbacks.buildSlideRuntimePages?.call();
     final update = _contentOwner.rebuildSlidePages(
       currentChapterIndex: currentChapterIndex,
@@ -426,8 +429,8 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     );
     slidePages = update.slidePages;
     currentPageIndex = update.currentPageIndex;
-    if (update.shouldRequestJump) {
-      requestJumpToPage(currentPageIndex, reason: ReaderCommandReason.system);
+    if (requestJump && update.shouldRequestJump) {
+      requestJumpToPage(currentPageIndex, reason: reason);
     }
   }
 
@@ -640,7 +643,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       isLocalScrollMode: _isLocalScrollMode,
       isDisposed: () => isDisposed,
       notifyListeners: notifyListeners,
-      refreshSlidePages: _refreshSlidePages,
+      refreshSlidePages: () => _refreshSlidePages(),
       retainedChapterIndexes: retainedChapterIndexes(
         focusChapterIndex: chapterIndex,
       ),
@@ -809,6 +812,20 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     int charOffset = 0,
     bool fromEnd = false,
   }) {
+    refreshSlidePagesForAnchor(
+      anchorChapterIndex: anchorChapterIndex,
+      charOffset: charOffset,
+      fromEnd: fromEnd,
+    );
+  }
+
+  void refreshSlidePagesForAnchor({
+    int? anchorChapterIndex,
+    int charOffset = 0,
+    bool fromEnd = false,
+    ReaderCommandReason reason = ReaderCommandReason.system,
+    bool requestJump = true,
+  }) {
     if (anchorChapterIndex != null) {
       _contentOwner.pinSlideTarget(
         chapterIndex: anchorChapterIndex,
@@ -816,6 +833,21 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
         fromEnd: fromEnd,
       );
     }
-    _refreshSlidePages();
+    _refreshSlidePages(reason: reason, requestJump: requestJump);
+  }
+
+  bool clearPinnedSlideTargetIfReached(int currentPageIndex) {
+    return _contentOwner.clearPinnedSlideTargetIfReached(
+      currentPageIndex: currentPageIndex,
+      slidePages: slidePages,
+      chapterAt:
+          (chapterIndex) => _contentCallbacks.chapterAt?.call(chapterIndex),
+      pagesForChapter:
+          (chapterIndex) =>
+              (_contentCallbacks.pagesForChapter?.call(chapterIndex)
+                  as List<TextPage>?) ??
+              chapterPagesCache[chapterIndex] ??
+              const <TextPage>[],
+    );
   }
 }

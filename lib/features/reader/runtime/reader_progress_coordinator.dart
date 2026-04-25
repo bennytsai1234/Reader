@@ -53,10 +53,15 @@ class ReaderProgressCoordinator {
     required int pageTurnMode,
     required bool isLoading,
     required int currentPageIndex,
+    required bool allowProgressCommit,
     required void Function(int ci, double lo, double al) updateVisible,
     required void Function(int ci) updateCurrentChapterIndex,
   }) {
     updateVisible(chapterIndex, localOffset, alignment);
+
+    if (!allowProgressCommit) {
+      return;
+    }
 
     if (pageTurnMode != PageAnim.scroll || isLoading) {
       return;

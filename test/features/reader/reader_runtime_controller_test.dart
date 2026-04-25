@@ -198,6 +198,24 @@ void main() {
       );
     });
 
+    test('globalSlidePageIndexForLocation 找不到目標頁時回傳 null', () {
+      expect(
+        controller.globalSlidePageIndexForLocation(
+          const ReaderLocation(chapterIndex: 1, charOffset: 8),
+        ),
+        2,
+      );
+
+      slidePages = [...chapter0.pages];
+
+      expect(
+        controller.globalSlidePageIndexForLocation(
+          const ReaderLocation(chapterIndex: 1, charOffset: 8),
+        ),
+        isNull,
+      );
+    });
+
     test('viewport command 會保留 source anchor metadata', () {
       final command = controller.resolveViewportCommand(
         isScrollMode: true,
