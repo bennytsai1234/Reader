@@ -510,6 +510,74 @@ class ReaderChapter {
     );
   }
 
+  ReadAloudBuildResult? buildParagraphReadAloudSegments({
+    required int startCharOffset,
+  }) {
+    final segments = <ReadAloudSegment>[];
+
+    for (final paragraph in paragraphs) {
+      if (paragraph.textLines.isEmpty) continue;
+
+      final paragraphEnd = paragraph.chapterEndPosition;
+      if (paragraphEnd <= startCharOffset) continue;
+
+      final buffer = StringBuffer();
+      final offsetMap = <ReadAloudOffsetMap>[];
+      int? segmentStart;
+      int? firstPageIndex;
+      int? firstLineIndex;
+
+      for (final line in paragraph.textLines) {
+        if (line.image != null) continue;
+
+        final lineStart = line.chapterPosition;
+        final lineEnd = lineStart + line.text.length;
+        if (lineEnd <= startCharOffset) continue;
+
+        final speakStart =
+            startCharOffset > lineStart ? startCharOffset - lineStart : 0;
+        final text =
+            speakStart <= 0 ? line.text : line.text.substring(speakStart);
+        if (text.isEmpty) continue;
+
+        final chapterOffset = lineStart + speakStart;
+        segmentStart ??= chapterOffset;
+        final locatedLine = locateLineAtCharOffset(chapterOffset);
+        firstPageIndex ??= locatedLine?.pageIndex;
+        firstLineIndex ??= locatedLine?.lineIndex;
+        offsetMap.add(
+          ReadAloudOffsetMap(
+            ttsOffset: buffer.length,
+            chapterOffset: chapterOffset,
+          ),
+        );
+        buffer.write(text);
+      }
+
+      final speakText = buffer.toString();
+      if (speakText.trim().isEmpty || segmentStart == null) continue;
+
+      segments.add(
+        ReadAloudSegment(
+          chapterIndex: index,
+          pageIndex: firstPageIndex ?? getPageIndexByCharIndex(segmentStart),
+          lineIndex: firstLineIndex ?? -1,
+          chapterStart: segmentStart,
+          chapterEnd: paragraphEnd,
+          text: speakText,
+          offsetMap: List<ReadAloudOffsetMap>.unmodifiable(offsetMap),
+        ),
+      );
+    }
+
+    if (segments.isEmpty) return null;
+    return ReadAloudBuildResult(
+      chapterIndex: index,
+      startCharOffset: startCharOffset,
+      segments: List<ReadAloudSegment>.unmodifiable(segments),
+    );
+  }
+
   List<ReaderParagraph> _buildParagraphs() {
     final grouped = <int, List<TextLine>>{};
     for (final line in allLines()) {

@@ -126,6 +126,35 @@ void main() {
       expect(result.segments.last.chapterEnd, 16);
     });
 
+    test('buildParagraphReadAloudSegments 會以段落分段並保留 offset map', () {
+      final chapter = makeChapter();
+
+      final result = chapter.buildParagraphReadAloudSegments(
+        startCharOffset: 9,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.chapterIndex, 0);
+      expect(result.startCharOffset, 9);
+      expect(result.segments, hasLength(1));
+
+      final segment = result.segments.single;
+      expect(segment.text, 'CCCDDDD');
+      expect(segment.pageIndex, 1);
+      expect(segment.lineIndex, 0);
+      expect(segment.chapterStart, 9);
+      expect(segment.chapterEnd, 16);
+      expect(segment.offsetMap, hasLength(2));
+      expect(segment.offsetMap.first.ttsOffset, 0);
+      expect(segment.offsetMap.first.chapterOffset, 9);
+      expect(segment.offsetMap.last.ttsOffset, 3);
+      expect(segment.offsetMap.last.chapterOffset, 12);
+      expect(segment.chapterOffsetForTtsOffset(0), 9);
+      expect(segment.chapterOffsetForTtsOffset(2), 11);
+      expect(segment.chapterOffsetForTtsOffset(3), 12);
+      expect(segment.chapterOffsetForTtsOffset(4), 13);
+    });
+
     test('line 與 paragraph query 會對齊 char offset', () {
       final chapter = makeChapter();
 

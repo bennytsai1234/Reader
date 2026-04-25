@@ -302,7 +302,7 @@ class ReadAloudController extends ChangeNotifier {
         startCharOffset ??
         (isScrollMode() ? visibleCharOffset() : currentCharOffset());
 
-    final result = targetChapter.buildReadAloudSegments(
+    final result = targetChapter.buildParagraphReadAloudSegments(
       startCharOffset: startCharPos,
     );
     if (result == null || result.segments.isEmpty) {
@@ -331,7 +331,7 @@ class ReadAloudController extends ChangeNotifier {
     final nextIdx = anchor + 1;
     final chapter = chapterOf(nextIdx);
     if (chapter == null || chapter.isEmpty) return;
-    final result = chapter.buildReadAloudSegments(
+    final result = chapter.buildParagraphReadAloudSegments(
       startCharOffset:
           chapter.firstPage == null
               ? 0
@@ -413,12 +413,13 @@ class ReadAloudController extends ChangeNotifier {
       return;
     }
 
+    final locatedLine = chapter.locateLineAtCharOffset(highlightStart);
     final resolvedPageIndex =
-        segment?.pageIndex ?? chapter.getPageIndexByCharIndex(highlightStart);
-    final locatedLine =
-        segment == null ? chapter.locateLineAtCharOffset(highlightStart) : null;
+        locatedLine?.pageIndex ??
+        segment?.pageIndex ??
+        chapter.getPageIndexByCharIndex(highlightStart);
     final resolvedLineIndex =
-        segment?.lineIndex ?? locatedLine?.lineIndex ?? -1;
+        locatedLine?.lineIndex ?? segment?.lineIndex ?? -1;
     final localOffset = chapter.localOffsetFromCharOffset(highlightStart);
     final position = ReaderTtsPosition(
       chapterIndex: chapter.index,
@@ -502,13 +503,14 @@ class ReadAloudController extends ChangeNotifier {
 
     final normalizedStart = rawStart.clamp(0, segment.text.length).toInt();
     final normalizedEnd = rawEnd.clamp(0, segment.text.length).toInt();
-    final chapterBase = segment.chapterStart + normalizedStart;
+    final chapterBase = segment.chapterOffsetForTtsOffset(normalizedStart);
     final chapterWordEnd =
         normalizedEnd <= normalizedStart
             ? (chapterBase + 1 <= segment.chapterEnd
                 ? chapterBase + 1
                 : segment.chapterEnd)
-            : (segment.chapterStart + normalizedEnd)
+            : segment
+                .chapterOffsetForTtsOffset(normalizedEnd)
                 .clamp(chapterBase + 1, segment.chapterEnd)
                 .toInt();
 

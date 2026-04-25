@@ -232,6 +232,64 @@ void main() {
       await fakeTts.disposeStreams();
     });
 
+    test('段落 segment 內跨行 progress 會對回目前行高亮', () async {
+      final fakeTts = FakeTtsEngine();
+      final chapters = <int, ReaderChapter>{
+        0: buildChapter(
+          index: 0,
+          title: 'Chapter 0',
+          paragraphs: ['AAAAABBBBB'],
+        ),
+      };
+
+      final controller = ReadAloudController(
+        ttsEngine: fakeTts,
+        nextChapter: () async {},
+        prevChapter: ({bool fromEnd = true}) async {},
+        nextPage: () async {},
+        prevPage: () async {},
+        canMoveToNextPage: () => false,
+        canMoveToPrevPage: () => false,
+        requestJumpToPage: (_) {},
+        requestJumpToChapter:
+            ({
+              required int chapterIndex,
+              required double alignment,
+              required double localOffset,
+            }) {},
+        chapterOf: (chapterIndex) => chapters[chapterIndex],
+        currentChapterIndex: () => 0,
+        visibleChapterIndex: () => 0,
+        currentCharOffset: () => 0,
+        visibleCharOffset: () => 0,
+        isScrollMode: () => false,
+        onStateChanged: () {},
+        updateMediaInfo: (_, __) {},
+      );
+
+      controller.attach();
+      controller.toggle();
+      await flushAsync();
+
+      expect(fakeTts.spokenTexts.single, 'AAAAABBBBB');
+
+      fakeTts.emitProgress(5, 7);
+      await flushAsync();
+
+      final position = controller.currentTtsPosition;
+      expect(position, isNotNull);
+      expect(position!.chapterIndex, 0);
+      expect(position.pageIndex, 0);
+      expect(position.lineIndex, 1);
+      expect(position.highlightStart, 5);
+      expect(position.highlightEnd, 10);
+      expect(position.wordStart, 5);
+      expect(position.wordEnd, 7);
+
+      controller.detach();
+      await fakeTts.disposeStreams();
+    });
+
     test('toggle 會從目前可見位置開始朗讀，而不是從章首重播', () async {
       final fakeTts = FakeTtsEngine();
       final chapter = buildChapter(
@@ -324,7 +382,7 @@ void main() {
 
       expect(fakeTts.resumeCount, 0);
       expect(fakeTts.spokenTexts, hasLength(2));
-      expect(fakeTts.spokenTexts.last, 'AAA');
+      expect(fakeTts.spokenTexts.last, 'AAABBBBB');
 
       controller.detach();
       await fakeTts.disposeStreams();
@@ -532,23 +590,15 @@ void main() {
       await flushAsync();
 
       expect(fakeTts.spokenTexts, hasLength(1));
-      expect(fakeTts.spokenTexts.first, 'AAAAA');
-      expect(controller.ttsChapterIndex, 0);
-
-      await fakeTts.emitAudioEvent('onComplete');
-      await flushAsync();
-
-      expect(nextChapterCalls, 0);
-      expect(fakeTts.spokenTexts, hasLength(2));
-      expect(fakeTts.spokenTexts.last, 'BBBBB');
+      expect(fakeTts.spokenTexts.first, 'AAAAABBBBB');
       expect(controller.ttsChapterIndex, 0);
 
       await fakeTts.emitAudioEvent('onComplete');
       await flushAsync();
 
       expect(nextChapterCalls, 1);
-      expect(fakeTts.spokenTexts, hasLength(3));
-      expect(fakeTts.spokenTexts.last, 'CCCCC');
+      expect(fakeTts.spokenTexts, hasLength(2));
+      expect(fakeTts.spokenTexts.last, 'CCCCCDDDDD');
       expect(controller.ttsChapterIndex, 1);
       expect(controller.isActive, isTrue);
 
@@ -648,8 +698,6 @@ void main() {
 
       await fakeTts.emitAudioEvent('onComplete');
       await flushAsync();
-      await fakeTts.emitAudioEvent('onComplete');
-      await flushAsync();
 
       fakeTts.emitProgress(0, 2);
       await flushAsync();
@@ -712,8 +760,6 @@ void main() {
       controller.toggle();
       await flushAsync();
 
-      await fakeTts.emitAudioEvent('onComplete');
-      await flushAsync();
       await fakeTts.emitAudioEvent('onComplete');
       await flushAsync();
 
@@ -825,8 +871,6 @@ void main() {
       controller.toggle();
       await flushAsync();
 
-      await fakeTts.emitAudioEvent('onComplete');
-      await flushAsync();
       await fakeTts.emitAudioEvent('onComplete');
       await flushAsync();
 

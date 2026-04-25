@@ -1,4 +1,5 @@
-const double kReaderContentTopSpacing = 6.0;
-const double kReaderPermanentInfoReservedHeight = 46.0;
-const double kReaderPermanentInfoTopPadding = 16.0;
-const double kReaderPermanentInfoBottomSpacing = 8.0;
+const double kReaderContentTopSafeAreaFactor = 0.75;
+const double kReaderContentTopSpacing = 4.5;
+const double kReaderPermanentInfoReservedHeight = 34.5;
+const double kReaderPermanentInfoTopPadding = 12.0;
+const double kReaderPermanentInfoBottomSpacing = 6.0;

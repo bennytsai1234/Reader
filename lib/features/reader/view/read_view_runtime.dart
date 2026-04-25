@@ -41,6 +41,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
   bool _contentRevealed = false;
   bool _holdContentUntilScrollRestore = false;
   bool _blankRecoveryScheduled = false;
+  bool _firstVisibleDataRefreshScheduled = false;
 
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
@@ -212,7 +213,9 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         final mediaPadding = MediaQuery.paddingOf(context);
-        final contentTopInset = mediaPadding.top + kReaderContentTopSpacing;
+        final contentTopInset =
+            (mediaPadding.top * kReaderContentTopSafeAreaFactor) +
+            kReaderContentTopSpacing;
         final contentBottomInset =
             mediaPadding.bottom + kReaderPermanentInfoReservedHeight;
         final contentInsetsChanged = provider.updateContentInsets(
@@ -245,6 +248,7 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
         }
 
         final hasVisibleData = _hasVisibleData(provider);
+        _scheduleFirstVisibleDataRefresh(hasVisibleData: hasVisibleData);
         _scheduleBlankViewportRecovery(
           provider,
           hasVisibleData: hasVisibleData,
@@ -370,6 +374,15 @@ class _ReadViewRuntimeState extends State<ReadViewRuntime>
       _blankRecoveryScheduled = false;
       if (!mounted) return;
       widget.provider.recoverBlankVisibleContent();
+    });
+  }
+
+  void _scheduleFirstVisibleDataRefresh({required bool hasVisibleData}) {
+    if (!hasVisibleData || _firstVisibleDataRefreshScheduled) return;
+    _firstVisibleDataRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {});
     });
   }
 

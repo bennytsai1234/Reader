@@ -337,7 +337,6 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
     required int chapterIndex,
     required double localOffset,
     double alignment = 0.0,
-    bool isAnchorConfirmed = true,
   }) {
     _progressCoordinator.updateVisibleChapterPosition(
       chapterIndex: chapterIndex,
@@ -345,7 +344,6 @@ class _ReaderRuntimeHarness extends ReaderProviderBase
       alignment: alignment,
       pageTurnMode: pageTurnMode,
       isLoading: isLoading,
-      isAnchorConfirmed: isAnchorConfirmed,
       currentPageIndex: currentPageIndex,
       updateVisible: (ci, lo, al) {
         visibleChapterIndex = ci;

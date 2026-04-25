@@ -52,14 +52,13 @@ class ReaderProgressCoordinator {
     required double alignment,
     required int pageTurnMode,
     required bool isLoading,
-    required bool isAnchorConfirmed,
     required int currentPageIndex,
     required void Function(int ci, double lo, double al) updateVisible,
     required void Function(int ci) updateCurrentChapterIndex,
   }) {
     updateVisible(chapterIndex, localOffset, alignment);
 
-    if (pageTurnMode != PageAnim.scroll || isLoading || !isAnchorConfirmed) {
+    if (pageTurnMode != PageAnim.scroll || isLoading) {
       return;
     }
     final currentLocation = _resolveScrollLocation(

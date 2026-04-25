@@ -790,7 +790,6 @@ class ReadBookController extends ReaderProviderBase
       alignment: alignment,
       pageTurnMode: pageTurnMode,
       isLoading: isLoading,
-      isAnchorConfirmed: isAnchorConfirmed,
       currentPageIndex: currentPageIndex,
       updateVisible: (ci, lo, al) {
         visibleChapterIndex = ci;
@@ -1624,15 +1623,49 @@ class ReadBookController extends ReaderProviderBase
       return;
     }
     final flushedLocation = await _progressCoordinator.flushPendingProgress();
-    if (flushedLocation == null && !isScrollRestoreUnconfirmed) {
-      final exitLocation = _sessionRuntime.resolveExitLocation(
-        _currentSessionContext(),
-      );
-      if (exitLocation != durableLocation) {
-        await _persistSessionLocation(exitLocation);
+    if (!isScrollRestoreUnconfirmed) {
+      if (pageTurnMode == PageAnim.scroll) {
+        await _persistCurrentScrollLocationNow();
+      } else if (flushedLocation == null) {
+        final exitLocation = _sessionRuntime.resolveExitLocation(
+          _currentSessionContext(),
+        );
+        if (exitLocation != durableLocation) {
+          await _persistSessionLocation(exitLocation);
+        }
       }
     }
     await _flushReadRecord();
+  }
+
+  Future<void> _persistCurrentScrollLocationNow() async {
+    if (chapters.isEmpty) return;
+
+    final chapterIndex =
+        visibleChapterIndex.clamp(0, chapters.length - 1).toInt();
+    final localOffset =
+        visibleChapterLocalOffset.isFinite && visibleChapterLocalOffset > 0
+            ? visibleChapterLocalOffset
+            : 0.0;
+    final runtimeChapter = chapterAt(chapterIndex);
+    final pages = pagesForChapter(chapterIndex);
+    final charOffset =
+        runtimeChapter != null
+            ? runtimeChapter.charOffsetFromLocalOffset(localOffset)
+            : ChapterPositionResolver.localOffsetToCharOffset(
+              pages,
+              localOffset,
+            );
+    final location =
+        ReaderLocation(
+          chapterIndex: chapterIndex,
+          charOffset: charOffset,
+        ).normalized();
+
+    _updateCommittedLocation(location);
+    _sessionCoordinator.updateVisibleLocation(location);
+    if (location == durableLocation) return;
+    await _persistSessionLocation(location);
   }
 
   @override

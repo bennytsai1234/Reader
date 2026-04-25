@@ -725,6 +725,9 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     required bool fromEnd,
     required ReaderCommandReason reason,
   }) {
+    if (pages.isNotEmpty) {
+      _contentCallbacks.refreshChapterRuntime?.call(chapterIndex);
+    }
     clearTransientViewportState(notify: false);
     final presentation = _contentOwner.resolvePresentation(
       ReaderPresentationRequest(

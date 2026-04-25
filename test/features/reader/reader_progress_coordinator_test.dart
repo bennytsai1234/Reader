@@ -92,7 +92,6 @@ void main() {
           alignment: 0.0,
           pageTurnMode: PageAnim.scroll,
           isLoading: false,
-          isAnchorConfirmed: true,
           currentPageIndex: 0,
           updateVisible: (_, __, ___) {},
           updateCurrentChapterIndex: (_) {},
@@ -119,7 +118,6 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
-        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
@@ -170,7 +168,6 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
-        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
@@ -199,7 +196,6 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: true,
-        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
@@ -224,7 +220,6 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
-        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
@@ -234,9 +229,10 @@ void main() {
       coordinator.dispose();
     });
 
-    test('沒有 anchor confirmation 時不更新語義位置也不持久化', () async {
+    test('沒有 anchor confirmation 時仍使用 fallback 位置持久化', () async {
       ReaderLocation? visibleLocation;
       ReaderLocation? committedLocation;
+      ReaderLocation? persistedLocation;
       var persistCalled = false;
 
       final coordinator = ReaderProgressCoordinator(
@@ -248,7 +244,8 @@ void main() {
         shouldPersistVisiblePosition: () => true,
         updateVisibleLocation: (location) => visibleLocation = location,
         updateCommittedLocation: (location) => committedLocation = location,
-        persistLocation: (_) async {
+        persistLocation: (location) async {
+          persistedLocation = location;
           persistCalled = true;
         },
       );
@@ -259,7 +256,6 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
-        isAnchorConfirmed: false,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},
@@ -267,9 +263,13 @@ void main() {
 
       await Future.delayed(const Duration(milliseconds: 600));
 
-      expect(visibleLocation, isNull);
-      expect(committedLocation, isNull);
-      expect(persistCalled, isFalse);
+      expect(visibleLocation, isNotNull);
+      expect(visibleLocation!.charOffset, 52);
+      expect(committedLocation, isNotNull);
+      expect(committedLocation!.charOffset, 52);
+      expect(persistedLocation, isNotNull);
+      expect(persistedLocation!.charOffset, 52);
+      expect(persistCalled, isTrue);
       coordinator.dispose();
     });
 
@@ -304,7 +304,6 @@ void main() {
         alignment: 0.0,
         pageTurnMode: PageAnim.scroll,
         isLoading: false,
-        isAnchorConfirmed: true,
         currentPageIndex: 0,
         updateVisible: (_, __, ___) {},
         updateCurrentChapterIndex: (_) {},

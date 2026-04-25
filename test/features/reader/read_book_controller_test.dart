@@ -160,6 +160,42 @@ class _BlankRecoveryReaderProvider extends ReaderProvider {
   }
 }
 
+class _ScrollModeSeededReaderProvider extends ReaderProvider {
+  _ScrollModeSeededReaderProvider({
+    required super.book,
+    required super.initialChapters,
+    required this.seededPages,
+  });
+
+  final Map<int, List<TextPage>> seededPages;
+
+  @override
+  Future<void> loadSettings() async {
+    await super.loadSettings();
+    pageTurnMode = PageAnim.scroll;
+  }
+
+  @override
+  void updatePaginationConfig() {}
+
+  @override
+  Future<void> loadChapterWithPreloadRadius(
+    int index, {
+    bool fromEnd = false,
+    int preloadRadius = 2,
+    ReaderCommandReason reason = ReaderCommandReason.chapterChange,
+    int? navigationToken,
+  }) async {
+    final pages = seededPages[index];
+    if (pages != null) {
+      chapterPagesCache[index] = pages;
+      refreshChapterRuntime(index);
+    }
+    currentChapterIndex = index;
+    visibleChapterIndex = index;
+  }
+}
+
 void _setupDi() {
   for (final unregister in [
     () {
@@ -200,7 +236,33 @@ Book _makeBook() => Book(
   durChapterPos: 0,
 );
 
+Book _makeBookWithOrigin(String origin) => Book(
+  bookUrl: 'http://test.com/$origin/book',
+  name: 'Test Book',
+  author: 'Author',
+  origin: origin,
+  durChapterIndex: 0,
+  durChapterPos: 0,
+);
+
 List<BookChapter> _fakeChaptersFromDao = [];
+
+List<BookChapter> _buildChapters(
+  int count, {
+  required String bookUrl,
+  bool includeContent = false,
+}) {
+  return List.generate(
+    count,
+    (index) => BookChapter(
+      title: 'c$index',
+      index: index,
+      bookUrl: bookUrl,
+      url: '$bookUrl/chapter-$index',
+      content: includeContent ? 'chapter $index content' : null,
+    ),
+  );
+}
 
 List<TextPage> _buildPages(
   int chapterIndex,
@@ -233,6 +295,115 @@ List<TextPage> _buildPages(
       ],
     );
   });
+}
+
+List<TextPage> _buildSinglePageLinePages(
+  int chapterIndex, {
+  required int lineCount,
+  required double lineHeight,
+  required int charsPerLine,
+  String title = 'chapter',
+}) {
+  return [
+    TextPage(
+      index: 0,
+      title: title,
+      chapterIndex: chapterIndex,
+      pageSize: 1,
+      lines: List.generate(lineCount, (lineIndex) {
+        return TextLine(
+          text: List.filled(charsPerLine, 'X').join(),
+          width: 100,
+          height: lineHeight,
+          chapterPosition: lineIndex * charsPerLine,
+          lineTop: lineIndex * lineHeight,
+          lineBottom: (lineIndex + 1) * lineHeight,
+          paragraphNum: lineIndex + 1,
+          isParagraphEnd: true,
+        );
+      }),
+    ),
+  ];
+}
+
+Future<void> _expectScrollResumeRoundTripAtChapterTen({
+  required Book book,
+  required List<BookChapter> chapters,
+}) async {
+  const targetChapterIndex = 9;
+  const lineHeight = 20.0;
+  const charsPerLine = 20;
+  const scrolledLines = 10.5;
+  final targetPages = _buildSinglePageLinePages(
+    targetChapterIndex,
+    lineCount: 24,
+    lineHeight: lineHeight,
+    charsPerLine: charsPerLine,
+    title: 'c$targetChapterIndex',
+  );
+  const scrolledLocalOffset = lineHeight * scrolledLines;
+  const expectedCharOffset = 10 * charsPerLine;
+  const expectedRestoredLocalOffset = 10 * lineHeight;
+
+  _fakeChaptersFromDao = chapters;
+  final firstController = _ScrollModeSeededReaderProvider(
+    book: book,
+    initialChapters: chapters,
+    seededPages: {targetChapterIndex: targetPages},
+  );
+  firstController.setViewSize(const Size(400, 800));
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+
+  firstController.chapterPagesCache[targetChapterIndex] = targetPages;
+  firstController.refreshChapterRuntime(targetChapterIndex);
+  firstController.handleVisibleScrollState(
+    chapterIndex: targetChapterIndex,
+    localOffset: scrolledLocalOffset,
+    alignment: 0.0,
+    visibleChapterIndexes: const [targetChapterIndex],
+  );
+
+  await firstController.persistExitProgress();
+
+  expect(_FakeBookDao.updates, isNotEmpty);
+  expect(_FakeBookDao.updates.last.chapterIndex, targetChapterIndex);
+  expect(_FakeBookDao.updates.last.pos, expectedCharOffset);
+  expect(book.durChapterIndex, targetChapterIndex);
+  expect(book.durChapterPos, expectedCharOffset);
+  expect(book.readerAnchorJson, isNotNull);
+  firstController.dispose();
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+
+  final reopenedController = _ScrollModeSeededReaderProvider(
+    book: book,
+    initialChapters: chapters,
+    seededPages: {targetChapterIndex: targetPages},
+  );
+  reopenedController.setViewSize(const Size(400, 800));
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+
+  expect(reopenedController.pageTurnMode, PageAnim.scroll);
+  expect(reopenedController.currentChapterIndex, targetChapterIndex);
+  expect(reopenedController.visibleChapterIndex, targetChapterIndex);
+  expect(
+    reopenedController.committedLocation,
+    const ReaderLocation(
+      chapterIndex: targetChapterIndex,
+      charOffset: expectedCharOffset,
+    ),
+  );
+  expect(
+    reopenedController.visibleChapterLocalOffset,
+    closeTo(expectedRestoredLocalOffset, 0.1),
+  );
+  expect(reopenedController.hasPendingScrollRestore, isTrue);
+
+  final restore = reopenedController.dispatchPendingScrollRestore();
+  expect(restore, isNotNull);
+  expect(restore!.chapterIndex, targetChapterIndex);
+  expect(restore.localOffset, closeTo(expectedRestoredLocalOffset, 0.1));
+
+  reopenedController.dispose();
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -1294,6 +1465,30 @@ void main() {
         const ReaderLocation(chapterIndex: 0, charOffset: 8),
       );
       controller.dispose();
+    });
+
+    test('本地書 scroll 到第十章 10.5 行後退出再進入會還原章內位置', () async {
+      final book = _makeBookWithOrigin('local');
+      final chapters = _buildChapters(12, bookUrl: book.bookUrl);
+
+      await _expectScrollResumeRoundTripAtChapterTen(
+        book: book,
+        chapters: chapters,
+      );
+    });
+
+    test('網路書 scroll 到第十章 10.5 行後退出再進入會還原章內位置', () async {
+      final book = _makeBookWithOrigin('https://source.test');
+      final chapters = _buildChapters(
+        12,
+        bookUrl: book.bookUrl,
+        includeContent: true,
+      );
+
+      await _expectScrollResumeRoundTripAtChapterTen(
+        book: book,
+        chapters: chapters,
+      );
     });
 
     test('app pause 與 persistExitProgress 會共用同一條 flush，不重複寫入', () async {
