@@ -176,6 +176,8 @@ void main() {
           2: chapter2.pages,
         },
         totalChapters: 3,
+        chapterAt: chapterAt,
+        pagesForChapter: pagesForChapter,
       );
 
       expect(update, isNotNull);
@@ -183,6 +185,45 @@ void main() {
       expect(update.slidePages.map((page) => page.chapterIndex), [1, 1, 1, 2]);
       expect(update.shouldRequestJump, isFalse);
       expect(pipeline.slideWindow.centerChapterIndex, 2);
+      expect(pipeline.hasPendingSlideRecenter, isFalse);
+    });
+
+    test('applyPendingSlideRecenter 使用 charOffset 映射，不依賴舊 pageIndex', () {
+      final oldChapter1 = chapter1;
+      final slidePages = [...chapter0.pages, ...oldChapter1.pages];
+      final change = pipeline.handleSlidePageChanged(
+        pageIndex: 2,
+        slidePages: slidePages,
+        currentChapterIndex: 0,
+        pagesForChapter: (index) {
+          if (index == 1) return oldChapter1.pages;
+          return pagesForChapter(index);
+        },
+        chapterAt: (index) {
+          if (index == 1) return oldChapter1;
+          return chapterAt(index);
+        },
+      );
+
+      expect(change, isNotNull);
+      expect(change!.chapterIndex, 1);
+      expect(pipeline.hasPendingSlideRecenter, isTrue);
+
+      chapter1 = _chapter(1, [0, 4, 8, 16]);
+
+      final update = pipeline.applyPendingSlideRecenter(
+        currentPageIndex: 2,
+        currentSlidePages: slidePages,
+        chapterPagesCache: {0: chapter0.pages, 1: chapter1.pages},
+        totalChapters: 2,
+        chapterAt: chapterAt,
+        pagesForChapter: pagesForChapter,
+      );
+
+      expect(update, isNotNull);
+      expect(update!.currentPageIndex, 3);
+      expect(update.slidePages[update.currentPageIndex].chapterIndex, 1);
+      expect(update.slidePages[update.currentPageIndex].index, 2);
       expect(pipeline.hasPendingSlideRecenter, isFalse);
     });
   });

@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
+import 'package:inkpage_reader/features/reader/engine/line_layout.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart'
     show PaginationConfig;
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/provider/content_callbacks.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_presentation_contract.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_viewport_state.dart';
@@ -222,6 +224,14 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       currentSlidePages: slidePages,
       chapterPagesCache: chapterPagesCache,
       totalChapters: chapters.length,
+      chapterAt:
+          (chapterIndex) => _contentCallbacks.chapterAt?.call(chapterIndex),
+      pagesForChapter:
+          (chapterIndex) =>
+              (_contentCallbacks.pagesForChapter?.call(chapterIndex)
+                  as List<TextPage>?) ??
+              chapterPagesCache[chapterIndex] ??
+              const <TextPage>[],
     );
     if (update == null) return;
     slidePages = update.slidePages;
@@ -583,13 +593,8 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       }
       return;
     }
-    if (currentPageIndex < slidePages.length - 1) {
-      currentPageIndex++;
-      _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
-      notifyListeners();
-    } else {
-      unawaited(nextChapter(reason: reason));
-    }
+    if (_moveToResolvedSlidePage(forward: true, reason: reason)) return;
+    unawaited(nextChapter(reason: reason));
   }
 
   void prevPage({ReaderCommandReason reason = ReaderCommandReason.user}) {
@@ -600,13 +605,96 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
       }
       return;
     }
-    if (currentPageIndex > 0) {
-      currentPageIndex--;
-      _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
-      notifyListeners();
-    } else {
-      unawaited(prevChapter(reason: reason));
+    if (_moveToResolvedSlidePage(forward: false, reason: reason)) return;
+    unawaited(prevChapter(reason: reason));
+  }
+
+  bool _moveToResolvedSlidePage({
+    required bool forward,
+    required ReaderCommandReason reason,
+  }) {
+    final targetLocation = _resolveAdjacentSlidePageLocation(forward: forward);
+    if (targetLocation == null) return false;
+    final targetPageIndex = _globalSlidePageIndexForLocation(targetLocation);
+    if (targetPageIndex == null || targetPageIndex == currentPageIndex) {
+      return false;
     }
+    currentPageIndex = targetPageIndex;
+    _contentCallbacks.jumpToSlidePage?.call(currentPageIndex, reason: reason);
+    notifyListeners();
+    return true;
+  }
+
+  ReaderLocation? _resolveAdjacentSlidePageLocation({required bool forward}) {
+    if (slidePages.isEmpty ||
+        currentPageIndex < 0 ||
+        currentPageIndex >= slidePages.length) {
+      return null;
+    }
+    final page = slidePages[currentPageIndex];
+    final chapterIndex = page.chapterIndex;
+    final layout = _lineLayoutForSlideChapter(chapterIndex);
+    final pageIndex = page.index;
+
+    if (forward) {
+      if (layout != null &&
+          pageIndex >= 0 &&
+          pageIndex < layout.pageGroups.length - 1) {
+        return ReaderLocation(
+          chapterIndex: chapterIndex,
+          charOffset: layout.charOffsetForPageIndex(pageIndex + 1),
+        ).normalized();
+      }
+      if (chapterIndex < chapters.length - 1) {
+        return ReaderLocation(chapterIndex: chapterIndex + 1, charOffset: 0);
+      }
+      return null;
+    }
+
+    if (layout != null && pageIndex > 0) {
+      return ReaderLocation(
+        chapterIndex: chapterIndex,
+        charOffset: layout.charOffsetForPageIndex(pageIndex - 1),
+      ).normalized();
+    }
+    if (chapterIndex <= 0) return null;
+    final prevLayout = _lineLayoutForSlideChapter(chapterIndex - 1);
+    if (prevLayout == null || prevLayout.pageGroups.isEmpty) return null;
+    return ReaderLocation(
+      chapterIndex: chapterIndex - 1,
+      charOffset: prevLayout.charOffsetForPageIndex(
+        prevLayout.pageGroups.length - 1,
+      ),
+    ).normalized();
+  }
+
+  int? _globalSlidePageIndexForLocation(ReaderLocation location) {
+    final normalized = location.normalized();
+    final layout = _lineLayoutForSlideChapter(normalized.chapterIndex);
+    final pageIndex = layout?.findPageIndexByCharOffset(normalized.charOffset);
+    if (pageIndex == null) return null;
+    final globalIndex = slidePages.indexWhere(
+      (page) =>
+          page.chapterIndex == normalized.chapterIndex &&
+          page.index == pageIndex,
+    );
+    return globalIndex >= 0 ? globalIndex : null;
+  }
+
+  LineLayout? _lineLayoutForSlideChapter(int chapterIndex) {
+    final runtimeChapter = _contentCallbacks.chapterAt?.call(chapterIndex);
+    if (runtimeChapter is ReaderChapter) return runtimeChapter.lineLayout;
+    final callbackPages =
+        _contentCallbacks.pagesForChapter?.call(chapterIndex)
+            as List<TextPage>?;
+    final pages =
+        callbackPages?.isNotEmpty == true
+            ? callbackPages!
+            : slidePages
+                .where((page) => page.chapterIndex == chapterIndex)
+                .toList(growable: false);
+    if (pages.isEmpty) return null;
+    return LineLayout.fromPages(pages, chapterIndex: chapterIndex);
   }
 
   Future<void> nextChapter({

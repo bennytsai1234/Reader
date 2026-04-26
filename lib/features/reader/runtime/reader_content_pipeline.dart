@@ -80,6 +80,8 @@ class ReaderContentPipeline {
     required List<TextPage> currentSlidePages,
     required Map<int, List<TextPage>> chapterPagesCache,
     required int totalChapters,
+    required ReaderChapter? Function(int chapterIndex) chapterAt,
+    required List<TextPage> Function(int chapterIndex) pagesForChapter,
   }) {
     final chapterIndex = _pendingRecenterChapterIndex;
     if (chapterIndex == null) return null;
@@ -89,6 +91,8 @@ class ReaderContentPipeline {
         currentPageIndex >= 0 && currentPageIndex < currentSlidePages.length
             ? currentSlidePages[currentPageIndex]
             : null;
+    final currentLocation =
+        currentPage == null ? null : _locationForSlidePage(currentPage);
     final result = SlideWindow.build(
       centerChapterIndex: chapterIndex,
       currentPage: currentPage,
@@ -97,10 +101,22 @@ class ReaderContentPipeline {
     );
     _slideWindow = result.window;
     final slidePages = result.window.flatPages;
+    final mappedByLocation =
+        currentLocation == null
+            ? null
+            : _globalSlidePageIndexForLocation(
+              location: currentLocation,
+              slidePages: slidePages,
+              chapterAt: chapterAt,
+              pagesForChapter: pagesForChapter,
+            );
     final nextPageIndex =
         slidePages.isEmpty
             ? 0
-            : result.mappedIndex.clamp(0, slidePages.length - 1);
+            : (mappedByLocation ?? result.mappedIndex).clamp(
+              0,
+              slidePages.length - 1,
+            );
     return ReaderSlideWindowUpdate(
       slidePages: slidePages,
       currentPageIndex: nextPageIndex,
@@ -297,5 +313,15 @@ class ReaderContentPipeline {
     final pages = pagesForChapter(chapterIndex);
     if (pages.isEmpty) return null;
     return LineLayout.fromPages(pages, chapterIndex: chapterIndex);
+  }
+
+  ReaderLocation _locationForSlidePage(TextPage page) {
+    final layout = LineLayout.fromPages([
+      page,
+    ], chapterIndex: page.chapterIndex);
+    return ReaderLocation(
+      chapterIndex: page.chapterIndex,
+      charOffset: layout.firstCharOffset,
+    ).normalized();
   }
 }

@@ -763,5 +763,59 @@ void main() {
       expect(chapterEndPage.chapterIndex, 1);
       expect(chapterEndPage.index, 2);
     });
+
+    test('slide 下一頁跨章會用目前 PageGroup 接到下一章章首', () {
+      final harness = _ReaderRuntimeHarness(
+        book: Book(bookUrl: 'book', name: 'Book'),
+        chapters: [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
+          BookChapter(title: 'c1', index: 1, bookUrl: 'book'),
+        ],
+      );
+      harness.pageTurnMode = PageAnim.slide;
+      harness.setChapterPages(0, _buildPages(0, [0, 8], title: 'c0'));
+      harness.setChapterPages(1, _buildPages(1, [0, 8], title: 'c1'));
+      harness.setSlidePages([
+        ...harness.pagesForChapter(0),
+        ...harness.pagesForChapter(1),
+      ]);
+      harness.currentChapterIndex = 0;
+      harness.visibleChapterIndex = 0;
+      harness.currentPageIndex = 1;
+
+      harness.nextPage();
+
+      expect(harness.currentPageIndex, 2);
+      expect(harness.lastSlideJump, 2);
+      expect(harness.slidePages[2].chapterIndex, 1);
+      expect(harness.slidePages[2].index, 0);
+    });
+
+    test('slide 上一頁跨章會用目前 PageGroup 接到上一章章末', () {
+      final harness = _ReaderRuntimeHarness(
+        book: Book(bookUrl: 'book', name: 'Book'),
+        chapters: [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'book'),
+          BookChapter(title: 'c1', index: 1, bookUrl: 'book'),
+        ],
+      );
+      harness.pageTurnMode = PageAnim.slide;
+      harness.setChapterPages(0, _buildPages(0, [0, 8, 16], title: 'c0'));
+      harness.setChapterPages(1, _buildPages(1, [0, 8], title: 'c1'));
+      harness.setSlidePages([
+        ...harness.pagesForChapter(0),
+        ...harness.pagesForChapter(1),
+      ]);
+      harness.currentChapterIndex = 1;
+      harness.visibleChapterIndex = 1;
+      harness.currentPageIndex = 3;
+
+      harness.prevPage();
+
+      expect(harness.currentPageIndex, 2);
+      expect(harness.lastSlideJump, 2);
+      expect(harness.slidePages[2].chapterIndex, 0);
+      expect(harness.slidePages[2].index, 2);
+    });
   });
 }

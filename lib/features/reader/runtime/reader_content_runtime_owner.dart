@@ -107,12 +107,16 @@ class ReaderContentRuntimeOwner {
     required List<TextPage> currentSlidePages,
     required Map<int, List<TextPage>> chapterPagesCache,
     required int totalChapters,
+    required ReaderChapter? Function(int chapterIndex) chapterAt,
+    required List<TextPage> Function(int chapterIndex) pagesForChapter,
   }) {
     return _pipeline.applyPendingSlideRecenter(
       currentPageIndex: currentPageIndex,
       currentSlidePages: currentSlidePages,
       chapterPagesCache: chapterPagesCache,
       totalChapters: totalChapters,
+      chapterAt: chapterAt,
+      pagesForChapter: pagesForChapter,
     );
   }
 
