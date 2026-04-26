@@ -1,7 +1,7 @@
 class ReaderScrollLayout {
   const ReaderScrollLayout._();
 
-  static const double anchorRatio = 0.15;
+  static const double anchorRatio = 0.0;
 
   static double chapterSeparatorPadding({
     required double fontSize,

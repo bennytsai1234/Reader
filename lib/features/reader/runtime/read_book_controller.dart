@@ -1708,19 +1708,79 @@ class ReadBookController extends ReaderProviderBase
       return;
     }
     final flushedLocation = await _progressCoordinator.flushPendingProgress();
-    if (!isScrollRestoreUnconfirmed) {
-      if (pageTurnMode == PageAnim.scroll) {
+    if (pageTurnMode == PageAnim.scroll) {
+      // Always attempt to persist the scroll position on exit.
+      // _persistCurrentScrollLocationNow() is the preferred path when the
+      // visible anchor has been confirmed by the scroll listener (pixel-
+      // precise).  When it skips (e.g. visibleConfirmed is false because
+      // the restore hasn't settled yet), fall back to a best-effort persist
+      // that uses the visible chapter/localOffset tracked by the provider.
+      if (!isScrollRestoreUnconfirmed) {
         await _persistCurrentScrollLocationNow();
-      } else if (flushedLocation == null) {
-        final exitLocation = _sessionRuntime.resolveExitLocation(
-          _currentSessionContext(),
-        );
-        if (exitLocation != durableLocation) {
-          await _persistSessionLocation(exitLocation);
-        }
+      }
+      // If the confirmed persist didn't run or was skipped, ensure we still
+      // write the best-known position so the user doesn't lose progress.
+      await _persistScrollLocationForExit();
+    } else if (!isScrollRestoreUnconfirmed && flushedLocation == null) {
+      final exitLocation = _sessionRuntime.resolveExitLocation(
+        _currentSessionContext(),
+      );
+      if (exitLocation != durableLocation) {
+        await _persistSessionLocation(exitLocation);
       }
     }
     await _flushReadRecord();
+  }
+
+  /// Best-effort scroll position persist used during exit.
+  ///
+  /// Unlike [_persistCurrentScrollLocationNow], this method does NOT
+  /// require `visibleConfirmed` or `_lastVisibleScrollAnchorConfirmed` to be
+  /// true.  It uses whatever `visibleChapterIndex` / `visibleChapterLocalOffset`
+  /// values are currently tracked by the provider.  If the position has already
+  /// been persisted by the debounce timer or by
+  /// `_persistCurrentScrollLocationNow`, the `_savedAnchorMatches` check
+  /// prevents a redundant write.
+  Future<void> _persistScrollLocationForExit() async {
+    if (chapters.isEmpty) return;
+
+    final chapterIndex =
+        visibleChapterIndex.clamp(0, chapters.length - 1).toInt();
+    final runtimeChapter = chapterAt(chapterIndex);
+    final pages = pagesForChapter(chapterIndex);
+    if (runtimeChapter == null && pages.isEmpty) return;
+
+    final localOffset =
+        visibleChapterLocalOffset.isFinite && visibleChapterLocalOffset > 0
+            ? visibleChapterLocalOffset
+            : 0.0;
+    final charOffset =
+        runtimeChapter != null
+            ? runtimeChapter.charOffsetFromLocalOffset(localOffset)
+            : ChapterPositionResolver.localOffsetToCharOffset(
+              pages,
+              localOffset,
+            );
+    final location =
+        ReaderLocation(
+          chapterIndex: chapterIndex,
+          charOffset: charOffset,
+        ).normalized();
+
+    final anchor = _buildPersistedAnchor(
+      location,
+      sourceAnchor: ReaderAnchor.location(
+        location,
+        localOffsetSnapshot: localOffset,
+      ),
+      preserveScrollLocalOffsetSnapshot: true,
+    );
+
+    if (_savedAnchorMatches(anchor)) return;
+
+    _updateCommittedLocation(location);
+    _sessionCoordinator.updateVisibleLocation(location);
+    await _sessionCoordinator.persistAnchor(anchor);
   }
 
   Future<void> _persistCurrentScrollLocationNow() async {
