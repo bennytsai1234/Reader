@@ -46,6 +46,25 @@ class AppStoragePaths {
     );
   }
 
+  static Future<Directory> bookAssetsDir({bool ensureExists = false}) async {
+    return _subdirectory(
+      await documentsDir(),
+      'book_assets',
+      ensureExists: ensureExists,
+    );
+  }
+
+  static Future<Directory> bookAssetDir(
+    String bookKey, {
+    bool ensureExists = false,
+  }) async {
+    return _subdirectory(
+      await bookAssetsDir(ensureExists: ensureExists),
+      bookKey,
+      ensureExists: ensureExists,
+    );
+  }
+
   static Future<Directory> shareExportDir({bool ensureExists = false}) async {
     return _subdirectory(
       await temporaryDir(),

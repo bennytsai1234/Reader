@@ -25,13 +25,14 @@ class ExportBookService {
     buffer.writeln('---');
 
     for (var i = 0; i < chapters.length; i++) {
-      var content = await _chapterContentDao.getContent(
-        cacheKey: ReaderChapterContentDao.cacheKey(
+      final entry = await _chapterContentDao.getEntry(
+        contentKey: ReaderChapterContentDao.contentKey(
           origin: book.origin,
           bookUrl: book.bookUrl,
           chapterUrl: chapters[i].url,
         ),
       );
+      var content = entry?.isReady == true ? entry?.content : null;
       if ((content == null || content.isEmpty) && book.origin == 'local') {
         content = await LocalBookService().getContent(book, chapters[i]);
       }

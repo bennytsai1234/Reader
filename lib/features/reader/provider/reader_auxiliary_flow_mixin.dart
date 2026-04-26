@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
+import 'package:inkpage_reader/core/services/book_cover_storage_service.dart';
 import 'package:inkpage_reader/core/services/source_switch_service.dart'
     show SourceSwitchResolution;
-import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_cache_repository.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_session_facade.dart';
@@ -56,9 +57,16 @@ mixin ReaderAuxiliaryFlowMixin
       progressStore: progressStore,
       bookDao: bookDao,
       chapterDao: chapterDao,
-      promoteChapterContent: _promoteChapterContentToBookshelf,
       onCompleted: notifyListeners,
     );
+  }
+
+  Future<void> discardUnkeptBookStorage() async {
+    if (book.isInBookshelf) return;
+    await readerChapterContentDao?.deleteByBook(book.origin, book.bookUrl);
+    await chapterDao.deleteByBook(book.bookUrl);
+    await bookDao.deleteByUrl(book.bookUrl);
+    await BookCoverStorageService().deleteBookAssets(book);
   }
 
   Future<void> toggleBookmark() async {
@@ -156,22 +164,9 @@ mixin ReaderAuxiliaryFlowMixin
   Future<void> _saveChapterContent(BookChapter chapter, String content) async {
     final chapterContentDao = readerChapterContentDao;
     if (chapterContentDao == null || content.isEmpty) return;
-    await ReaderChapterContentCacheRepository(
+    await ReaderChapterContentStore(
       chapterDao: chapterDao,
       contentDao: chapterContentDao,
     ).saveRawContent(book: book, chapter: chapter, content: content);
-  }
-
-  Future<void> _promoteChapterContentToBookshelf() async {
-    final chapterContentDao = readerChapterContentDao;
-    if (chapterContentDao == null || chapters.isEmpty) return;
-    await ReaderChapterContentCacheRepository(
-      chapterDao: chapterDao,
-      contentDao: chapterContentDao,
-    ).promoteTransientCacheToBookshelf(
-      book: book,
-      chapters: chapters,
-      insertChapterMetadata: false,
-    );
   }
 }

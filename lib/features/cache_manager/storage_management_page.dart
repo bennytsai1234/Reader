@@ -42,8 +42,8 @@ class StorageManagementPage extends StatelessWidget {
                               leading: const Icon(
                                 Icons.download_for_offline_outlined,
                               ),
-                              title: const Text('離線快取佇列'),
-                              subtitle: const Text('查看並管理進行中的章節離線快取任務'),
+                              title: const Text('背景下載佇列'),
+                              subtitle: const Text('查看並管理進行中的章節下載任務'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap:
                                   () => Navigator.push(
@@ -57,7 +57,7 @@ class StorageManagementPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 24),
 
-                          _buildSectionTitle(context, '本地快取'),
+                          _buildSectionTitle(context, '本地儲存'),
                           ...provider.entries.map(
                             (entry) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -76,7 +76,7 @@ class StorageManagementPage extends StatelessWidget {
                           const SizedBox(height: 12),
                           OutlinedButton.icon(
                             icon: const Icon(Icons.delete_sweep_outlined),
-                            label: const Text('清理所有快取資料'),
+                            label: const Text('清理所有可重建資料'),
                             onPressed:
                                 provider.isLoading
                                     ? null
@@ -127,7 +127,7 @@ class StorageManagementPage extends StatelessWidget {
             style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text('包含正文快取、圖片、分享匯出暫存、規則資料與自訂字體。搜尋歷史以筆數顯示。'),
+          const Text('包含書籍正文、封面、圖片暫存、分享匯出暫存、規則資料與自訂字體。搜尋歷史以筆數顯示。'),
         ],
       ),
     );
@@ -141,8 +141,8 @@ class StorageManagementPage extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('一鍵清理所有快取'),
-          content: const Text('會清空正文、圖片、匯出暫存、搜尋歷史、規則資料與自訂字體。'),
+          title: const Text('一鍵清理可重建資料'),
+          content: const Text('會清空臨時圖片、匯出暫存、搜尋歷史、規則資料與自訂字體，不會刪除書籍正文與本地封面。'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -166,6 +166,7 @@ class StorageManagementPage extends StatelessWidget {
     StorageManagementProvider provider,
     StorageEntry entry,
   ) async {
+    if (!entry.canClear) return;
     final shouldClear = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -179,7 +180,7 @@ class StorageManagementPage extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('清理'),
+              child: Text(entry.clearLabel),
             ),
           ],
         );
@@ -220,7 +221,10 @@ class _StorageEntryCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.bold),
                 textAlign: TextAlign.end,
               ),
-              TextButton(onPressed: onClear, child: const Text('清理')),
+              TextButton(
+                onPressed: entry.canClear ? onClear : null,
+                child: Text(entry.canClear ? entry.clearLabel : '保留'),
+              ),
             ],
           ),
         ),

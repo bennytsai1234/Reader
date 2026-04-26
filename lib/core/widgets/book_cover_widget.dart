@@ -74,8 +74,11 @@ class BookCoverWidget extends StatelessWidget {
       );
     }
 
-    if (coverUrl!.startsWith('local://')) {
-      final file = File(coverUrl!.replaceFirst('local://', ''));
+    if (coverUrl!.startsWith('local://') || coverUrl!.startsWith('file://')) {
+      final file =
+          coverUrl!.startsWith('local://')
+              ? File(coverUrl!.replaceFirst('local://', ''))
+              : File(Uri.parse(coverUrl!).toFilePath());
       if (!file.existsSync()) {
         return _buildTextCover();
       }

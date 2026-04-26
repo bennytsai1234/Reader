@@ -18,7 +18,9 @@ class BookBase {
   String? kind; // 分類 (書源獲取)
   String? customTag; // 分類 (用戶修改)
   String? coverUrl; // 封面 URL (書源獲取)
+  String? coverLocalPath; // 系統保存的本地封面檔案
   String? customCoverUrl; // 封面 URL (用戶修改)
+  String? customCoverLocalPath; // 使用者封面本地化後的檔案
   String? intro; // 簡介 (書源獲取)
   String? customIntro; // 簡介 (用戶修改)
   String? charset; // 自定義字符集 (本地書)
@@ -57,7 +59,9 @@ class BookBase {
     this.kind,
     this.customTag,
     this.coverUrl,
+    this.coverLocalPath,
     this.customCoverUrl,
+    this.customCoverLocalPath,
     this.intro,
     this.customIntro,
     this.charset,

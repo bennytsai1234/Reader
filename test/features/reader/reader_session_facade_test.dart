@@ -275,7 +275,7 @@ void main() {
       expect(callbackCalled, isTrue);
     });
 
-    test('applySourceSwitchResolution 會更新書籍、持久化書架並 reload 目標章節', () async {
+    test('applySourceSwitchResolution 會切到新書、保留舊書並 reload 目標章節', () async {
       const facade = ReaderSessionFacade();
       final bookDao = _FakeBookDao();
       final chapterDao = _FakeChapterDao();
@@ -393,11 +393,8 @@ void main() {
       expect(jumpedTargets, hasLength(1));
       expect(jumpedTargets.single.chapterIndex, 1);
       expect(jumpedTargets.single.charOffset, 96);
-      expect(bookDao.deletedUrls, <String>['https://example.com/book']);
-      expect(chapterDao.deletedBooks, <String>[
-        'https://example.com/book',
-        migratedBook.bookUrl,
-      ]);
+      expect(bookDao.deletedUrls, isEmpty);
+      expect(chapterDao.deletedBooks, <String>[migratedBook.bookUrl]);
       expect(bookDao.upserts, hasLength(1));
       expect(bookDao.upserts.single.readerAnchorJson, isNull);
       expect(chapterDao.insertedBatches, hasLength(1));

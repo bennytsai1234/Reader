@@ -15,6 +15,7 @@ import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/models/reader_chapter_content.dart';
 import 'package:inkpage_reader/core/models/replace_rule.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/engine/page_view_widget.dart';
@@ -94,40 +95,43 @@ class _FakeReaderChapterContentDao implements ReaderChapterContentDao {
   static final Map<String, String> contentByKey = <String, String>{};
 
   @override
-  Future<String?> getContent({
-    required String cacheKey,
-    int? minUpdatedAt,
-  }) async {
-    final content = contentByKey[cacheKey];
+  Future<String?> getContent({required String contentKey}) async {
+    final content = contentByKey[contentKey];
     return content == null || content.isEmpty ? null : content;
   }
 
   @override
+  Future<ReaderChapterContentEntry?> getEntry({
+    required String contentKey,
+  }) async {
+    final content = await getContent(contentKey: contentKey);
+    if (content == null) return null;
+    return ReaderChapterContentEntry(
+      contentKey: contentKey,
+      origin: '',
+      bookUrl: '',
+      chapterUrl: '',
+      chapterIndex: 0,
+      status: ReaderChapterContentStatus.ready,
+      content: content,
+      updatedAt: 1,
+    );
+  }
+
+  @override
   Future<void> saveContent({
-    required String cacheKey,
+    required String contentKey,
     required String origin,
     required String bookUrl,
     required String chapterUrl,
     required int chapterIndex,
     required String content,
     required int updatedAt,
-    bool isPersistent = false,
+    ReaderChapterContentStatus status = ReaderChapterContentStatus.ready,
+    String? failureMessage,
   }) async {
-    contentByKey[cacheKey] = content;
+    contentByKey[contentKey] = content;
   }
-
-  @override
-  Future<int> getFailureCount(String cacheKey) async => 0;
-
-  @override
-  Future<void> recordFailure({
-    required String cacheKey,
-    required String origin,
-    required String bookUrl,
-    required String chapterUrl,
-    required int chapterIndex,
-    required int updatedAt,
-  }) async {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -321,7 +325,8 @@ void _seedChapterContent(Book book, Iterable<BookChapter> chapters) {
   for (final chapter in chapters) {
     final content = chapter.content;
     if (content == null || content.isEmpty) continue;
-    _FakeReaderChapterContentDao.contentByKey[ReaderChapterContentDao.cacheKey(
+    _FakeReaderChapterContentDao
+            .contentByKey[ReaderChapterContentDao.contentKey(
           origin: book.origin,
           bookUrl: book.bookUrl,
           chapterUrl: chapter.url,

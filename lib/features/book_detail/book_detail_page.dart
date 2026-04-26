@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -85,7 +87,7 @@ class BookDetailPage extends StatelessWidget {
                             onEdit:
                                 () =>
                                     _showEditBookInfoDialog(context, provider),
-                            onCacheOffline:
+                            onDownloadChapters:
                                 () => _showDownloadSheet(context, provider),
                             showSourceOptions: _showSourceOptions,
                             navigateToReader: _navigateToReader,
@@ -150,7 +152,10 @@ class BookDetailPage extends StatelessWidget {
               (ctx) => [
                 const PopupMenuItem(value: 'change_cover', child: Text('換封面')),
                 const PopupMenuItem(value: 'export', child: Text('匯出全書')),
-                const PopupMenuItem(value: 'clear_cache', child: Text('清理快取')),
+                const PopupMenuItem(
+                  value: 'clear_content',
+                  child: Text('移除本書正文'),
+                ),
                 const PopupMenuItem(value: 'edit', child: Text('編輯資訊')),
               ],
         ),
@@ -165,11 +170,11 @@ class BookDetailPage extends StatelessWidget {
   ) {
     if (val == 'export') {
       ExportBookService().exportToTxt(provider.book);
-    } else if (val == 'clear_cache') {
-      provider.clearCache();
+    } else if (val == 'clear_content') {
+      provider.clearStoredContent();
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('已清理快取')));
+      ).showSnackBar(const SnackBar(content: Text('已移除本書正文儲存')));
     } else if (val == 'edit') {
       _showEditBookInfoDialog(context, provider);
     } else if (val == 'change_cover') {
@@ -178,6 +183,7 @@ class BookDetailPage extends StatelessWidget {
   }
 
   void _showPhotoView(BuildContext context, String url) {
+    final isLocal = url.startsWith('local://') || url.startsWith('file://');
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -188,7 +194,14 @@ class BookDetailPage extends StatelessWidget {
               body: Center(
                 child: Hero(
                   tag: 'book_cover',
-                  child: CachedNetworkImage(imageUrl: url),
+                  child:
+                      isLocal
+                          ? Image.file(
+                            url.startsWith('local://')
+                                ? File(url.replaceFirst('local://', ''))
+                                : File(Uri.parse(url).toFilePath()),
+                          )
+                          : CachedNetworkImage(imageUrl: url),
                 ),
               ),
             ),
@@ -275,10 +288,10 @@ class BookDetailPage extends StatelessWidget {
       );
 
   void _showDownloadSheet(BuildContext context, BookDetailProvider provider) {
-    if (!provider.supportsOfflineCache) {
+    if (!provider.supportsBackgroundDownload) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('這本書已在裝置內，不需要再加入離線快取')));
+      ).showSnackBar(const SnackBar(content: Text('這本書已在裝置內，不需要背景下載')));
       return;
     }
     showModalBottomSheet(
@@ -288,12 +301,12 @@ class BookDetailPage extends StatelessWidget {
             child: Wrap(
               children: [
                 const ListTile(
-                  title: Text('離線快取章節'),
-                  subtitle: Text('只會保存章節內容供離線閱讀，不會匯出成本地檔案'),
+                  title: Text('背景下載章節'),
+                  subtitle: Text('章節會直接寫入本地書籍儲存，不需要額外搬移'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.download_for_offline_outlined),
-                  title: const Text('快取全部章節'),
+                  title: const Text('下載全部章節'),
                   subtitle: Text('共 ${provider.totalChapterCount} 章'),
                   onTap: () async {
                     Navigator.pop(sheetContext);
@@ -305,10 +318,8 @@ class BookDetailPage extends StatelessWidget {
                 if (provider.book.chapterIndex < provider.totalChapterCount)
                   ListTile(
                     leading: const Icon(Icons.playlist_play_rounded),
-                    title: const Text('從目前進度往後快取'),
-                    subtitle: Text(
-                      '從第 ${provider.book.chapterIndex + 1} 章開始',
-                    ),
+                    title: const Text('從目前進度往後下載'),
+                    subtitle: Text('從第 ${provider.book.chapterIndex + 1} 章開始'),
                     onTap: () async {
                       Navigator.pop(sheetContext);
                       final result = await provider.queueDownloadFromCurrent();
@@ -318,18 +329,18 @@ class BookDetailPage extends StatelessWidget {
                   ),
                 ListTile(
                   leading: const Icon(Icons.offline_pin_outlined),
-                  title: const Text('只快取未快取章節'),
+                  title: const Text('只下載缺少章節'),
                   subtitle: const Text('跳過已經存在本機的章節內容'),
                   onTap: () async {
                     Navigator.pop(sheetContext);
-                    final result = await provider.queueDownloadUncached();
+                    final result = await provider.queueDownloadMissing();
                     if (!context.mounted) return;
                     _showDownloadQueuedSnackBar(context, result.message);
                   },
                 ),
                 ListTile(
                   leading: const Icon(Icons.manage_history_outlined),
-                  title: const Text('查看離線快取佇列'),
+                  title: const Text('查看背景下載佇列'),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     Navigator.push(

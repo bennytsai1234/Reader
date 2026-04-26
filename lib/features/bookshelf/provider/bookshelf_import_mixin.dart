@@ -1,4 +1,5 @@
 import 'package:inkpage_reader/core/services/app_log_service.dart';
+import 'package:inkpage_reader/core/services/book_cover_storage_service.dart';
 import 'package:inkpage_reader/core/services/local_book_service.dart';
 import 'bookshelf_provider_base.dart';
 
@@ -15,6 +16,7 @@ mixin BookshelfImportMixin on BookshelfProviderBase {
     try {
       final result = await LocalBookService().importBook(path);
       if (result != null) {
+        await BookCoverStorageService().ensureBookCoverStored(result.book);
         await bookDao.upsert(result.book);
         await chapterDao.insertChapters(result.chapters);
         await loadBooks();

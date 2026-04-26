@@ -442,6 +442,49 @@ void main() {
       manager.dispose();
     });
 
+    test('background content preload 先補目前與鄰章，再往後補到結尾', () async {
+      final fetchOrder = <int>[];
+      final completers = <int, Completer<FetchResult>>{};
+      final manager = ChapterContentManager(
+        fetchFn: (index) {
+          fetchOrder.add(index);
+          return (completers[index] ??= Completer<FetchResult>()).future;
+        },
+        chapters: makeChapters(5),
+      );
+      manager.updateConfig(makeConfig());
+
+      manager.startBackgroundContentPreload(startIndex: 2);
+      expect(fetchOrder, [2]);
+
+      completers[2]!.complete(FetchResult(content: 'content-2'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(fetchOrder, [2, 3]);
+
+      completers[3]!.complete(FetchResult(content: 'content-3'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(fetchOrder, [2, 3, 1]);
+
+      completers[1]!.complete(FetchResult(content: 'content-1'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(fetchOrder, [2, 3, 1, 4]);
+
+      completers[4]!.complete(FetchResult(content: 'content-4'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(fetchOrder, [2, 3, 1, 4, 0]);
+
+      for (final completer in completers.values) {
+        if (!completer.isCompleted) {
+          completer.complete(FetchResult(content: 'done'));
+        }
+      }
+      manager.dispose();
+    });
+
     test(
       'prioritizeChapter 會保留 retained chapter，不驅逐 current neighborhood',
       () async {

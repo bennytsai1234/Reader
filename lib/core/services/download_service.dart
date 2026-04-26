@@ -7,9 +7,9 @@ export 'download/download_base.dart';
 export 'download/download_scheduler.dart';
 export 'download/download_executor.dart';
 
-/// DownloadService - 書籍離線快取服務 (重構後)
-/// (原 Android service/CacheBookService.kt)
-class DownloadService extends DownloadBase with DownloadScheduler, DownloadExecutor {
+/// DownloadService - 書籍章節背景下載服務
+class DownloadService extends DownloadBase
+    with DownloadScheduler, DownloadExecutor {
   static final DownloadService _instance = DownloadService._internal();
   factory DownloadService() => _instance;
 
@@ -32,7 +32,10 @@ class DownloadService extends DownloadBase with DownloadScheduler, DownloadExecu
   }
 
   void pauseTask(String bookUrl) {
-    final task = tasks.cast<DownloadTask?>().firstWhere((t) => t?.bookUrl == bookUrl, orElse: () => null);
+    final task = tasks.cast<DownloadTask?>().firstWhere(
+      (t) => t?.bookUrl == bookUrl,
+      orElse: () => null,
+    );
     if (task != null) {
       task.status = 2;
       downloadDao.updateProgress(bookUrl, status: 2);
@@ -57,4 +60,3 @@ class DownloadService extends DownloadBase with DownloadScheduler, DownloadExecu
     update();
   }
 }
-

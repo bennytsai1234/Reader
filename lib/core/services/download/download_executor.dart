@@ -1,14 +1,15 @@
 import 'dart:async';
-import 'package:inkpage_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'download_base.dart';
 import 'download_scheduler.dart';
-import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/download_task.dart';
 import 'package:inkpage_reader/core/engine/app_event_bus.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
+import 'package:inkpage_reader/core/services/chapter_content_preparation_pipeline.dart';
+import 'package:inkpage_reader/core/services/reader_chapter_content_store.dart';
 
-bool downloadTaskCountsPreCachedChapters({
+bool downloadTaskCountsPreStoredChapters({
   required DownloadTask task,
   required int chapterCountInRange,
 }) {
@@ -28,13 +29,17 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
       if (book == null) {
         throw Exception('書籍不存在');
       }
-      final source = await sourceDao.getByUrl(book.origin);
-      if (source == null) {
+      final source =
+          book.origin == 'local' ? null : await sourceDao.getByUrl(book.origin);
+      if (book.origin != 'local' && source == null) {
         throw Exception('書源不存在');
       }
 
       var chapters = await chapterDao.getChapters(task.bookUrl);
       if (chapters.isEmpty) {
+        if (source == null) {
+          throw Exception('章節目錄不存在');
+        }
         chapters = await sourceService.getChapterList(source, book);
         await chapterDao.insertChapters(chapters);
         // 更新任務實例
@@ -57,9 +62,20 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
                     c.index <= task.endChapterIndex,
               )
               .toList();
-      final countsPreCachedChapters = downloadTaskCountsPreCachedChapters(
+      final countsPreStoredChapters = downloadTaskCountsPreStoredChapters(
         task: task,
         chapterCountInRange: toDownload.length,
+      );
+      final contentStore = ReaderChapterContentStore(
+        chapterDao: chapterDao,
+        contentDao: chapterContentDao,
+      );
+      final pipeline = ChapterContentPreparationPipeline(
+        book: book,
+        contentStore: contentStore,
+        sourceDao: sourceDao,
+        service: sourceService,
+        getSource: () => source,
       );
       var poolCount = 0;
       for (var chapter in toDownload) {
@@ -68,13 +84,8 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         }
         await checkPause();
 
-        final cacheKey = ReaderChapterContentDao.cacheKey(
-          origin: book.origin,
-          bookUrl: book.bookUrl,
-          chapterUrl: chapter.url,
-        );
-        if (await chapterContentDao.hasContent(cacheKey: cacheKey)) {
-          if (countsPreCachedChapters) {
+        if (await contentStore.hasReadyContent(book: book, chapter: chapter)) {
+          if (countsPreStoredChapters) {
             task.successCount++;
           }
           task.currentChapterIndex = chapter.index;
@@ -93,7 +104,11 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         }
 
         poolCount++;
-        _downloadChapter(book, source, task, chapter).then((success) {
+        _downloadChapter(
+          pipeline: pipeline,
+          source: source,
+          chapter: chapter,
+        ).then((success) {
           if (success) {
             task.successCount++;
           } else {
@@ -136,51 +151,18 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
 
   static const int _maxRetries = 3;
 
-  Future<bool> _downloadChapter(
-    Book book,
-    dynamic source,
-    DownloadTask task,
-    BookChapter chapter,
-  ) async {
-    for (var attempt = 0; attempt < _maxRetries; attempt++) {
-      try {
-        final content = await sourceService.getContent(source, book, chapter);
-        if (content.isNotEmpty) {
-          await chapterContentDao.saveContent(
-            cacheKey: ReaderChapterContentDao.cacheKey(
-              origin: book.origin,
-              bookUrl: book.bookUrl,
-              chapterUrl: chapter.url,
-            ),
-            origin: book.origin,
-            bookUrl: book.bookUrl,
-            chapterUrl: chapter.url,
-            chapterIndex: chapter.index,
-            content: content,
-            updatedAt: DateTime.now().millisecondsSinceEpoch,
-            isPersistent: true,
-          );
-          return true;
-        }
-        return false;
-      } catch (e, stack) {
-        AppLog.w(
-          'Chapter download failed (attempt ${attempt + 1}/$_maxRetries) '
-          '- book: ${task.bookName}, chapter: ${chapter.title}: $e',
-        );
-        if (attempt < _maxRetries - 1) {
-          final delay = Duration(milliseconds: 500 * (1 << attempt));
-          await Future.delayed(delay);
-        } else {
-          AppLog.e(
-            'Chapter download exhausted retries '
-            '- book: ${task.bookName}, chapter: ${chapter.title}',
-            error: e,
-            stackTrace: stack,
-          );
-        }
-      }
-    }
-    return false;
+  Future<bool> _downloadChapter({
+    required ChapterContentPreparationPipeline pipeline,
+    required BookSource? source,
+    required BookChapter chapter,
+  }) async {
+    final result = await pipeline.prepare(
+      chapterIndex: chapter.index,
+      chapter: chapter,
+      sourceOverride: source,
+      forceRefresh: true,
+      maxAttempts: _maxRetries,
+    );
+    return result.isReady;
   }
 }

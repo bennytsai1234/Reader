@@ -3,6 +3,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:inkpage_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:inkpage_reader/core/database/dao/search_history_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
+import 'package:inkpage_reader/core/services/book_cover_storage_service.dart';
 import 'package:inkpage_reader/core/services/rule_big_data_service.dart';
 import 'package:inkpage_reader/core/storage/app_storage_paths.dart';
 import 'package:inkpage_reader/core/storage/storage_metrics.dart';
@@ -14,7 +15,8 @@ class StorageEntry {
     required this.description,
     required this.sizeInBytes,
     required this.displayValue,
-    required this.onClear,
+    this.onClear,
+    this.clearLabel = '清理',
   });
 
   final IconData icon;
@@ -22,13 +24,17 @@ class StorageEntry {
   final String description;
   final int sizeInBytes;
   final String displayValue;
-  final Future<void> Function() onClear;
+  final Future<void> Function()? onClear;
+  final String clearLabel;
+
+  bool get canClear => onClear != null;
 }
 
 class StorageManagementProvider extends ChangeNotifier {
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
   final SearchHistoryDao _searchHistoryDao = getIt<SearchHistoryDao>();
+  final BookCoverStorageService _coverStorage = BookCoverStorageService();
 
   bool _isLoading = false;
   List<StorageEntry> _entries = const [];
@@ -43,6 +49,7 @@ class StorageManagementProvider extends ChangeNotifier {
     notifyListeners();
 
     final chapterSize = await _chapterContentDao.getTotalContentSize();
+    final coverAssetSize = await _coverStorage.getTotalCoverAssetSize();
     final imageCacheDir = await AppStoragePaths.imageCacheDir();
     final imageCacheSize = await StorageMetrics.directorySize(imageCacheDir);
     final exportTempDir = await AppStoragePaths.shareExportDir();
@@ -56,16 +63,22 @@ class StorageManagementProvider extends ChangeNotifier {
     _entries = [
       StorageEntry(
         icon: Icons.article_outlined,
-        title: '書籍正文快取',
-        description: '已下載章節與閱讀中寫入資料庫的正文內容',
+        title: '書籍正文儲存',
+        description: '已建立本地 storage 的章節正文，刪書時才會一併移除',
         sizeInBytes: chapterSize,
         displayValue: StorageMetrics.formatBytes(chapterSize),
-        onClear: _chapterContentDao.clearAllContent,
+      ),
+      StorageEntry(
+        icon: Icons.photo_library_outlined,
+        title: '書籍封面儲存',
+        description: '書架與詳情頁使用的本地封面檔案，避免打開 app 時等待網路圖片',
+        sizeInBytes: coverAssetSize,
+        displayValue: StorageMetrics.formatBytes(coverAssetSize),
       ),
       StorageEntry(
         icon: Icons.image_outlined,
-        title: '封面與圖片快取',
-        description: '封面圖與閱讀中載入的圖片快取',
+        title: '臨時圖片快取',
+        description: '搜尋、詳情和其他臨時畫面載入的圖片，可重新下載',
         sizeInBytes: imageCacheSize,
         displayValue: StorageMetrics.formatBytes(imageCacheSize),
         onClear: _clearImageCache,
@@ -109,12 +122,13 @@ class StorageManagementProvider extends ChangeNotifier {
   }
 
   Future<void> clearEntry(StorageEntry entry) async {
-    await entry.onClear();
+    final onClear = entry.onClear;
+    if (onClear == null) return;
+    await onClear();
     await load();
   }
 
   Future<void> clearAll() async {
-    await _chapterContentDao.clearAllContent();
     await _clearImageCache();
     await _clearExportTemp();
     await _searchHistoryDao.clearAll();

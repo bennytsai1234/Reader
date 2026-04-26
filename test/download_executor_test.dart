@@ -76,8 +76,8 @@ void main() {
     });
   });
 
-  group('downloadTaskCountsPreCachedChapters', () {
-    test('counts pre-cached chapters for contiguous tasks', () {
+  group('downloadTaskCountsPreStoredChapters', () {
+    test('counts pre-stored chapters for contiguous tasks', () {
       final task = DownloadTask(
         bookUrl: 'book',
         bookName: 'Book',
@@ -87,12 +87,12 @@ void main() {
       );
 
       expect(
-        downloadTaskCountsPreCachedChapters(task: task, chapterCountInRange: 3),
+        downloadTaskCountsPreStoredChapters(task: task, chapterCountInRange: 3),
         isTrue,
       );
     });
 
-    test('skips pre-cached chapters for sparse uncached selections', () {
+    test('skips pre-stored chapters for sparse missing selections', () {
       final task = DownloadTask(
         bookUrl: 'book',
         bookName: 'Book',
@@ -102,7 +102,7 @@ void main() {
       );
 
       expect(
-        downloadTaskCountsPreCachedChapters(task: task, chapterCountInRange: 5),
+        downloadTaskCountsPreStoredChapters(task: task, chapterCountInRange: 5),
         isFalse,
       );
     });

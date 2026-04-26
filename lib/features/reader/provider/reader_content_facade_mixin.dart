@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart'
     show PaginationConfig;
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
@@ -56,6 +57,27 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
 
   void clearChapterFailure(int chapterIndex) {
     _contentOwner.clearChapterFailure(chapterIndex);
+  }
+
+  Future<void> retryCurrentChapterContent() {
+    return retryChapterContent(currentChapterIndex);
+  }
+
+  Future<void> retryChapterContent(int chapterIndex) async {
+    if (chapterIndex < 0 || chapterIndex >= chapters.length) return;
+    final contentDao = readerChapterContentDao;
+    if (contentDao != null) {
+      await ReaderChapterContentStore(
+        chapterDao: chapterDao,
+        contentDao: contentDao,
+      ).clearChapter(book: book, chapter: chapters[chapterIndex]);
+    }
+    _contentOwner.clearChapterContentState(chapterIndex);
+    chapterPagesCache.remove(chapterIndex);
+    loadingChapters.remove(chapterIndex);
+    clearTransientViewportState(notify: false);
+    notifyListeners();
+    await loadChapter(chapterIndex, reason: ReaderCommandReason.system);
   }
 
   ReaderViewportState? chapterViewportStateFor(int chapterIndex) {
@@ -159,7 +181,7 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
   bool get _isLocalBook => book.origin == 'local';
   bool get _isScrollMode => pageTurnMode == PageAnim.scroll;
   int get _effectiveScrollPreloadRadius =>
-      !_isLocalBook && book.isInBookshelf
+      !_isLocalBook
           ? ReaderContentLifecycleRuntime.bookshelfNetworkScrollPreloadRadius
           : ReaderContentLifecycleRuntime.scrollPreloadRadius;
   // 本地書 slide 模式的 warmup 半徑與網路書相同（disk I/O 無額外成本）。

@@ -31,10 +31,19 @@ extension BookExtensions on BookBase {
 
   // --- 顯示輔助 ---
   String getRealAuthor() => BookHelp.formatBookAuthor(author);
-  String? getDisplayCover() =>
-      (customCoverUrl == null || customCoverUrl!.isEmpty)
-          ? coverUrl
-          : customCoverUrl;
+  String? getDisplayCover() {
+    if (customCoverLocalPath != null && customCoverLocalPath!.isNotEmpty) {
+      return 'local://$customCoverLocalPath';
+    }
+    if (customCoverUrl != null && customCoverUrl!.isNotEmpty) {
+      return customCoverUrl;
+    }
+    if (coverLocalPath != null && coverLocalPath!.isNotEmpty) {
+      return 'local://$coverLocalPath';
+    }
+    return coverUrl;
+  }
+
   String? getDisplayIntro() =>
       (customIntro == null || customIntro!.isEmpty) ? intro : customIntro;
 

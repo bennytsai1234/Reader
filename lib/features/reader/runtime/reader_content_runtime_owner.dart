@@ -48,6 +48,11 @@ class ReaderContentRuntimeOwner {
     _lifecycle.clearChapterFailure(chapterIndex);
   }
 
+  void clearChapterContentState(int chapterIndex) {
+    _lifecycle.clearChapterContentState(chapterIndex);
+    _callbacks.refreshChapterRuntime?.call(chapterIndex);
+  }
+
   bool hasCachedChapterContent(int chapterIndex) {
     return _lifecycle.hasCachedContent(chapterIndex);
   }

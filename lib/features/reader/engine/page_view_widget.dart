@@ -219,6 +219,28 @@ class PageViewWidget extends StatelessWidget {
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed:
+                    provider.loadingChapters.contains(
+                          provider.currentChapterIndex,
+                        )
+                        ? null
+                        : () {
+                          provider.retryCurrentChapterContent();
+                        },
+                icon:
+                    provider.loadingChapters.contains(
+                          provider.currentChapterIndex,
+                        )
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.refresh),
+                label: const Text('重新載入本章'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed:
                     provider.isSwitchingSource
                         ? null
                         : () {

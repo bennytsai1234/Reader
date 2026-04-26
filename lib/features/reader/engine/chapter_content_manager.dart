@@ -323,18 +323,24 @@ class ChapterContentManager {
     if (_chapters.isEmpty || _disposed) return;
     _backgroundContentPreloadEnabled = true;
     final center = (startIndex ?? 0).clamp(0, _chapters.length - 1).toInt();
-    final ordered = <int>[
-      for (var i = center; i < _chapters.length; i++) i,
-      for (var i = 0; i < center; i++) i,
-    ];
+    final ordered = _buildCenteredWholeBookOrder(center);
+    _backgroundContentQueue.removeWhere(
+      (chapterIndex) =>
+          _hasChapterContent(chapterIndex) ||
+          _emptyContentChapters.contains(chapterIndex),
+    );
+    final nextQueue = <int>[];
     for (final chapterIndex in ordered) {
       if (_hasChapterContent(chapterIndex) ||
-          _backgroundContentQueue.contains(chapterIndex) ||
+          nextQueue.contains(chapterIndex) ||
           _emptyContentChapters.contains(chapterIndex)) {
         continue;
       }
-      _backgroundContentQueue.add(chapterIndex);
+      nextQueue.add(chapterIndex);
     }
+    _backgroundContentQueue
+      ..clear()
+      ..addAll(nextQueue);
     _processBackgroundContentQueue();
   }
 
@@ -539,6 +545,18 @@ class ChapterContentManager {
     _paginatedCache.remove(index); // 內容變更，分頁作廢
     _pendingDisplayRepaginatedPages.remove(index);
     _pendingDisplayRepaginatedIndexes.remove(index);
+  }
+
+  void clearChapterContent(int index) {
+    _contentCache.remove(index);
+    _paginatedCache.remove(index);
+    _pendingDisplayRepaginatedPages.remove(index);
+    _pendingDisplayRepaginatedIndexes.remove(index);
+    _pendingRawRepaginateIndexes.remove(index);
+    _displayTitleCache.remove(index);
+    _emptyContentChapters.remove(index);
+    _preloadQueue.remove(index);
+    _backgroundContentQueue.remove(index);
   }
 
   void dispose() {
@@ -1187,6 +1205,26 @@ class ChapterContentManager {
     }
 
     return {for (int i = start; i <= end; i++) i};
+  }
+
+  List<int> _buildCenteredWholeBookOrder(int centerChapterIndex) {
+    final result = <int>[];
+    if (_chapters.isEmpty) return result;
+    final center = centerChapterIndex.clamp(0, _chapters.length - 1).toInt();
+    result.add(center);
+
+    final next = center + 1;
+    if (next < _chapters.length) result.add(next);
+    final previous = center - 1;
+    if (previous >= 0) result.add(previous);
+
+    for (var index = center + 2; index < _chapters.length; index++) {
+      result.add(index);
+    }
+    for (var index = center - 2; index >= 0; index--) {
+      result.add(index);
+    }
+    return result;
   }
 
   String _chapterDisplayTitle(int index) {

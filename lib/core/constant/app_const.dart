@@ -19,7 +19,7 @@ class AppConst {
     'ASCII',
   ];
 
-  // 離線快取通道 (對標 channelId)
+  // 章節背景下載通道
   static const String channelIdDownload = 'channel_download';
   static const String channelIdReadAloud = 'channel_read_aloud';
   static const String channelIdWeb = 'channel_web';
@@ -65,4 +65,3 @@ class PlaybackStatus {
   static const int play = 1;
   static const int pause = 3;
 }
-

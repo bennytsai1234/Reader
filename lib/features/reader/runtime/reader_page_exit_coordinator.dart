@@ -12,6 +12,8 @@ abstract class ReaderExitFlowDelegate {
   Future<void> persistExitProgress();
 
   Future<void> addCurrentBookToBookshelf();
+
+  Future<void> discardUnkeptBookStorage();
 }
 
 class ReaderPageExitCoordinator {
@@ -39,6 +41,10 @@ class ReaderPageExitCoordinator {
       await provider.persistExitProgress();
       if (!context.mounted) return;
       if (!shouldPrompt) {
+        if (!provider.book.isInBookshelf) {
+          await provider.discardUnkeptBookStorage();
+          if (!context.mounted) return;
+        }
         popNavigator();
         return;
       }
@@ -50,6 +56,9 @@ class ReaderPageExitCoordinator {
       if (!context.mounted) return;
       if (addToBookshelf == true) {
         await provider.addCurrentBookToBookshelf();
+        if (!context.mounted) return;
+      } else {
+        await provider.discardUnkeptBookStorage();
         if (!context.mounted) return;
       }
       popNavigator();

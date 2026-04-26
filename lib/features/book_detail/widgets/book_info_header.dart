@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/widgets/book_cover_widget.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 import '../book_detail_provider.dart';
 
@@ -10,7 +10,7 @@ class BookInfoHeader extends StatelessWidget {
   final BookDetailProvider provider;
   final Function(BuildContext, String) showPhotoView;
   final VoidCallback onEdit;
-  final VoidCallback onCacheOffline;
+  final VoidCallback onDownloadChapters;
   final Function(BuildContext, Book) showSourceOptions;
   final void Function(BuildContext, Book, ReaderOpenTarget, List<BookChapter>)
   navigateToReader;
@@ -22,7 +22,7 @@ class BookInfoHeader extends StatelessWidget {
     required this.provider,
     required this.showPhotoView,
     required this.onEdit,
-    required this.onCacheOffline,
+    required this.onDownloadChapters,
     required this.showSourceOptions,
     required this.navigateToReader,
     required this.showChangeSource,
@@ -58,18 +58,13 @@ class BookInfoHeader extends StatelessWidget {
             },
             child: Hero(
               tag: 'book_cover',
-              child: ClipRRect(
+              child: BookCoverWidget(
+                coverUrl: coverUrl,
+                bookName: book.name,
+                author: book.author,
+                width: 100,
+                height: 140,
                 borderRadius: BorderRadius.circular(4),
-                child:
-                    coverUrl != null && coverUrl.isNotEmpty
-                        ? CachedNetworkImage(
-                          imageUrl: coverUrl,
-                          width: 100,
-                          height: 140,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _buildCoverPlaceholder(),
-                        )
-                        : _buildCoverPlaceholder(),
               ),
             ),
           ),
@@ -153,15 +148,15 @@ class BookInfoHeader extends StatelessWidget {
                             style: TextStyle(fontSize: 12),
                           ),
                         ),
-                        if (provider.supportsOfflineCache)
+                        if (provider.supportsBackgroundDownload)
                           TextButton.icon(
-                            onPressed: onCacheOffline,
+                            onPressed: onDownloadChapters,
                             icon: const Icon(
                               Icons.download_for_offline_outlined,
                               size: 16,
                             ),
                             label: const Text(
-                              '離線快取',
+                              '背景下載',
                               style: TextStyle(fontSize: 12),
                             ),
                           ),
@@ -176,11 +171,4 @@ class BookInfoHeader extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildCoverPlaceholder() => Container(
-    width: 100,
-    height: 140,
-    color: Colors.grey.shade200,
-    child: const Icon(Icons.book, size: 50, color: Colors.grey),
-  );
 }

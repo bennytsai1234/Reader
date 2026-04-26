@@ -50,7 +50,7 @@ class _OtherSettingsPageState extends State<OtherSettingsPage> {
               _buildSectionTitle('存儲與數據'),
               ListTile(
                 title: const Text('存儲與下載'),
-                subtitle: const Text('管理下載任務、清理快取空間'),
+                subtitle: const Text('管理章節下載任務與本地空間'),
                 leading: const Icon(Icons.storage_outlined),
                 onTap:
                     () => Navigator.push(

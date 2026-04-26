@@ -10,13 +10,14 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
+import 'package:inkpage_reader/core/services/book_cover_storage_service.dart';
 import 'package:inkpage_reader/core/services/download_service.dart';
 import 'package:inkpage_reader/core/engine/app_event_bus.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
-import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_cache_repository.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
 
-class OfflineCacheQueueResult {
-  const OfflineCacheQueueResult._({
+class StorageDownloadQueueResult {
+  const StorageDownloadQueueResult._({
     required this.queuedChapterCount,
     required this.message,
   });
@@ -24,15 +25,18 @@ class OfflineCacheQueueResult {
   final int queuedChapterCount;
   final String message;
 
-  factory OfflineCacheQueueResult.queued(int count) {
-    return OfflineCacheQueueResult._(
+  factory StorageDownloadQueueResult.queued(int count) {
+    return StorageDownloadQueueResult._(
       queuedChapterCount: count,
-      message: '已加入離線快取佇列，共 $count 章',
+      message: '已加入背景下載佇列，共 $count 章',
     );
   }
 
-  factory OfflineCacheQueueResult.blocked(String message) {
-    return OfflineCacheQueueResult._(queuedChapterCount: 0, message: message);
+  factory StorageDownloadQueueResult.blocked(String message) {
+    return StorageDownloadQueueResult._(
+      queuedChapterCount: 0,
+      message: message,
+    );
   }
 }
 
@@ -42,6 +46,7 @@ class BookDetailProvider extends ChangeNotifier {
   final BookSourceDao _sourceDao;
   final ReaderChapterContentDao? _chapterContentDao;
   final BookSourceService _service;
+  final BookCoverStorageService _coverStorage;
   DownloadService? _downloadService;
 
   late Book _book;
@@ -60,12 +65,13 @@ class BookDetailProvider extends ChangeNotifier {
   int get totalChapterCount => _allChapters.length;
   bool get isLoading => _isLoading;
   bool get isInBookshelf => _isInBookshelf;
-  bool get supportsOfflineCache => _book.origin != 'local';
+  bool get supportsBackgroundDownload => _book.origin != 'local';
   DownloadService get _resolvedDownloadService =>
       _downloadService ??= DownloadService();
 
   String _searchQuery = '';
   bool _isReversed = false;
+  bool _disposed = false;
   bool get isReversed => _isReversed;
 
   Timer? _debounce;
@@ -77,6 +83,7 @@ class BookDetailProvider extends ChangeNotifier {
     BookSourceDao? sourceDao,
     ReaderChapterContentDao? chapterContentDao,
     BookSourceService? service,
+    BookCoverStorageService? coverStorage,
     DownloadService? downloadService,
   }) : _bookDao = bookDao ?? getIt<BookDao>(),
        _chapterDao = chapterDao ?? getIt<ChapterDao>(),
@@ -87,6 +94,7 @@ class BookDetailProvider extends ChangeNotifier {
                ? getIt<ReaderChapterContentDao>()
                : null),
        _service = service ?? BookSourceService(),
+       _coverStorage = coverStorage ?? BookCoverStorageService(),
        _downloadService = downloadService {
     _book =
         searchBook.book is Book
@@ -108,11 +116,15 @@ class BookDetailProvider extends ChangeNotifier {
     final existing = await _bookDao.getByUrl(_book.bookUrl);
     if (existing != null) {
       _book = existing;
-      _isInBookshelf = true;
+      _isInBookshelf = existing.isInBookshelf;
+    } else {
+      _book.isInBookshelf = false;
+      await _bookDao.upsert(_book);
     }
     await _loadSource();
     await _loadBookInfo();
     await _loadChapters();
+    unawaited(_storeDisplayCover());
     _isLoading = false;
     notifyListeners();
   }
@@ -137,11 +149,17 @@ class BookDetailProvider extends ChangeNotifier {
       return;
     }
     try {
+      final wasInBookshelf = _book.isInBookshelf;
+      final coverLocalPath = _book.coverLocalPath;
+      final customCoverUrl = _book.customCoverUrl;
+      final customCoverLocalPath = _book.customCoverLocalPath;
       final updatedBook = await _service.getBookInfo(_currentSource!, _book);
+      updatedBook.isInBookshelf = wasInBookshelf;
+      updatedBook.coverLocalPath = coverLocalPath;
+      updatedBook.customCoverUrl = customCoverUrl;
+      updatedBook.customCoverLocalPath = customCoverLocalPath;
       _book = updatedBook;
-      if (_isInBookshelf) {
-        await _bookDao.upsert(_book);
-      }
+      await _bookDao.upsert(_book);
     } catch (e) {
       AppLog.e('加載書籍詳情失敗: $e', error: e);
       // 即使加載詳情失敗，仍嘗試用已有資訊載入目錄
@@ -149,6 +167,7 @@ class BookDetailProvider extends ChangeNotifier {
       if (_book.tocUrl.isEmpty) {
         _book.tocUrl = _book.bookUrl;
       }
+      await _bookDao.upsert(_book);
     }
   }
 
@@ -162,7 +181,7 @@ class BookDetailProvider extends ChangeNotifier {
       }
       try {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
-        if (_isInBookshelf) await _chapterDao.insertChapters(_allChapters);
+        await _chapterDao.insertChapters(_allChapters);
       } catch (e) {
         _sourceIssueMessage = '目前來源目錄載入失敗，建議換源後再試';
         AppLog.e('加載目錄失敗: $e', error: e);
@@ -171,58 +190,58 @@ class BookDetailProvider extends ChangeNotifier {
     _applyFilter();
   }
 
-  Future<OfflineCacheQueueResult> queueDownloadAll() async {
-    return _queueOfflineCache(
+  Future<StorageDownloadQueueResult> queueDownloadAll() async {
+    return _queueStorageDownload(
       resolveChapters: (_) => List<BookChapter>.from(_allChapters),
-      emptyMessage: '目前沒有可離線快取的章節',
+      emptyMessage: '目前沒有可下載的章節',
     );
   }
 
-  Future<OfflineCacheQueueResult> queueDownloadFromCurrent() async {
-    return _queueOfflineCache(
+  Future<StorageDownloadQueueResult> queueDownloadFromCurrent() async {
+    return _queueStorageDownload(
       resolveChapters: (_) {
         final startIndex = book.chapterIndex.clamp(0, _allChapters.length);
         return _allChapters
             .where((chapter) => chapter.index >= startIndex)
             .toList();
       },
-      emptyMessage: '目前進度之後沒有可離線快取的章節',
+      emptyMessage: '目前進度之後沒有可下載的章節',
     );
   }
 
-  Future<OfflineCacheQueueResult> queueDownloadUncached() async {
-    return _queueOfflineCache(
+  Future<StorageDownloadQueueResult> queueDownloadMissing() async {
+    return _queueStorageDownload(
       resolveChapters:
-          (cachedIndices) =>
+          (storedIndices) =>
               _allChapters
-                  .where((chapter) => !cachedIndices.contains(chapter.index))
+                  .where((chapter) => !storedIndices.contains(chapter.index))
                   .toList(),
-      emptyMessage: '目前沒有新的章節需要離線快取',
+      emptyMessage: '目前沒有新的章節需要下載',
     );
   }
 
-  Future<OfflineCacheQueueResult> _queueOfflineCache({
-    required List<BookChapter> Function(Set<int> cachedIndices) resolveChapters,
+  Future<StorageDownloadQueueResult> _queueStorageDownload({
+    required List<BookChapter> Function(Set<int> storedIndices) resolveChapters,
     required String emptyMessage,
   }) async {
-    final blockedReason = await _prepareOfflineCacheQueue();
+    final blockedReason = await _prepareStorageDownloadQueue();
     if (blockedReason != null) {
-      return OfflineCacheQueueResult.blocked(blockedReason);
+      return StorageDownloadQueueResult.blocked(blockedReason);
     }
 
-    final cachedIndices = await _cachedChapterIndices();
-    final chapters = resolveChapters(cachedIndices);
+    final storedIndices = await _storedChapterIndices();
+    final chapters = resolveChapters(storedIndices);
     if (chapters.isEmpty) {
-      return OfflineCacheQueueResult.blocked(emptyMessage);
+      return StorageDownloadQueueResult.blocked(emptyMessage);
     }
 
     await _resolvedDownloadService.addDownloadTask(_book, chapters);
-    return OfflineCacheQueueResult.queued(chapters.length);
+    return StorageDownloadQueueResult.queued(chapters.length);
   }
 
-  Future<String?> _prepareOfflineCacheQueue() async {
-    if (!supportsOfflineCache) {
-      return '這本書已經在裝置內，不需要再加入離線快取。';
+  Future<String?> _prepareStorageDownloadQueue() async {
+    if (!supportsBackgroundDownload) {
+      return '這本書已經在裝置內，不需要背景下載。';
     }
 
     if (_currentSource == null) {
@@ -240,23 +259,11 @@ class BookDetailProvider extends ChangeNotifier {
       await _loadChapters();
     }
     if (_allChapters.isEmpty) {
-      return _sourceIssueMessage ?? '目前沒有可離線快取的章節。';
-    }
-
-    var bookshelfChanged = false;
-    if (!_isInBookshelf) {
-      _isInBookshelf = true;
-      _book.isInBookshelf = true;
-      bookshelfChanged = true;
+      return _sourceIssueMessage ?? '目前沒有可下載的章節。';
     }
 
     await _bookDao.upsert(_book);
-    await _promoteTransientCacheIfPossible();
-
-    if (bookshelfChanged) {
-      AppEventBus().fire(AppEventBus.upBookshelf);
-      notifyListeners();
-    }
+    await _saveChapterMetadataIfPossible();
 
     return null;
   }
@@ -289,29 +296,36 @@ class BookDetailProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 執行換源 (繼承舊版實作)
+  /// 執行換源：來源切換建立為另一本書，不覆蓋/刪除原書 storage。
   Future<void> changeSource(SearchBook newSource) async {
     _isLoading = true;
     notifyListeners();
     try {
-      final oldUrl = _book.bookUrl;
-      _book.bookUrl = newSource.bookUrl;
-      _book.origin = newSource.origin;
-      _book.originName = newSource.originName ?? '未知';
-      _book.tocUrl = newSource.tocUrl ?? '';
+      final oldBook = _book.copyWith();
+      final candidate = newSource.toBook();
+      final source = await _sourceDao.getByUrl(candidate.origin);
+      if (source == null) {
+        throw StateError('找不到對應書源');
+      }
+      _currentSource = source;
+      final hydratedBook = await _service.getBookInfo(source, candidate);
+      final nextBook = oldBook.migrateTo(
+        hydratedBook.copyWith(isInBookshelf: oldBook.isInBookshelf),
+        const <BookChapter>[],
+      );
+      _book = nextBook;
       await _loadSource();
       await _loadBookInfo();
       _allChapters = [];
       if (_currentSource != null) {
         _allChapters = await _service.getChapterList(_currentSource!, _book);
       }
-      if (_isInBookshelf) {
-        await _bookDao.deleteByUrl(oldUrl);
-        await _chapterDao.deleteByBook(oldUrl);
-        await _chapterDao.deleteByBook(_book.bookUrl);
-        await _bookDao.upsert(_book);
-        await _chapterDao.insertChapters(_allChapters);
-      }
+      _book = oldBook.migrateTo(_book, _allChapters);
+      _isInBookshelf = _book.isInBookshelf;
+      await _chapterDao.deleteByBook(_book.bookUrl);
+      await _bookDao.upsert(_book);
+      await _chapterDao.insertChapters(_allChapters);
+      unawaited(_storeDisplayCover());
       _applyFilter();
       AppEventBus().fire(AppEventBus.upBookshelf);
     } catch (e) {
@@ -334,9 +348,7 @@ class BookDetailProvider extends ChangeNotifier {
           await _loadChapters();
         }
         await _bookDao.upsert(_book);
-        if (_allChapters.isNotEmpty) {
-          await _promoteTransientCacheIfPossible();
-        }
+        await _saveChapterMetadataIfPossible();
       } catch (e) {
         AppLog.e('加入書架失敗: $e', error: e);
       } finally {
@@ -345,7 +357,6 @@ class BookDetailProvider extends ChangeNotifier {
       }
     } else {
       await _bookDao.upsert(_book);
-      // 選用：移除書架時是否刪除章節？通常保留以利再次加入
     }
 
     AppEventBus().fire(AppEventBus.upBookshelf);
@@ -362,52 +373,63 @@ class BookDetailProvider extends ChangeNotifier {
     _book.author = author;
     _book.intro = intro;
     _book.coverUrl = coverUrl;
-    if (_isInBookshelf) await _bookDao.upsert(_book);
+    _book.coverLocalPath = null;
+    await _bookDao.upsert(_book);
+    unawaited(_storeDisplayCover());
     notifyListeners();
   }
 
   Future<void> updateCover(String url) async {
     _book.customCoverUrl = url;
-    if (_isInBookshelf) await _bookDao.upsert(_book);
+    _book.customCoverLocalPath = null;
+    await _storeDisplayCover();
+    await _bookDao.upsert(_book);
     notifyListeners();
   }
 
-  void clearCache() {
-    unawaited(_clearCachedContent());
+  void clearStoredContent() {
+    unawaited(_clearStoredContent());
   }
 
-  Future<void> _promoteTransientCacheIfPossible() {
+  Future<void> _saveChapterMetadataIfPossible() {
     if (_allChapters.isEmpty) return Future<void>.value();
     final chapterContentDao = _chapterContentDao;
     if (chapterContentDao == null) {
       return _chapterDao.insertChapters(_allChapters);
     }
-    return ReaderChapterContentCacheRepository(
+    return ReaderChapterContentStore(
       chapterDao: _chapterDao,
       contentDao: chapterContentDao,
-    ).promoteTransientCacheToBookshelf(book: _book, chapters: _allChapters);
+    ).saveChapterMetadata(_allChapters);
   }
 
-  Future<Set<int>> _cachedChapterIndices() async {
+  Future<Set<int>> _storedChapterIndices() async {
     final chapterContentDao = _chapterContentDao;
     if (chapterContentDao == null) return <int>{};
-    return ReaderChapterContentCacheRepository(
+    return ReaderChapterContentStore(
       chapterDao: _chapterDao,
       contentDao: chapterContentDao,
-    ).cachedChapterIndices(book: _book);
+    ).storedChapterIndices(book: _book);
   }
 
-  Future<void> _clearCachedContent() async {
+  Future<void> _clearStoredContent() async {
     final chapterContentDao = _chapterContentDao;
     if (chapterContentDao == null) return;
-    await ReaderChapterContentCacheRepository(
+    await ReaderChapterContentStore(
       chapterDao: _chapterDao,
       contentDao: chapterContentDao,
-    ).deleteCachedContentForBook(book: _book);
+    ).deleteStoredContentForBook(book: _book);
+  }
+
+  Future<void> _storeDisplayCover() async {
+    await _coverStorage.ensureDisplayCoverStored(_book);
+    await _bookDao.upsert(_book);
+    if (!_isLoading && !_disposed) notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _debounce?.cancel();
     super.dispose();
   }

@@ -128,6 +128,9 @@ class _ReaderPageShellProbe extends ReaderProvider {
   Future<void> addCurrentBookToBookshelf() async {
     addToBookshelfCalls++;
   }
+
+  @override
+  Future<void> discardUnkeptBookStorage() async {}
 }
 
 typedef _ShellExitHandler =

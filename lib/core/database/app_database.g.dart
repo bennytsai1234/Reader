@@ -95,6 +95,17 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _coverLocalPathMeta = const VerificationMeta(
+    'coverLocalPath',
+  );
+  @override
+  late final GeneratedColumn<String> coverLocalPath = GeneratedColumn<String>(
+    'coverLocalPath',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _customCoverUrlMeta = const VerificationMeta(
     'customCoverUrl',
   );
@@ -106,6 +117,17 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _customCoverLocalPathMeta =
+      const VerificationMeta('customCoverLocalPath');
+  @override
+  late final GeneratedColumn<String> customCoverLocalPath =
+      GeneratedColumn<String>(
+        'customCoverLocalPath',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _introMeta = const VerificationMeta('intro');
   @override
   late final GeneratedColumn<String> intro = GeneratedColumn<String>(
@@ -380,7 +402,9 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     kind,
     customTag,
     coverUrl,
+    coverLocalPath,
     customCoverUrl,
+    customCoverLocalPath,
     intro,
     customIntro,
     charset,
@@ -451,12 +475,30 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta),
       );
     }
+    if (data.containsKey('coverLocalPath')) {
+      context.handle(
+        _coverLocalPathMeta,
+        coverLocalPath.isAcceptableOrUnknown(
+          data['coverLocalPath']!,
+          _coverLocalPathMeta,
+        ),
+      );
+    }
     if (data.containsKey('customCoverUrl')) {
       context.handle(
         _customCoverUrlMeta,
         customCoverUrl.isAcceptableOrUnknown(
           data['customCoverUrl']!,
           _customCoverUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('customCoverLocalPath')) {
+      context.handle(
+        _customCoverLocalPathMeta,
+        customCoverLocalPath.isAcceptableOrUnknown(
+          data['customCoverLocalPath']!,
+          _customCoverLocalPathMeta,
         ),
       );
     }
@@ -683,9 +725,17 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         DriftSqlType.string,
         data['${effectivePrefix}coverUrl'],
       ),
+      coverLocalPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverLocalPath'],
+      ),
       customCoverUrl: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}customCoverUrl'],
+      ),
+      customCoverLocalPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}customCoverLocalPath'],
       ),
       intro: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -825,7 +875,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
   final Value<String?> kind;
   final Value<String?> customTag;
   final Value<String?> coverUrl;
+  final Value<String?> coverLocalPath;
   final Value<String?> customCoverUrl;
+  final Value<String?> customCoverLocalPath;
   final Value<String?> intro;
   final Value<String?> customIntro;
   final Value<String?> charset;
@@ -860,7 +912,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.kind = const Value.absent(),
     this.customTag = const Value.absent(),
     this.coverUrl = const Value.absent(),
+    this.coverLocalPath = const Value.absent(),
     this.customCoverUrl = const Value.absent(),
+    this.customCoverLocalPath = const Value.absent(),
     this.intro = const Value.absent(),
     this.customIntro = const Value.absent(),
     this.charset = const Value.absent(),
@@ -896,7 +950,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.kind = const Value.absent(),
     this.customTag = const Value.absent(),
     this.coverUrl = const Value.absent(),
+    this.coverLocalPath = const Value.absent(),
     this.customCoverUrl = const Value.absent(),
+    this.customCoverLocalPath = const Value.absent(),
     this.intro = const Value.absent(),
     this.customIntro = const Value.absent(),
     this.charset = const Value.absent(),
@@ -933,7 +989,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Expression<String>? kind,
     Expression<String>? customTag,
     Expression<String>? coverUrl,
+    Expression<String>? coverLocalPath,
     Expression<String>? customCoverUrl,
+    Expression<String>? customCoverLocalPath,
     Expression<String>? intro,
     Expression<String>? customIntro,
     Expression<String>? charset,
@@ -969,7 +1027,10 @@ class BooksCompanion extends UpdateCompanion<Book> {
       if (kind != null) 'kind': kind,
       if (customTag != null) 'customTag': customTag,
       if (coverUrl != null) 'coverUrl': coverUrl,
+      if (coverLocalPath != null) 'coverLocalPath': coverLocalPath,
       if (customCoverUrl != null) 'customCoverUrl': customCoverUrl,
+      if (customCoverLocalPath != null)
+        'customCoverLocalPath': customCoverLocalPath,
       if (intro != null) 'intro': intro,
       if (customIntro != null) 'customIntro': customIntro,
       if (charset != null) 'charset': charset,
@@ -1007,7 +1068,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Value<String?>? kind,
     Value<String?>? customTag,
     Value<String?>? coverUrl,
+    Value<String?>? coverLocalPath,
     Value<String?>? customCoverUrl,
+    Value<String?>? customCoverLocalPath,
     Value<String?>? intro,
     Value<String?>? customIntro,
     Value<String?>? charset,
@@ -1043,7 +1106,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
       kind: kind ?? this.kind,
       customTag: customTag ?? this.customTag,
       coverUrl: coverUrl ?? this.coverUrl,
+      coverLocalPath: coverLocalPath ?? this.coverLocalPath,
       customCoverUrl: customCoverUrl ?? this.customCoverUrl,
+      customCoverLocalPath: customCoverLocalPath ?? this.customCoverLocalPath,
       intro: intro ?? this.intro,
       customIntro: customIntro ?? this.customIntro,
       charset: charset ?? this.charset,
@@ -1109,8 +1174,16 @@ class BooksCompanion extends UpdateCompanion<Book> {
     if (coverUrl.present) {
       map['coverUrl'] = Variable<String>(coverUrl.value);
     }
+    if (coverLocalPath.present) {
+      map['coverLocalPath'] = Variable<String>(coverLocalPath.value);
+    }
     if (customCoverUrl.present) {
       map['customCoverUrl'] = Variable<String>(customCoverUrl.value);
+    }
+    if (customCoverLocalPath.present) {
+      map['customCoverLocalPath'] = Variable<String>(
+        customCoverLocalPath.value,
+      );
     }
     if (intro.present) {
       map['intro'] = Variable<String>(intro.value);
@@ -1201,7 +1274,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
           ..write('kind: $kind, ')
           ..write('customTag: $customTag, ')
           ..write('coverUrl: $coverUrl, ')
+          ..write('coverLocalPath: $coverLocalPath, ')
           ..write('customCoverUrl: $customCoverUrl, ')
+          ..write('customCoverLocalPath: $customCoverLocalPath, ')
           ..write('intro: $intro, ')
           ..write('customIntro: $customIntro, ')
           ..write('charset: $charset, ')
@@ -1246,7 +1321,9 @@ class _$BookInsertable implements Insertable<Book> {
       kind: Value(_object.kind),
       customTag: Value(_object.customTag),
       coverUrl: Value(_object.coverUrl),
+      coverLocalPath: Value(_object.coverLocalPath),
       customCoverUrl: Value(_object.customCoverUrl),
+      customCoverLocalPath: Value(_object.customCoverLocalPath),
       intro: Value(_object.intro),
       customIntro: Value(_object.customIntro),
       charset: Value(_object.charset),
@@ -1949,12 +2026,12 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $ReaderChapterContentsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _cacheKeyMeta = const VerificationMeta(
-    'cacheKey',
+  static const VerificationMeta _contentKeyMeta = const VerificationMeta(
+    'contentKey',
   );
   @override
-  late final GeneratedColumn<String> cacheKey = GeneratedColumn<String>(
-    'cacheKey',
+  late final GeneratedColumn<String> contentKey = GeneratedColumn<String>(
+    'contentKey',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -2013,6 +2090,27 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<int> status = GeneratedColumn<int>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _failureMessageMeta = const VerificationMeta(
+    'failureMessage',
+  );
+  @override
+  late final GeneratedColumn<String> failureMessage = GeneratedColumn<String>(
+    'failureMessage',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -2024,44 +2122,17 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _isPersistentMeta = const VerificationMeta(
-    'isPersistent',
-  );
-  @override
-  late final GeneratedColumn<bool> isPersistent = GeneratedColumn<bool>(
-    'isPersistent',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("isPersistent" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _failureCountMeta = const VerificationMeta(
-    'failureCount',
-  );
-  @override
-  late final GeneratedColumn<int> failureCount = GeneratedColumn<int>(
-    'failureCount',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
   @override
   List<GeneratedColumn> get $columns => [
-    cacheKey,
+    contentKey,
     origin,
     bookUrl,
     chapterUrl,
     chapterIndex,
     content,
+    status,
+    failureMessage,
     updatedAt,
-    isPersistent,
-    failureCount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2075,13 +2146,13 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
-    if (data.containsKey('cacheKey')) {
+    if (data.containsKey('contentKey')) {
       context.handle(
-        _cacheKeyMeta,
-        cacheKey.isAcceptableOrUnknown(data['cacheKey']!, _cacheKeyMeta),
+        _contentKeyMeta,
+        contentKey.isAcceptableOrUnknown(data['contentKey']!, _contentKeyMeta),
       );
     } else if (isInserting) {
-      context.missing(_cacheKeyMeta);
+      context.missing(_contentKeyMeta);
     }
     if (data.containsKey('origin')) {
       context.handle(
@@ -2124,6 +2195,21 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
         content.isAcceptableOrUnknown(data['content']!, _contentMeta),
       );
     }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('failureMessage')) {
+      context.handle(
+        _failureMessageMeta,
+        failureMessage.isAcceptableOrUnknown(
+          data['failureMessage']!,
+          _failureMessageMeta,
+        ),
+      );
+    }
     if (data.containsKey('updatedAt')) {
       context.handle(
         _updatedAtMeta,
@@ -2132,37 +2218,19 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
-    if (data.containsKey('isPersistent')) {
-      context.handle(
-        _isPersistentMeta,
-        isPersistent.isAcceptableOrUnknown(
-          data['isPersistent']!,
-          _isPersistentMeta,
-        ),
-      );
-    }
-    if (data.containsKey('failureCount')) {
-      context.handle(
-        _failureCountMeta,
-        failureCount.isAcceptableOrUnknown(
-          data['failureCount']!,
-          _failureCountMeta,
-        ),
-      );
-    }
     return context;
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {cacheKey};
+  Set<GeneratedColumn> get $primaryKey => {contentKey};
   @override
   ReaderChapterContent map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ReaderChapterContent(
-      cacheKey:
+      contentKey:
           attachedDatabase.typeMapping.read(
             DriftSqlType.string,
-            data['${effectivePrefix}cacheKey'],
+            data['${effectivePrefix}contentKey'],
           )!,
       origin:
           attachedDatabase.typeMapping.read(
@@ -2188,20 +2256,19 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
         DriftSqlType.string,
         data['${effectivePrefix}content'],
       ),
+      status:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.int,
+            data['${effectivePrefix}status'],
+          )!,
+      failureMessage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}failureMessage'],
+      ),
       updatedAt:
           attachedDatabase.typeMapping.read(
             DriftSqlType.int,
             data['${effectivePrefix}updatedAt'],
-          )!,
-      isPersistent:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.bool,
-            data['${effectivePrefix}isPersistent'],
-          )!,
-      failureCount:
-          attachedDatabase.typeMapping.read(
-            DriftSqlType.int,
-            data['${effectivePrefix}failureCount'],
           )!,
     );
   }
@@ -2214,30 +2281,30 @@ class $ReaderChapterContentsTable extends ReaderChapterContents
 
 class ReaderChapterContent extends DataClass
     implements Insertable<ReaderChapterContent> {
-  final String cacheKey;
+  final String contentKey;
   final String origin;
   final String bookUrl;
   final String chapterUrl;
   final int chapterIndex;
   final String? content;
+  final int status;
+  final String? failureMessage;
   final int updatedAt;
-  final bool isPersistent;
-  final int failureCount;
   const ReaderChapterContent({
-    required this.cacheKey,
+    required this.contentKey,
     required this.origin,
     required this.bookUrl,
     required this.chapterUrl,
     required this.chapterIndex,
     this.content,
+    required this.status,
+    this.failureMessage,
     required this.updatedAt,
-    required this.isPersistent,
-    required this.failureCount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['cacheKey'] = Variable<String>(cacheKey);
+    map['contentKey'] = Variable<String>(contentKey);
     map['origin'] = Variable<String>(origin);
     map['bookUrl'] = Variable<String>(bookUrl);
     map['chapterUrl'] = Variable<String>(chapterUrl);
@@ -2245,15 +2312,17 @@ class ReaderChapterContent extends DataClass
     if (!nullToAbsent || content != null) {
       map['content'] = Variable<String>(content);
     }
+    map['status'] = Variable<int>(status);
+    if (!nullToAbsent || failureMessage != null) {
+      map['failureMessage'] = Variable<String>(failureMessage);
+    }
     map['updatedAt'] = Variable<int>(updatedAt);
-    map['isPersistent'] = Variable<bool>(isPersistent);
-    map['failureCount'] = Variable<int>(failureCount);
     return map;
   }
 
   ReaderChapterContentsCompanion toCompanion(bool nullToAbsent) {
     return ReaderChapterContentsCompanion(
-      cacheKey: Value(cacheKey),
+      contentKey: Value(contentKey),
       origin: Value(origin),
       bookUrl: Value(bookUrl),
       chapterUrl: Value(chapterUrl),
@@ -2262,9 +2331,12 @@ class ReaderChapterContent extends DataClass
           content == null && nullToAbsent
               ? const Value.absent()
               : Value(content),
+      status: Value(status),
+      failureMessage:
+          failureMessage == null && nullToAbsent
+              ? const Value.absent()
+              : Value(failureMessage),
       updatedAt: Value(updatedAt),
-      isPersistent: Value(isPersistent),
-      failureCount: Value(failureCount),
     );
   }
 
@@ -2274,57 +2346,59 @@ class ReaderChapterContent extends DataClass
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ReaderChapterContent(
-      cacheKey: serializer.fromJson<String>(json['cacheKey']),
+      contentKey: serializer.fromJson<String>(json['contentKey']),
       origin: serializer.fromJson<String>(json['origin']),
       bookUrl: serializer.fromJson<String>(json['bookUrl']),
       chapterUrl: serializer.fromJson<String>(json['chapterUrl']),
       chapterIndex: serializer.fromJson<int>(json['chapterIndex']),
       content: serializer.fromJson<String?>(json['content']),
+      status: serializer.fromJson<int>(json['status']),
+      failureMessage: serializer.fromJson<String?>(json['failureMessage']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
-      isPersistent: serializer.fromJson<bool>(json['isPersistent']),
-      failureCount: serializer.fromJson<int>(json['failureCount']),
     );
   }
   @override
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'cacheKey': serializer.toJson<String>(cacheKey),
+      'contentKey': serializer.toJson<String>(contentKey),
       'origin': serializer.toJson<String>(origin),
       'bookUrl': serializer.toJson<String>(bookUrl),
       'chapterUrl': serializer.toJson<String>(chapterUrl),
       'chapterIndex': serializer.toJson<int>(chapterIndex),
       'content': serializer.toJson<String?>(content),
+      'status': serializer.toJson<int>(status),
+      'failureMessage': serializer.toJson<String?>(failureMessage),
       'updatedAt': serializer.toJson<int>(updatedAt),
-      'isPersistent': serializer.toJson<bool>(isPersistent),
-      'failureCount': serializer.toJson<int>(failureCount),
     };
   }
 
   ReaderChapterContent copyWith({
-    String? cacheKey,
+    String? contentKey,
     String? origin,
     String? bookUrl,
     String? chapterUrl,
     int? chapterIndex,
     Value<String?> content = const Value.absent(),
+    int? status,
+    Value<String?> failureMessage = const Value.absent(),
     int? updatedAt,
-    bool? isPersistent,
-    int? failureCount,
   }) => ReaderChapterContent(
-    cacheKey: cacheKey ?? this.cacheKey,
+    contentKey: contentKey ?? this.contentKey,
     origin: origin ?? this.origin,
     bookUrl: bookUrl ?? this.bookUrl,
     chapterUrl: chapterUrl ?? this.chapterUrl,
     chapterIndex: chapterIndex ?? this.chapterIndex,
     content: content.present ? content.value : this.content,
+    status: status ?? this.status,
+    failureMessage:
+        failureMessage.present ? failureMessage.value : this.failureMessage,
     updatedAt: updatedAt ?? this.updatedAt,
-    isPersistent: isPersistent ?? this.isPersistent,
-    failureCount: failureCount ?? this.failureCount,
   );
   ReaderChapterContent copyWithCompanion(ReaderChapterContentsCompanion data) {
     return ReaderChapterContent(
-      cacheKey: data.cacheKey.present ? data.cacheKey.value : this.cacheKey,
+      contentKey:
+          data.contentKey.present ? data.contentKey.value : this.contentKey,
       origin: data.origin.present ? data.origin.value : this.origin,
       bookUrl: data.bookUrl.present ? data.bookUrl.value : this.bookUrl,
       chapterUrl:
@@ -2334,150 +2408,147 @@ class ReaderChapterContent extends DataClass
               ? data.chapterIndex.value
               : this.chapterIndex,
       content: data.content.present ? data.content.value : this.content,
+      status: data.status.present ? data.status.value : this.status,
+      failureMessage:
+          data.failureMessage.present
+              ? data.failureMessage.value
+              : this.failureMessage,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      isPersistent:
-          data.isPersistent.present
-              ? data.isPersistent.value
-              : this.isPersistent,
-      failureCount:
-          data.failureCount.present
-              ? data.failureCount.value
-              : this.failureCount,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('ReaderChapterContent(')
-          ..write('cacheKey: $cacheKey, ')
+          ..write('contentKey: $contentKey, ')
           ..write('origin: $origin, ')
           ..write('bookUrl: $bookUrl, ')
           ..write('chapterUrl: $chapterUrl, ')
           ..write('chapterIndex: $chapterIndex, ')
           ..write('content: $content, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('isPersistent: $isPersistent, ')
-          ..write('failureCount: $failureCount')
+          ..write('status: $status, ')
+          ..write('failureMessage: $failureMessage, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(
-    cacheKey,
+    contentKey,
     origin,
     bookUrl,
     chapterUrl,
     chapterIndex,
     content,
+    status,
+    failureMessage,
     updatedAt,
-    isPersistent,
-    failureCount,
   );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ReaderChapterContent &&
-          other.cacheKey == this.cacheKey &&
+          other.contentKey == this.contentKey &&
           other.origin == this.origin &&
           other.bookUrl == this.bookUrl &&
           other.chapterUrl == this.chapterUrl &&
           other.chapterIndex == this.chapterIndex &&
           other.content == this.content &&
-          other.updatedAt == this.updatedAt &&
-          other.isPersistent == this.isPersistent &&
-          other.failureCount == this.failureCount);
+          other.status == this.status &&
+          other.failureMessage == this.failureMessage &&
+          other.updatedAt == this.updatedAt);
 }
 
 class ReaderChapterContentsCompanion
     extends UpdateCompanion<ReaderChapterContent> {
-  final Value<String> cacheKey;
+  final Value<String> contentKey;
   final Value<String> origin;
   final Value<String> bookUrl;
   final Value<String> chapterUrl;
   final Value<int> chapterIndex;
   final Value<String?> content;
+  final Value<int> status;
+  final Value<String?> failureMessage;
   final Value<int> updatedAt;
-  final Value<bool> isPersistent;
-  final Value<int> failureCount;
   final Value<int> rowid;
   const ReaderChapterContentsCompanion({
-    this.cacheKey = const Value.absent(),
+    this.contentKey = const Value.absent(),
     this.origin = const Value.absent(),
     this.bookUrl = const Value.absent(),
     this.chapterUrl = const Value.absent(),
     this.chapterIndex = const Value.absent(),
     this.content = const Value.absent(),
+    this.status = const Value.absent(),
+    this.failureMessage = const Value.absent(),
     this.updatedAt = const Value.absent(),
-    this.isPersistent = const Value.absent(),
-    this.failureCount = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ReaderChapterContentsCompanion.insert({
-    required String cacheKey,
+    required String contentKey,
     required String origin,
     required String bookUrl,
     required String chapterUrl,
     required int chapterIndex,
     this.content = const Value.absent(),
+    this.status = const Value.absent(),
+    this.failureMessage = const Value.absent(),
     required int updatedAt,
-    this.isPersistent = const Value.absent(),
-    this.failureCount = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : cacheKey = Value(cacheKey),
+  }) : contentKey = Value(contentKey),
        origin = Value(origin),
        bookUrl = Value(bookUrl),
        chapterUrl = Value(chapterUrl),
        chapterIndex = Value(chapterIndex),
        updatedAt = Value(updatedAt);
   static Insertable<ReaderChapterContent> custom({
-    Expression<String>? cacheKey,
+    Expression<String>? contentKey,
     Expression<String>? origin,
     Expression<String>? bookUrl,
     Expression<String>? chapterUrl,
     Expression<int>? chapterIndex,
     Expression<String>? content,
+    Expression<int>? status,
+    Expression<String>? failureMessage,
     Expression<int>? updatedAt,
-    Expression<bool>? isPersistent,
-    Expression<int>? failureCount,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
-      if (cacheKey != null) 'cacheKey': cacheKey,
+      if (contentKey != null) 'contentKey': contentKey,
       if (origin != null) 'origin': origin,
       if (bookUrl != null) 'bookUrl': bookUrl,
       if (chapterUrl != null) 'chapterUrl': chapterUrl,
       if (chapterIndex != null) 'chapterIndex': chapterIndex,
       if (content != null) 'content': content,
+      if (status != null) 'status': status,
+      if (failureMessage != null) 'failureMessage': failureMessage,
       if (updatedAt != null) 'updatedAt': updatedAt,
-      if (isPersistent != null) 'isPersistent': isPersistent,
-      if (failureCount != null) 'failureCount': failureCount,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
   ReaderChapterContentsCompanion copyWith({
-    Value<String>? cacheKey,
+    Value<String>? contentKey,
     Value<String>? origin,
     Value<String>? bookUrl,
     Value<String>? chapterUrl,
     Value<int>? chapterIndex,
     Value<String?>? content,
+    Value<int>? status,
+    Value<String?>? failureMessage,
     Value<int>? updatedAt,
-    Value<bool>? isPersistent,
-    Value<int>? failureCount,
     Value<int>? rowid,
   }) {
     return ReaderChapterContentsCompanion(
-      cacheKey: cacheKey ?? this.cacheKey,
+      contentKey: contentKey ?? this.contentKey,
       origin: origin ?? this.origin,
       bookUrl: bookUrl ?? this.bookUrl,
       chapterUrl: chapterUrl ?? this.chapterUrl,
       chapterIndex: chapterIndex ?? this.chapterIndex,
       content: content ?? this.content,
+      status: status ?? this.status,
+      failureMessage: failureMessage ?? this.failureMessage,
       updatedAt: updatedAt ?? this.updatedAt,
-      isPersistent: isPersistent ?? this.isPersistent,
-      failureCount: failureCount ?? this.failureCount,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2485,8 +2556,8 @@ class ReaderChapterContentsCompanion
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    if (cacheKey.present) {
-      map['cacheKey'] = Variable<String>(cacheKey.value);
+    if (contentKey.present) {
+      map['contentKey'] = Variable<String>(contentKey.value);
     }
     if (origin.present) {
       map['origin'] = Variable<String>(origin.value);
@@ -2503,14 +2574,14 @@ class ReaderChapterContentsCompanion
     if (content.present) {
       map['content'] = Variable<String>(content.value);
     }
+    if (status.present) {
+      map['status'] = Variable<int>(status.value);
+    }
+    if (failureMessage.present) {
+      map['failureMessage'] = Variable<String>(failureMessage.value);
+    }
     if (updatedAt.present) {
       map['updatedAt'] = Variable<int>(updatedAt.value);
-    }
-    if (isPersistent.present) {
-      map['isPersistent'] = Variable<bool>(isPersistent.value);
-    }
-    if (failureCount.present) {
-      map['failureCount'] = Variable<int>(failureCount.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -2521,15 +2592,15 @@ class ReaderChapterContentsCompanion
   @override
   String toString() {
     return (StringBuffer('ReaderChapterContentsCompanion(')
-          ..write('cacheKey: $cacheKey, ')
+          ..write('contentKey: $contentKey, ')
           ..write('origin: $origin, ')
           ..write('bookUrl: $bookUrl, ')
           ..write('chapterUrl: $chapterUrl, ')
           ..write('chapterIndex: $chapterIndex, ')
           ..write('content: $content, ')
+          ..write('status: $status, ')
+          ..write('failureMessage: $failureMessage, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isPersistent: $isPersistent, ')
-          ..write('failureCount: $failureCount, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9472,7 +9543,9 @@ typedef $$BooksTableCreateCompanionBuilder =
       Value<String?> kind,
       Value<String?> customTag,
       Value<String?> coverUrl,
+      Value<String?> coverLocalPath,
       Value<String?> customCoverUrl,
+      Value<String?> customCoverLocalPath,
       Value<String?> intro,
       Value<String?> customIntro,
       Value<String?> charset,
@@ -9509,7 +9582,9 @@ typedef $$BooksTableUpdateCompanionBuilder =
       Value<String?> kind,
       Value<String?> customTag,
       Value<String?> coverUrl,
+      Value<String?> coverLocalPath,
       Value<String?> customCoverUrl,
+      Value<String?> customCoverLocalPath,
       Value<String?> intro,
       Value<String?> customIntro,
       Value<String?> charset,
@@ -9593,8 +9668,18 @@ class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get coverLocalPath => $composableBuilder(
+    column: $table.coverLocalPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get customCoverUrl => $composableBuilder(
     column: $table.customCoverUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get customCoverLocalPath => $composableBuilder(
+    column: $table.customCoverLocalPath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9769,8 +9854,18 @@ class $$BooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get coverLocalPath => $composableBuilder(
+    column: $table.coverLocalPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get customCoverUrl => $composableBuilder(
     column: $table.customCoverUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get customCoverLocalPath => $composableBuilder(
+    column: $table.customCoverLocalPath,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -9929,8 +10024,18 @@ class $$BooksTableAnnotationComposer
   GeneratedColumn<String> get coverUrl =>
       $composableBuilder(column: $table.coverUrl, builder: (column) => column);
 
+  GeneratedColumn<String> get coverLocalPath => $composableBuilder(
+    column: $table.coverLocalPath,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get customCoverUrl => $composableBuilder(
     column: $table.customCoverUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get customCoverLocalPath => $composableBuilder(
+    column: $table.customCoverLocalPath,
     builder: (column) => column,
   );
 
@@ -10070,7 +10175,9 @@ class $$BooksTableTableManager
                 Value<String?> kind = const Value.absent(),
                 Value<String?> customTag = const Value.absent(),
                 Value<String?> coverUrl = const Value.absent(),
+                Value<String?> coverLocalPath = const Value.absent(),
                 Value<String?> customCoverUrl = const Value.absent(),
+                Value<String?> customCoverLocalPath = const Value.absent(),
                 Value<String?> intro = const Value.absent(),
                 Value<String?> customIntro = const Value.absent(),
                 Value<String?> charset = const Value.absent(),
@@ -10105,7 +10212,9 @@ class $$BooksTableTableManager
                 kind: kind,
                 customTag: customTag,
                 coverUrl: coverUrl,
+                coverLocalPath: coverLocalPath,
                 customCoverUrl: customCoverUrl,
+                customCoverLocalPath: customCoverLocalPath,
                 intro: intro,
                 customIntro: customIntro,
                 charset: charset,
@@ -10142,7 +10251,9 @@ class $$BooksTableTableManager
                 Value<String?> kind = const Value.absent(),
                 Value<String?> customTag = const Value.absent(),
                 Value<String?> coverUrl = const Value.absent(),
+                Value<String?> coverLocalPath = const Value.absent(),
                 Value<String?> customCoverUrl = const Value.absent(),
+                Value<String?> customCoverLocalPath = const Value.absent(),
                 Value<String?> intro = const Value.absent(),
                 Value<String?> customIntro = const Value.absent(),
                 Value<String?> charset = const Value.absent(),
@@ -10177,7 +10288,9 @@ class $$BooksTableTableManager
                 kind: kind,
                 customTag: customTag,
                 coverUrl: coverUrl,
+                coverLocalPath: coverLocalPath,
                 customCoverUrl: customCoverUrl,
+                customCoverLocalPath: customCoverLocalPath,
                 intro: intro,
                 customIntro: customIntro,
                 charset: charset,
@@ -10654,28 +10767,28 @@ typedef $$ChaptersTableProcessedTableManager =
     >;
 typedef $$ReaderChapterContentsTableCreateCompanionBuilder =
     ReaderChapterContentsCompanion Function({
-      required String cacheKey,
+      required String contentKey,
       required String origin,
       required String bookUrl,
       required String chapterUrl,
       required int chapterIndex,
       Value<String?> content,
+      Value<int> status,
+      Value<String?> failureMessage,
       required int updatedAt,
-      Value<bool> isPersistent,
-      Value<int> failureCount,
       Value<int> rowid,
     });
 typedef $$ReaderChapterContentsTableUpdateCompanionBuilder =
     ReaderChapterContentsCompanion Function({
-      Value<String> cacheKey,
+      Value<String> contentKey,
       Value<String> origin,
       Value<String> bookUrl,
       Value<String> chapterUrl,
       Value<int> chapterIndex,
       Value<String?> content,
+      Value<int> status,
+      Value<String?> failureMessage,
       Value<int> updatedAt,
-      Value<bool> isPersistent,
-      Value<int> failureCount,
       Value<int> rowid,
     });
 
@@ -10688,8 +10801,8 @@ class $$ReaderChapterContentsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get cacheKey => $composableBuilder(
-    column: $table.cacheKey,
+  ColumnFilters<String> get contentKey => $composableBuilder(
+    column: $table.contentKey,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10718,18 +10831,18 @@ class $$ReaderChapterContentsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get failureMessage => $composableBuilder(
+    column: $table.failureMessage,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get isPersistent => $composableBuilder(
-    column: $table.isPersistent,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get failureCount => $composableBuilder(
-    column: $table.failureCount,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -10743,8 +10856,8 @@ class $$ReaderChapterContentsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get cacheKey => $composableBuilder(
-    column: $table.cacheKey,
+  ColumnOrderings<String> get contentKey => $composableBuilder(
+    column: $table.contentKey,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -10773,18 +10886,18 @@ class $$ReaderChapterContentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get failureMessage => $composableBuilder(
+    column: $table.failureMessage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get isPersistent => $composableBuilder(
-    column: $table.isPersistent,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get failureCount => $composableBuilder(
-    column: $table.failureCount,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -10798,8 +10911,10 @@ class $$ReaderChapterContentsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get cacheKey =>
-      $composableBuilder(column: $table.cacheKey, builder: (column) => column);
+  GeneratedColumn<String> get contentKey => $composableBuilder(
+    column: $table.contentKey,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get origin =>
       $composableBuilder(column: $table.origin, builder: (column) => column);
@@ -10820,18 +10935,16 @@ class $$ReaderChapterContentsTableAnnotationComposer
   GeneratedColumn<String> get content =>
       $composableBuilder(column: $table.content, builder: (column) => column);
 
+  GeneratedColumn<int> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get failureMessage => $composableBuilder(
+    column: $table.failureMessage,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-
-  GeneratedColumn<bool> get isPersistent => $composableBuilder(
-    column: $table.isPersistent,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get failureCount => $composableBuilder(
-    column: $table.failureCount,
-    builder: (column) => column,
-  );
 }
 
 class $$ReaderChapterContentsTableTableManager
@@ -10880,50 +10993,50 @@ class $$ReaderChapterContentsTableTableManager
               ),
           updateCompanionCallback:
               ({
-                Value<String> cacheKey = const Value.absent(),
+                Value<String> contentKey = const Value.absent(),
                 Value<String> origin = const Value.absent(),
                 Value<String> bookUrl = const Value.absent(),
                 Value<String> chapterUrl = const Value.absent(),
                 Value<int> chapterIndex = const Value.absent(),
                 Value<String?> content = const Value.absent(),
+                Value<int> status = const Value.absent(),
+                Value<String?> failureMessage = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
-                Value<bool> isPersistent = const Value.absent(),
-                Value<int> failureCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ReaderChapterContentsCompanion(
-                cacheKey: cacheKey,
+                contentKey: contentKey,
                 origin: origin,
                 bookUrl: bookUrl,
                 chapterUrl: chapterUrl,
                 chapterIndex: chapterIndex,
                 content: content,
+                status: status,
+                failureMessage: failureMessage,
                 updatedAt: updatedAt,
-                isPersistent: isPersistent,
-                failureCount: failureCount,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
-                required String cacheKey,
+                required String contentKey,
                 required String origin,
                 required String bookUrl,
                 required String chapterUrl,
                 required int chapterIndex,
                 Value<String?> content = const Value.absent(),
+                Value<int> status = const Value.absent(),
+                Value<String?> failureMessage = const Value.absent(),
                 required int updatedAt,
-                Value<bool> isPersistent = const Value.absent(),
-                Value<int> failureCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ReaderChapterContentsCompanion.insert(
-                cacheKey: cacheKey,
+                contentKey: contentKey,
                 origin: origin,
                 bookUrl: bookUrl,
                 chapterUrl: chapterUrl,
                 chapterIndex: chapterIndex,
                 content: content,
+                status: status,
+                failureMessage: failureMessage,
                 updatedAt: updatedAt,
-                isPersistent: isPersistent,
-                failureCount: failureCount,
                 rowid: rowid,
               ),
           withReferenceMapper:

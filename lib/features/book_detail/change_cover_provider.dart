@@ -50,24 +50,24 @@ class ChangeCoverProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 深度還原：快取優先加載邏輯
+  /// 先載入資料庫中既有封面，再視需要發起搜尋。
   Future<void> init(String name, String author) async {
     _covers = [_buildDefaultCoverItem(name, author)];
     notifyListeners();
 
     // 1. 先從資料庫加載既有封面
-    final cached = await _searchBookDao.getEnabledHasCover(name, author);
-    if (cached.isNotEmpty) {
-      for (var b in cached) {
+    final stored = await _searchBookDao.getEnabledHasCover(name, author);
+    if (stored.isNotEmpty) {
+      for (var b in stored) {
         if (!_covers.any((c) => c.book.coverUrl == b.coverUrl)) {
-          _covers.add(AggregatedSearchBook(book: b, sources: ['快取']));
+          _covers.add(AggregatedSearchBook(book: b, sources: ['本地記錄']));
         }
       }
       notifyListeners();
     }
 
-    // 2. 若快取為空，自動發起搜尋
-    if (cached.isEmpty) {
+    // 2. 若本地沒有記錄，自動發起搜尋
+    if (stored.isEmpty) {
       search(name, author);
     }
   }
@@ -82,15 +82,22 @@ class ChangeCoverProvider extends ChangeNotifier {
     _searchCount = 0;
     notifyListeners();
 
-    final cached = await _searchBookDao.getEnabledHasCover(name, author);
-    for (var b in cached) {
+    final stored = await _searchBookDao.getEnabledHasCover(name, author);
+    for (var b in stored) {
       if (!_covers.any((c) => c.book.coverUrl == b.coverUrl)) {
-        _covers.add(AggregatedSearchBook(book: b, sources: ['快取']));
+        _covers.add(AggregatedSearchBook(book: b, sources: ['本地記錄']));
       }
     }
 
     final enabledSources = await _sourceDao.getEnabled();
-    final coverSources = enabledSources.where((s) => s.ruleSearch?.coverUrl != null && s.ruleSearch!.coverUrl!.isNotEmpty).toList();
+    final coverSources =
+        enabledSources
+            .where(
+              (s) =>
+                  s.ruleSearch?.coverUrl != null &&
+                  s.ruleSearch!.coverUrl!.isNotEmpty,
+            )
+            .toList();
 
     _totalSources = coverSources.length;
     if (_totalSources == 0) {
@@ -99,13 +106,17 @@ class ChangeCoverProvider extends ChangeNotifier {
       return;
     }
 
-    final threadCount = await SharedPreferences.getInstance().then((p) => p.getInt('thread_count') ?? 8);
+    final threadCount = await SharedPreferences.getInstance().then(
+      (p) => p.getInt('thread_count') ?? 8,
+    );
     final coverPool = Pool(threadCount);
 
     final tasks = <Future<void>>[];
     for (final source in coverSources) {
       if (!_isSearching) break;
-      tasks.add(coverPool.withResource(() => _searchSingleSource(source, name, author)));
+      tasks.add(
+        coverPool.withResource(() => _searchSingleSource(source, name, author)),
+      );
     }
 
     await Future.wait(tasks);
@@ -113,15 +124,22 @@ class ChangeCoverProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _searchSingleSource(BookSource source, String name, String author) async {
+  Future<void> _searchSingleSource(
+    BookSource source,
+    String name,
+    String author,
+  ) async {
     if (!_isSearching) return;
     try {
-      final books = await _service.searchBooks(
-        source,
-        name,
-      );
+      final books = await _service.searchBooks(source, name);
 
-      final filtered = books.where((b) => b.name == name && (author.isEmpty || (b.author?.contains(author) ?? false) || author.contains(b.author ?? '')));
+      final filtered = books.where(
+        (b) =>
+            b.name == name &&
+            (author.isEmpty ||
+                (b.author?.contains(author) ?? false) ||
+                author.contains(b.author ?? '')),
+      );
 
       for (var result in filtered) {
         if (result.coverUrl != null && result.coverUrl!.isNotEmpty) {
@@ -144,5 +162,3 @@ class ChangeCoverProvider extends ChangeNotifier {
     }
   }
 }
-
-

@@ -11,43 +11,57 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/replace_rule.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
-import 'package:inkpage_reader/core/services/local_book_service.dart';
+import 'package:inkpage_reader/features/reader/engine/chapter_content_preparation_pipeline.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
-import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_cache_repository.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
 
 class ReaderChapterContentLoader {
   ReaderChapterContentLoader({
     required this.book,
-    this.cacheRepository,
+    this.contentStore,
     required this.replaceDao,
-    required this.sourceDao,
-    required this.service,
+    required BookSourceDao sourceDao,
+    required BookSourceService service,
     required this.currentChineseConvert,
     required this.getSource,
     required this.setSource,
     this.resolveNextChapterUrl,
-  });
+    ChapterContentPreparationPipeline? preparationPipeline,
+  }) : _preparationPipeline =
+           preparationPipeline ??
+           ChapterContentPreparationPipeline(
+             book: book,
+             contentStore: contentStore,
+             sourceDao: sourceDao,
+             service: service,
+             getSource: getSource,
+             setSource: setSource,
+             resolveNextChapterUrl: resolveNextChapterUrl,
+           );
 
   final Book book;
-  final ReaderChapterContentCacheRepository? cacheRepository;
+  final ReaderChapterContentStore? contentStore;
   final ReplaceRuleDao replaceDao;
-  final BookSourceDao sourceDao;
-  final BookSourceService service;
   final int Function() currentChineseConvert;
   final BookSource? Function() getSource;
   final void Function(BookSource source) setSource;
   final String? Function(int chapterIndex)? resolveNextChapterUrl;
+  final ChapterContentPreparationPipeline _preparationPipeline;
   final ChineseTextConverter _textConverter = const ChineseTextConverter();
 
   List<Map<String, dynamic>>? _cachedRulesJson;
   final Map<String, String> _convertedContentCache = <String, String>{};
   final Map<String, String> _convertedTitleCache = <String, String>{};
-  final Map<String, Future<String>> _rawFetches = <String, Future<String>>{};
 
   Future<FetchResult> load(int chapterIndex, BookChapter chapter) async {
-    final rawContent = await _loadRawContent(chapterIndex, chapter);
-    if (_looksLikeFailureMessage(rawContent)) {
+    final prepared = await _preparationPipeline.prepare(
+      chapterIndex: chapterIndex,
+      chapter: chapter,
+      saveChapterMetadata: book.origin != 'local',
+    );
+    final rawContent = prepared.content;
+    if (prepared.isFailed || _looksLikeFailureMessage(rawContent)) {
       final failureTitle = _textConverter.convert(
         chapter.getDisplayTitle(chineseConvertType: currentChineseConvert()),
         convertType: currentChineseConvert(),
@@ -90,89 +104,7 @@ class ReaderChapterContentLoader {
     _cachedRulesJson = null;
     _convertedContentCache.clear();
     _convertedTitleCache.clear();
-    _rawFetches.clear();
-  }
-
-  Future<String> _loadRawContent(int chapterIndex, BookChapter chapter) async {
-    final nextChapterUrl = resolveNextChapterUrl?.call(chapterIndex);
-
-    if (book.origin == 'local') {
-      return ReaderPerfTrace.measureAsync(
-        'local content chapter $chapterIndex',
-        () => LocalBookService().getContent(book, chapter),
-      );
-    }
-
-    final repository = cacheRepository;
-    if (repository != null) {
-      final cachedContent = await repository.getRawContent(
-        book: book,
-        chapter: chapter,
-      );
-      if (cachedContent != null && cachedContent.isNotEmpty) {
-        return cachedContent;
-      }
-    }
-
-    var source = getSource();
-    source ??= await sourceDao.getByUrl(book.origin);
-    if (source != null) {
-      setSource(source);
-    }
-    if (source == null) {
-      return '加載章節失敗: 找不到書源';
-    }
-    final fetchKey =
-        repository == null
-            ? '${book.origin}\n${book.bookUrl}\n${chapter.url}'
-            : ReaderChapterContentCacheRepository.cacheKeyFor(
-              book: book,
-              chapter: chapter,
-            );
-    final existingFetch = _rawFetches[fetchKey];
-    if (existingFetch != null) return existingFetch;
-    final fetch = _fetchRemoteRawContent(
-      chapterIndex: chapterIndex,
-      chapter: chapter,
-      source: source,
-      nextChapterUrl: nextChapterUrl,
-    );
-    _rawFetches[fetchKey] = fetch;
-    return fetch.whenComplete(() => _rawFetches.remove(fetchKey));
-  }
-
-  Future<String> _fetchRemoteRawContent({
-    required int chapterIndex,
-    required BookChapter chapter,
-    required BookSource source,
-    required String? nextChapterUrl,
-  }) async {
-    try {
-      final raw = await ReaderPerfTrace.measureAsync(
-        'remote content chapter $chapterIndex',
-        () => service.getContent(
-          source,
-          book,
-          chapter,
-          nextChapterUrl: nextChapterUrl,
-        ),
-      );
-      if (raw.isNotEmpty) {
-        final repository = cacheRepository;
-        if (repository != null) {
-          await repository.saveRawContent(
-            book: book,
-            chapter: chapter,
-            content: raw,
-          );
-        }
-        return raw;
-      }
-      return '章節內容為空 (可能解析規則有誤)';
-    } catch (e) {
-      await cacheRepository?.recordFetchFailure(book: book, chapter: chapter);
-      return '加載章節失敗: $e';
-    }
+    _preparationPipeline.reset();
   }
 
   Future<List<Map<String, dynamic>>> _loadRulesJson() async {

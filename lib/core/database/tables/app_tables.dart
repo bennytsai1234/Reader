@@ -177,7 +177,10 @@ class Books extends Table {
   TextColumn get kind => text().nullable()();
   TextColumn get customTag => text().named('customTag').nullable()();
   TextColumn get coverUrl => text().named('coverUrl').nullable()();
+  TextColumn get coverLocalPath => text().named('coverLocalPath').nullable()();
   TextColumn get customCoverUrl => text().named('customCoverUrl').nullable()();
+  TextColumn get customCoverLocalPath =>
+      text().named('customCoverLocalPath').nullable()();
   TextColumn get intro => text().nullable()();
   TextColumn get customIntro => text().named('customIntro').nullable()();
   TextColumn get charset => text().nullable()();
@@ -254,20 +257,19 @@ class Chapters extends Table {
 
 // ───────────── Reader chapter content store ─────────────
 class ReaderChapterContents extends Table {
-  TextColumn get cacheKey => text().named('cacheKey')();
+  TextColumn get contentKey => text().named('contentKey')();
   TextColumn get origin => text()();
   TextColumn get bookUrl => text().named('bookUrl')();
   TextColumn get chapterUrl => text().named('chapterUrl')();
   IntColumn get chapterIndex => integer().named('chapterIndex')();
   TextColumn get content => text().nullable()();
+  IntColumn get status =>
+      integer().named('status').withDefault(const Constant(1))();
+  TextColumn get failureMessage => text().named('failureMessage').nullable()();
   IntColumn get updatedAt => integer().named('updatedAt')();
-  BoolColumn get isPersistent =>
-      boolean().named('isPersistent').withDefault(const Constant(false))();
-  IntColumn get failureCount =>
-      integer().named('failureCount').withDefault(const Constant(0))();
 
   @override
-  Set<Column> get primaryKey => {cacheKey};
+  Set<Column> get primaryKey => {contentKey};
 }
 
 // ───────────── BookSources ─────────────

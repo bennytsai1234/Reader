@@ -14,6 +14,7 @@ class _ExitFlowProbe implements ReaderExitFlowDelegate {
   bool promptAddToBookshelf = false;
   int persistCalls = 0;
   int addToBookshelfCalls = 0;
+  int discardCalls = 0;
   Completer<void>? persistCompleter;
 
   @override
@@ -33,6 +34,11 @@ class _ExitFlowProbe implements ReaderExitFlowDelegate {
   @override
   Future<void> addCurrentBookToBookshelf() async {
     addToBookshelfCalls++;
+  }
+
+  @override
+  Future<void> discardUnkeptBookStorage() async {
+    discardCalls++;
   }
 }
 
@@ -94,6 +100,7 @@ void main() {
 
     expect(provider.persistCalls, 1);
     expect(provider.addToBookshelfCalls, 0);
+    expect(provider.discardCalls, 1);
     expect(popCalls, 1);
   });
 
@@ -114,6 +121,28 @@ void main() {
 
     expect(provider.persistCalls, 1);
     expect(provider.addToBookshelfCalls, 1);
+    expect(provider.discardCalls, 0);
+    expect(popCalls, 1);
+  });
+
+  testWidgets('需要 prompt 且選擇不加入時會移除未保留 storage', (tester) async {
+    final provider = _ExitFlowProbe(_makeBook())..promptAddToBookshelf = true;
+    final coordinator = ReaderPageExitCoordinator(
+      promptAddToBookshelf: (_, __) async => false,
+    );
+    final context = await _pumpContext(tester);
+    var popCalls = 0;
+
+    await coordinator.handleExitIntent(
+      context: context,
+      provider: provider,
+      isDrawerOpen: () => false,
+      popNavigator: () => popCalls++,
+    );
+
+    expect(provider.persistCalls, 1);
+    expect(provider.addToBookshelfCalls, 0);
+    expect(provider.discardCalls, 1);
     expect(popCalls, 1);
   });
 

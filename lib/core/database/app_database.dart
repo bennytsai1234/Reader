@@ -102,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase._internal() : super(_openConnection());
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -146,6 +146,13 @@ class AppDatabase extends _$AppDatabase {
         );
         await m.createTable(readerChapterContents);
       }
+      if (from < 14) {
+        await _addBookStorageColumnsIfMissing();
+        await _migrateReaderChapterContentsToStorageSchema(m);
+      }
+      if (from < 15) {
+        await _addReaderChapterContentStatusColumnsIfMissing();
+      }
     },
     beforeOpen: (details) async {
       if (!details.wasCreated) {
@@ -154,9 +161,87 @@ class AppDatabase extends _$AppDatabase {
         for (final table in allTables) {
           await m.createTable(table);
         }
+        await _addBookStorageColumnsIfMissing();
+        await _migrateReaderChapterContentsToStorageSchema(m);
+        await _addReaderChapterContentStatusColumnsIfMissing();
       }
     },
   );
+
+  Future<void> _addBookStorageColumnsIfMissing() async {
+    await _addColumnIfMissing(
+      tableName: 'books',
+      columnName: 'coverLocalPath',
+      columnSql: 'ALTER TABLE books ADD COLUMN "coverLocalPath" TEXT',
+    );
+    await _addColumnIfMissing(
+      tableName: 'books',
+      columnName: 'customCoverLocalPath',
+      columnSql: 'ALTER TABLE books ADD COLUMN "customCoverLocalPath" TEXT',
+    );
+  }
+
+  Future<void> _migrateReaderChapterContentsToStorageSchema(
+    Migrator migrator,
+  ) async {
+    final hasContentKey = await _columnExists(
+      'reader_chapter_contents',
+      'contentKey',
+    );
+    if (hasContentKey) return;
+
+    final hasLegacyCacheKey = await _columnExists(
+      'reader_chapter_contents',
+      'cacheKey',
+    );
+    if (!hasLegacyCacheKey) {
+      await migrator.createTable(readerChapterContents);
+      return;
+    }
+
+    await customStatement(
+      'ALTER TABLE reader_chapter_contents RENAME TO reader_chapter_contents_old',
+    );
+    await migrator.createTable(readerChapterContents);
+    await customStatement('''
+      INSERT OR REPLACE INTO reader_chapter_contents
+        ("contentKey", origin, "bookUrl", "chapterUrl", "chapterIndex", content, status, "failureMessage", "updatedAt")
+      SELECT
+        "cacheKey", origin, "bookUrl", "chapterUrl", "chapterIndex", content, 1, NULL, "updatedAt"
+      FROM reader_chapter_contents_old
+      WHERE content IS NOT NULL AND content != ''
+    ''');
+    await customStatement('DROP TABLE IF EXISTS reader_chapter_contents_old');
+  }
+
+  Future<void> _addReaderChapterContentStatusColumnsIfMissing() async {
+    await _addColumnIfMissing(
+      tableName: 'reader_chapter_contents',
+      columnName: 'status',
+      columnSql:
+          'ALTER TABLE reader_chapter_contents ADD COLUMN "status" INTEGER NOT NULL DEFAULT 1',
+    );
+    await _addColumnIfMissing(
+      tableName: 'reader_chapter_contents',
+      columnName: 'failureMessage',
+      columnSql:
+          'ALTER TABLE reader_chapter_contents ADD COLUMN "failureMessage" TEXT',
+    );
+  }
+
+  Future<void> _addColumnIfMissing({
+    required String tableName,
+    required String columnName,
+    required String columnSql,
+  }) async {
+    if (await _columnExists(tableName, columnName)) return;
+    await customStatement(columnSql);
+  }
+
+  Future<bool> _columnExists(String tableName, String columnName) async {
+    final rows = await customSelect('PRAGMA table_info($tableName)').get();
+    return rows.any((row) => row.data['name'] == columnName);
+  }
 
   static Future<String> getDatabasePath() async {
     final appSupportDir = await getApplicationSupportDirectory();

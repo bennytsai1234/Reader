@@ -15,7 +15,9 @@ extension BookLogic on Book {
     kind = other.kind;
     customTag = other.customTag;
     coverUrl = other.coverUrl;
+    coverLocalPath = other.coverLocalPath;
     customCoverUrl = other.customCoverUrl;
+    customCoverLocalPath = other.customCoverLocalPath;
     intro = other.intro;
     customIntro = other.customIntro;
     charset = other.charset;
@@ -96,6 +98,7 @@ extension BookLogic on Book {
       customTag: customTag,
       canUpdate: canUpdate,
       readConfig: readConfig,
+      isInBookshelf: isInBookshelf,
     );
   }
 

@@ -26,7 +26,6 @@ typedef ReaderChapterContentSeeder =
     void Function(int chapterIndex, String content);
 typedef ReaderChapterContentSaver =
     Future<void> Function(BookChapter chapter, String content);
-typedef ReaderChapterContentPromoter = Future<void> Function();
 
 class ReaderSessionFacade {
   const ReaderSessionFacade();
@@ -76,7 +75,6 @@ class ReaderSessionFacade {
     required ReaderProgressStore progressStore,
     required BookDao bookDao,
     required ChapterDao chapterDao,
-    ReaderChapterContentPromoter? promoteChapterContent,
     void Function()? onCompleted,
   }) async {
     progressStore.updateBookProgress(
@@ -91,7 +89,6 @@ class ReaderSessionFacade {
     if (chapters.isNotEmpty) {
       await chapterDao.insertChapters(chapters);
     }
-    await promoteChapterContent?.call();
     AppEventBus().fire(AppEventBus.upBookshelf, data: book.bookUrl);
     onCompleted?.call();
   }
@@ -123,7 +120,6 @@ class ReaderSessionFacade {
     required ReaderCharOffsetJump jumpToChapterCharOffset,
     ReaderCommandReason reason = ReaderCommandReason.system,
   }) async {
-    final oldBookUrl = book.bookUrl;
     final nextChapters = List<BookChapter>.from(resolution.chapters);
     book.overwriteFrom(resolution.migratedBook);
     setSource(resolution.source);
@@ -145,10 +141,6 @@ class ReaderSessionFacade {
     }
 
     if (book.isInBookshelf) {
-      if (oldBookUrl != book.bookUrl) {
-        await bookDao.deleteByUrl(oldBookUrl);
-        await chapterDao.deleteByBook(oldBookUrl);
-      }
       await chapterDao.deleteByBook(book.bookUrl);
       await bookDao.upsert(book);
       await chapterDao.insertChapters(nextChapters);

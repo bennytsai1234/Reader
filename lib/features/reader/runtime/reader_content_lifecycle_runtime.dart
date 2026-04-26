@@ -9,7 +9,7 @@ import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
 import 'package:inkpage_reader/features/reader/engine/line_layout.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_loader.dart';
-import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_cache_repository.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
@@ -51,6 +51,11 @@ class ReaderContentLifecycleRuntime {
 
   void clearChapterFailure(int chapterIndex) {
     _chapterFailureMessages.remove(chapterIndex);
+  }
+
+  void clearChapterContentState(int chapterIndex) {
+    _chapterFailureMessages.remove(chapterIndex);
+    _contentManager?.clearChapterContent(chapterIndex);
   }
 
   bool hasCachedContent(int chapterIndex) {
@@ -132,10 +137,10 @@ class ReaderContentLifecycleRuntime {
     _contentManager?.dispose();
     _chapterFailureMessages.clear();
     _lastVisibleScrollChapter = -1;
-    _backgroundContentPreloadEnabled =
-        book.origin != 'local' && book.isInBookshelf;
+    final isNetworkBook = book.origin != 'local';
+    _backgroundContentPreloadEnabled = true;
     _scrollPreloadRadius =
-        book.origin != 'local' && book.isInBookshelf
+        isNetworkBook
             ? bookshelfNetworkScrollPreloadRadius
             : scrollPreloadRadius;
     chapterPagesCache.clear();
@@ -143,10 +148,10 @@ class ReaderContentLifecycleRuntime {
     resetPresentationState();
     _chapterContentLoader = ReaderChapterContentLoader(
       book: book,
-      cacheRepository:
+      contentStore:
           chapterContentDao == null
               ? null
-              : ReaderChapterContentCacheRepository(
+              : ReaderChapterContentStore(
                 chapterDao: chapterDao,
                 contentDao: chapterContentDao,
               ),
@@ -163,9 +168,7 @@ class ReaderContentLifecycleRuntime {
       chapters: chapters,
     );
     _contentManager!.setProgressivePaginationEnabled(false);
-    _contentManager!.setPreloadConcurrency(
-      book.origin != 'local' && book.isInBookshelf ? 2 : 1,
-    );
+    _contentManager!.setPreloadConcurrency(isNetworkBook ? 2 : 1);
     _chapterReadySub = _contentManager!.onChapterReady.listen(onChapterReady);
   }
 

@@ -3,8 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:inkpage_reader/core/services/download_service.dart';
 import 'package:inkpage_reader/core/models/download_task.dart';
 
-/// DownloadManagerPage - 全域離線快取管理頁面
-/// (原 Android ui/book/cache/CacheActivity.kt)
+/// DownloadManagerPage - 全域背景下載管理頁面
 class DownloadManagerPage extends StatelessWidget {
   const DownloadManagerPage({super.key});
 
@@ -15,7 +14,7 @@ class DownloadManagerPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('離線快取佇列'),
+        title: const Text('背景下載佇列'),
         actions: [
           IconButton(
             icon: Icon(
@@ -67,7 +66,7 @@ class DownloadManagerPage extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '暫無離線快取任務',
+            '暫無背景下載任務',
             style: TextStyle(
               color: Theme.of(
                 context,
@@ -112,9 +111,9 @@ class DownloadManagerPage extends StatelessWidget {
             children: [
               Text(
                 isDone
-                    ? '快取完成'
+                    ? '下載完成'
                     : (isError
-                        ? '快取失敗'
+                        ? '下載失敗'
                         : '${task.successCount} / ${task.totalCount} 章'),
                 style: TextStyle(
                   fontSize: 11,
@@ -123,7 +122,7 @@ class DownloadManagerPage extends StatelessWidget {
               ),
               if (isRunning)
                 const Text(
-                  '正在快取...',
+                  '正在下載...',
                   style: TextStyle(fontSize: 11, color: Colors.blue),
                 ),
             ],
