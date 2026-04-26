@@ -6,8 +6,8 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/download_task.dart';
 import 'package:inkpage_reader/core/engine/app_event_bus.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
-import 'package:inkpage_reader/core/services/chapter_content_preparation_pipeline.dart';
 import 'package:inkpage_reader/core/services/reader_chapter_content_store.dart';
+import 'package:inkpage_reader/core/services/reader_chapter_content_storage.dart';
 
 bool downloadTaskCountsPreStoredChapters({
   required DownloadTask task,
@@ -70,7 +70,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         chapterDao: chapterDao,
         contentDao: chapterContentDao,
       );
-      final pipeline = ChapterContentPreparationPipeline(
+      final contentStorage = ReaderChapterContentStorage.withMaterializer(
         book: book,
         contentStore: contentStore,
         sourceDao: sourceDao,
@@ -105,7 +105,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
 
         poolCount++;
         _downloadChapter(
-          pipeline: pipeline,
+          contentStorage: contentStorage,
           source: source,
           chapter: chapter,
         ).then((success) {
@@ -152,11 +152,11 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
   static const int _maxRetries = 3;
 
   Future<bool> _downloadChapter({
-    required ChapterContentPreparationPipeline pipeline,
+    required ReaderChapterContentStorage contentStorage,
     required BookSource? source,
     required BookChapter chapter,
   }) async {
-    final result = await pipeline.prepare(
+    final result = await contentStorage.read(
       chapterIndex: chapter.index,
       chapter: chapter,
       sourceOverride: source,

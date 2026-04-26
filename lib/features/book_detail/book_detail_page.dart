@@ -11,7 +11,6 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/export_book_service.dart';
 import 'package:inkpage_reader/features/source_manager/source_editor_page.dart';
 import 'package:inkpage_reader/features/source_manager/source_debug_page.dart';
-import 'package:inkpage_reader/features/cache_manager/download_manager_page.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
 import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
@@ -87,8 +86,6 @@ class BookDetailPage extends StatelessWidget {
                             onEdit:
                                 () =>
                                     _showEditBookInfoDialog(context, provider),
-                            onDownloadChapters:
-                                () => _showDownloadSheet(context, provider),
                             showSourceOptions: _showSourceOptions,
                             navigateToReader: _navigateToReader,
                             showChangeSource: _showChangeSourceDialog,
@@ -286,82 +283,6 @@ class BookDetailPage extends StatelessWidget {
         isScrollControlled: true,
         builder: (ctx) => ChangeSourceSheet(book: p.book, detailProvider: p),
       );
-
-  void _showDownloadSheet(BuildContext context, BookDetailProvider provider) {
-    if (!provider.supportsBackgroundDownload) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('這本書已在裝置內，不需要背景下載')));
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      builder:
-          (sheetContext) => SafeArea(
-            child: Wrap(
-              children: [
-                const ListTile(
-                  title: Text('背景下載章節'),
-                  subtitle: Text('章節會直接寫入本地書籍儲存，不需要額外搬移'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.download_for_offline_outlined),
-                  title: const Text('下載全部章節'),
-                  subtitle: Text('共 ${provider.totalChapterCount} 章'),
-                  onTap: () async {
-                    Navigator.pop(sheetContext);
-                    final result = await provider.queueDownloadAll();
-                    if (!context.mounted) return;
-                    _showDownloadQueuedSnackBar(context, result.message);
-                  },
-                ),
-                if (provider.book.chapterIndex < provider.totalChapterCount)
-                  ListTile(
-                    leading: const Icon(Icons.playlist_play_rounded),
-                    title: const Text('從目前進度往後下載'),
-                    subtitle: Text('從第 ${provider.book.chapterIndex + 1} 章開始'),
-                    onTap: () async {
-                      Navigator.pop(sheetContext);
-                      final result = await provider.queueDownloadFromCurrent();
-                      if (!context.mounted) return;
-                      _showDownloadQueuedSnackBar(context, result.message);
-                    },
-                  ),
-                ListTile(
-                  leading: const Icon(Icons.offline_pin_outlined),
-                  title: const Text('只下載缺少章節'),
-                  subtitle: const Text('跳過已經存在本機的章節內容'),
-                  onTap: () async {
-                    Navigator.pop(sheetContext);
-                    final result = await provider.queueDownloadMissing();
-                    if (!context.mounted) return;
-                    _showDownloadQueuedSnackBar(context, result.message);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.manage_history_outlined),
-                  title: const Text('查看背景下載佇列'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DownloadManagerPage(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-    );
-  }
-
-  void _showDownloadQueuedSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
 
   void _showSearchTocDialog(BuildContext context, BookDetailProvider p) =>
       showDialog(

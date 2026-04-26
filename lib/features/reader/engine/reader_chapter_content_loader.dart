@@ -11,9 +11,9 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/replace_rule.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
-import 'package:inkpage_reader/features/reader/engine/chapter_content_preparation_pipeline.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_storage.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
 
 class ReaderChapterContentLoader {
@@ -27,18 +27,20 @@ class ReaderChapterContentLoader {
     required this.getSource,
     required this.setSource,
     this.resolveNextChapterUrl,
-    ChapterContentPreparationPipeline? preparationPipeline,
-  }) : _preparationPipeline =
-           preparationPipeline ??
-           ChapterContentPreparationPipeline(
-             book: book,
-             contentStore: contentStore,
-             sourceDao: sourceDao,
-             service: service,
-             getSource: getSource,
-             setSource: setSource,
-             resolveNextChapterUrl: resolveNextChapterUrl,
-           );
+    ReaderChapterContentStorage? contentStorage,
+  }) : _contentStorage =
+           contentStorage ??
+           (contentStore == null
+               ? null
+               : ReaderChapterContentStorage.withMaterializer(
+                 book: book,
+                 contentStore: contentStore,
+                 sourceDao: sourceDao,
+                 service: service,
+                 getSource: getSource,
+                 setSource: setSource,
+                 resolveNextChapterUrl: resolveNextChapterUrl,
+               ));
 
   final Book book;
   final ReaderChapterContentStore? contentStore;
@@ -47,7 +49,7 @@ class ReaderChapterContentLoader {
   final BookSource? Function() getSource;
   final void Function(BookSource source) setSource;
   final String? Function(int chapterIndex)? resolveNextChapterUrl;
-  final ChapterContentPreparationPipeline _preparationPipeline;
+  final ReaderChapterContentStorage? _contentStorage;
   final ChineseTextConverter _textConverter = const ChineseTextConverter();
 
   List<Map<String, dynamic>>? _cachedRulesJson;
@@ -55,22 +57,18 @@ class ReaderChapterContentLoader {
   final Map<String, String> _convertedTitleCache = <String, String>{};
 
   Future<FetchResult> load(int chapterIndex, BookChapter chapter) async {
-    final prepared = await _preparationPipeline.prepare(
+    final storage = _contentStorage;
+    if (storage == null) {
+      return _failureResult(chapter, '正文 storage 不可用');
+    }
+    final prepared = await storage.read(
       chapterIndex: chapterIndex,
       chapter: chapter,
       saveChapterMetadata: book.origin != 'local',
     );
     final rawContent = prepared.content;
     if (prepared.isFailed || _looksLikeFailureMessage(rawContent)) {
-      final failureTitle = _textConverter.convert(
-        chapter.getDisplayTitle(chineseConvertType: currentChineseConvert()),
-        convertType: currentChineseConvert(),
-      );
-      return FetchResult(
-        content: rawContent,
-        displayTitle: failureTitle,
-        failureMessage: rawContent,
-      );
+      return _failureResult(chapter, rawContent);
     }
     final rulesJson = await _loadRulesJson();
     final chineseConvertType = currentChineseConvert();
@@ -104,7 +102,19 @@ class ReaderChapterContentLoader {
     _cachedRulesJson = null;
     _convertedContentCache.clear();
     _convertedTitleCache.clear();
-    _preparationPipeline.reset();
+    _contentStorage?.reset();
+  }
+
+  FetchResult _failureResult(BookChapter chapter, String message) {
+    final failureTitle = _textConverter.convert(
+      chapter.getDisplayTitle(chineseConvertType: currentChineseConvert()),
+      convertType: currentChineseConvert(),
+    );
+    return FetchResult(
+      content: message,
+      displayTitle: failureTitle,
+      failureMessage: message,
+    );
   }
 
   Future<List<Map<String, dynamic>>> _loadRulesJson() async {

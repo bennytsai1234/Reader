@@ -10,7 +10,6 @@ class BookInfoHeader extends StatelessWidget {
   final BookDetailProvider provider;
   final Function(BuildContext, String) showPhotoView;
   final VoidCallback onEdit;
-  final VoidCallback onDownloadChapters;
   final Function(BuildContext, Book) showSourceOptions;
   final void Function(BuildContext, Book, ReaderOpenTarget, List<BookChapter>)
   navigateToReader;
@@ -22,7 +21,6 @@ class BookInfoHeader extends StatelessWidget {
     required this.provider,
     required this.showPhotoView,
     required this.onEdit,
-    required this.onDownloadChapters,
     required this.showSourceOptions,
     required this.navigateToReader,
     required this.showChangeSource,
@@ -148,18 +146,6 @@ class BookInfoHeader extends StatelessWidget {
                             style: TextStyle(fontSize: 12),
                           ),
                         ),
-                        if (provider.supportsBackgroundDownload)
-                          TextButton.icon(
-                            onPressed: onDownloadChapters,
-                            icon: const Icon(
-                              Icons.download_for_offline_outlined,
-                              size: 16,
-                            ),
-                            label: const Text(
-                              '背景下載',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
                       ],
                     ),
                   ),

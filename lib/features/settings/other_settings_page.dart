@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:inkpage_reader/features/cache_manager/storage_management_page.dart';
 import 'package:inkpage_reader/features/reader/provider/reader_prefs_repository.dart';
 import 'package:provider/provider.dart';
 import 'settings_provider.dart';
@@ -44,21 +43,6 @@ class _OtherSettingsPageState extends State<OtherSettingsPage> {
                 subtitle: Text(_getLanguageName(settings.locale)),
                 leading: const Icon(Icons.language),
                 onTap: () => _showLanguageDialog(context, settings),
-              ),
-              const Divider(),
-
-              _buildSectionTitle('存儲與數據'),
-              ListTile(
-                title: const Text('存儲與下載'),
-                subtitle: const Text('管理章節下載任務與本地空間'),
-                leading: const Icon(Icons.storage_outlined),
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const StorageManagementPage(),
-                      ),
-                    ),
               ),
               const Divider(),
 

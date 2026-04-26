@@ -68,7 +68,6 @@ void main() {
               provider: provider,
               showPhotoView: (_, __) {},
               onEdit: () {},
-              onDownloadChapters: () {},
               showSourceOptions: (_, __) {},
               navigateToReader: (_, __, ___, ____) {},
               showChangeSource: (_, __) {},
@@ -80,7 +79,7 @@ void main() {
 
       expect(find.widgetWithText(FilledButton, '開始閱讀'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, '放入書架'), findsOneWidget);
-      expect(find.widgetWithText(TextButton, '背景下載'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, '背景下載'), findsNothing);
       expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
       expect(find.byIcon(Icons.library_add), findsOneWidget);
     },
@@ -110,7 +109,6 @@ void main() {
               provider: provider,
               showPhotoView: (_, __) {},
               onEdit: () {},
-              onDownloadChapters: () {},
               showSourceOptions: (_, __) {},
               navigateToReader: (_, __, ___, ____) {},
               showChangeSource: (_, __) {},
@@ -149,7 +147,6 @@ void main() {
             provider: provider,
             showPhotoView: (_, __) {},
             onEdit: () {},
-            onDownloadChapters: () {},
             showSourceOptions: (_, __) {},
             navigateToReader: (_, __, target, ____) {
               receivedTarget = target;

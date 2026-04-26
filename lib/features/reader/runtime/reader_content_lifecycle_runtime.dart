@@ -6,10 +6,12 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
+import 'package:inkpage_reader/features/reader/engine/chapter_content_scheduler.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
 import 'package:inkpage_reader/features/reader/engine/line_layout.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_loader.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_storage.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
@@ -29,9 +31,9 @@ class ReaderContentLifecycleRuntime {
   Timer? _extendedWindowWarmupTimer;
   Timer? _localAdjacentLoadTimer;
   ReaderChapterContentLoader? _chapterContentLoader;
+  ChapterContentScheduler? _chapterContentScheduler;
   int _scrollPreloadRadius = scrollPreloadRadius;
   int _lastVisibleScrollChapter = -1;
-  bool _backgroundContentPreloadEnabled = false;
   final Map<int, String> _chapterFailureMessages = <int, String>{};
 
   bool get hasContentManager => _contentManager != null;
@@ -134,11 +136,11 @@ class ReaderContentLifecycleRuntime {
     _extendedWindowWarmupTimer?.cancel();
     _localAdjacentLoadTimer?.cancel();
     _chapterContentLoader?.resetProcessingContext();
+    _chapterContentScheduler?.dispose();
     _contentManager?.dispose();
     _chapterFailureMessages.clear();
     _lastVisibleScrollChapter = -1;
     final isNetworkBook = book.origin != 'local';
-    _backgroundContentPreloadEnabled = true;
     _scrollPreloadRadius =
         isNetworkBook
             ? bookshelfNetworkScrollPreloadRadius
@@ -146,15 +148,29 @@ class ReaderContentLifecycleRuntime {
     chapterPagesCache.clear();
     setSlidePages(const <TextPage>[]);
     resetPresentationState();
+    final contentStore =
+        chapterContentDao == null
+            ? null
+            : ReaderChapterContentStore(
+              chapterDao: chapterDao,
+              contentDao: chapterContentDao,
+            );
+    final contentStorage =
+        contentStore == null
+            ? null
+            : ReaderChapterContentStorage.withMaterializer(
+              book: book,
+              contentStore: contentStore,
+              sourceDao: sourceDao,
+              service: service,
+              getSource: getSource,
+              setSource: setSource,
+              resolveNextChapterUrl: resolveNextChapterUrl,
+            );
     _chapterContentLoader = ReaderChapterContentLoader(
       book: book,
-      contentStore:
-          chapterContentDao == null
-              ? null
-              : ReaderChapterContentStore(
-                chapterDao: chapterDao,
-                contentDao: chapterContentDao,
-              ),
+      contentStore: contentStore,
+      contentStorage: contentStorage,
       replaceDao: replaceDao,
       sourceDao: sourceDao,
       service: service,
@@ -163,6 +179,18 @@ class ReaderContentLifecycleRuntime {
       setSource: setSource,
       resolveNextChapterUrl: resolveNextChapterUrl,
     );
+    _chapterContentScheduler =
+        contentStorage == null
+            ? null
+            : ChapterContentScheduler(
+              chapters: chapters,
+              readContent:
+                  (chapterIndex, chapter) => contentStorage.read(
+                    chapterIndex: chapterIndex,
+                    chapter: chapter,
+                    saveChapterMetadata: book.origin != 'local',
+                  ),
+            );
     _contentManager = ChapterContentManager(
       fetchFn: (index) => _fetchChapterData(index, chapters: chapters),
       chapters: chapters,
@@ -182,12 +210,14 @@ class ReaderContentLifecycleRuntime {
     _extendedWindowWarmupTimer?.cancel();
     _localAdjacentLoadTimer?.cancel();
     _chapterContentLoader?.resetProcessingContext();
+    _chapterContentScheduler?.dispose();
     chapterPagesCache.clear();
     setSlidePages(const <TextPage>[]);
     resetPresentationState();
     _contentManager?.dispose();
     _contentManager = null;
     _chapterContentLoader = null;
+    _chapterContentScheduler = null;
     _chapterFailureMessages.clear();
     _lastVisibleScrollChapter = -1;
   }
@@ -287,7 +317,7 @@ class ReaderContentLifecycleRuntime {
       refreshChapterRuntime: refreshChapterRuntime,
       retainedChapterIndexes: retainedChapterIndexes,
     );
-    _startBackgroundContentPreload(centerIndex);
+    _startStorageContentPreload(centerIndex);
   }
 
   void scheduleDeferredWindowWarmup({
@@ -399,7 +429,7 @@ class ReaderContentLifecycleRuntime {
     Set<int> retainedChapterIndexes = const <int>{},
   }) {
     if (!hasContentManager || !isScrollMode) return;
-    _startBackgroundContentPreload(visibleChapter);
+    _startStorageContentPreload(visibleChapter);
     ReaderPerfTrace.mark(
       'scroll preload update center=$visibleChapter '
       '(cached: ${chapterPagesCache[visibleChapter]?.isNotEmpty == true}, '
@@ -505,9 +535,8 @@ class ReaderContentLifecycleRuntime {
     }
   }
 
-  void _startBackgroundContentPreload(int startIndex) {
-    if (!_backgroundContentPreloadEnabled || !hasContentManager) return;
-    _contentManager!.startBackgroundContentPreload(startIndex: startIndex);
+  void _startStorageContentPreload(int startIndex) {
+    _chapterContentScheduler?.start(centerChapterIndex: startIndex);
   }
 
   void setScrollInteractionActive({
