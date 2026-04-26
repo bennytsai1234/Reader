@@ -12,7 +12,6 @@ import 'package:inkpage_reader/core/services/bookshelf_exchange_service.dart';
 
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
 class BookSourceService {
-
   /// 獲取書籍詳情 (對標 getBookInfoAwait)
   Future<Book> getBookInfo(BookSource source, Book book) async {
     return await WebBook.getBookInfoAwait(source, book);
@@ -85,7 +84,11 @@ class BookSourceService {
   }
 
   /// 精確搜尋
-  Future<List<SearchBook>> preciseSearch(BookSource source, String name, String author) async {
+  Future<List<SearchBook>> preciseSearch(
+    BookSource source,
+    String name,
+    String author,
+  ) async {
     return await WebBook.searchBookAwait(
       source,
       name,
@@ -97,15 +100,18 @@ class BookSourceService {
   Future<List<Book>> importBookshelf(String url) async {
     final result = await BookshelfExchangeService().importFromUrl(url);
     if (result.books <= 0) return [];
-    return getIt<BookDao>().getAllInBookshelf();
+    return getIt<BookDao>().getInBookshelf();
   }
 
   /// 儲存（新增或更新）書源
-  Future<void> saveSource(BookSource source) => getIt<BookSourceDao>().upsert(source);
+  Future<void> saveSource(BookSource source) =>
+      getIt<BookSourceDao>().upsert(source);
 
   /// 依 URL 取得書源
-  Future<BookSource?> getSourceByUrl(String url) => getIt<BookSourceDao>().getByUrl(url);
+  Future<BookSource?> getSourceByUrl(String url) =>
+      getIt<BookSourceDao>().getByUrl(url);
 
   /// 取得書籍所有章節（用於不帶完整 provider 的頁面）
-  Future<List<BookChapter>> getBookChapters(String bookUrl) => getIt<ChapterDao>().getChapters(bookUrl);
+  Future<List<BookChapter>> getBookChapters(String bookUrl) =>
+      getIt<ChapterDao>().getByBook(bookUrl);
 }

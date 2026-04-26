@@ -156,7 +156,7 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
   }
 
   Future<void> deleteGroup(int id) async {
-    final allBooks = await bookDao.getAllInBookshelf();
+    final allBooks = await bookDao.getInBookshelf();
     for (final book in allBooks) {
       if (book.hasGroup(id)) {
         book.removeGroup(id);

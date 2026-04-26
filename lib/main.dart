@@ -23,7 +23,7 @@ void callbackDispatcher() {
       await configureDependencies();
 
       final bookDao = getIt<BookDao>();
-      final books = await bookDao.getAllInBookshelf();
+      final books = await bookDao.getInBookshelf();
 
       getIt<Logger>().i(
         'Background Task: Checking updates for ${books.length} books',

@@ -76,10 +76,6 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     )).get();
   }
 
-  Future<List<Book>> getAllInBookshelf() => getInBookshelf();
-
-  Future<List<Book>> getBooksInGroup(int groupId) => getInGroup(groupId);
-
   Future<void> updateProgress(
     String bookUrl,
     int chapterIndex,

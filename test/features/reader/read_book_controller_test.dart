@@ -63,7 +63,7 @@ class _FakeChapterDao implements ChapterDao {
   static final List<List<BookChapter>> insertedBatches = [];
 
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) async =>
+  Future<List<BookChapter>> getByBook(String bookUrl) async =>
       _fakeChaptersFromDao;
 
   @override
@@ -879,6 +879,44 @@ void main() {
       controller.dispose();
     });
 
+    test('slide 模式目錄重選目前章會回到章首', () async {
+      _fakeChaptersFromDao = [
+        BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+        BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+      ];
+      final controller = ReadBookController(
+        book: _makeBook(),
+        initialChapters: _fakeChaptersFromDao,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.slide;
+      controller.chapterPagesCache[0] = _buildPages(0, [0], title: 'c0');
+      controller.chapterPagesCache[1] = _buildPages(1, [0, 8, 16], title: 'c1');
+      controller.refreshChapterRuntime(0);
+      controller.refreshChapterRuntime(1);
+      controller.slidePages = [
+        ...controller.chapterPagesCache[0]!,
+        ...controller.chapterPagesCache[1]!,
+      ];
+      controller.currentChapterIndex = 1;
+      controller.visibleChapterIndex = 1;
+      controller.currentPageIndex = 2;
+      controller.updateCommittedLocationForAuxiliary(
+        const ReaderLocation(chapterIndex: 1, charOffset: 8),
+      );
+
+      await controller.jumpToChapter(1);
+
+      expect(controller.currentPageIndex, 1);
+      expect(controller.consumePendingSlidePageIndex(), 1);
+      expect(
+        controller.committedLocation,
+        const ReaderLocation(chapterIndex: 1, charOffset: 0),
+      );
+      controller.dispose();
+    });
+
     test(
       'failure chapter load 會進入 transient viewport state，不污染 committed/durable location',
       () async {
@@ -1559,6 +1597,83 @@ void main() {
 
       expect(controller.hasPendingChapterNavigation, isFalse);
       expect(controller.pendingChapterNavigationIndex, isNull);
+      controller.dispose();
+    });
+
+    test('chapter navigation 會接管正在 loading 的目標章節', () async {
+      final controller = _PendingNavigationReaderProvider(
+        book: _makeBook(),
+        initialChapters: [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+          BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+          BookChapter(title: 'c2', index: 2, bookUrl: 'http://test.com/book'),
+        ],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      controller.currentChapterIndex = 0;
+      controller.visibleChapterIndex = 0;
+      controller.loadingChapters.add(2);
+
+      final jump = controller.jumpToChapter(2);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.loadRequests, hasLength(1));
+      expect(controller.loadRequests.single.chapterIndex, 2);
+      expect(controller.pendingChapterNavigationIndex, 2);
+
+      controller.loadCompleter!.complete();
+      await jump;
+
+      expect(controller.pendingChapterNavigationIndex, isNull);
+      controller.dispose();
+    });
+
+    test('底部上一章下一章與滑桿會以實際顯示章節為基準', () async {
+      final controller = _PendingNavigationReaderProvider(
+        book: _makeBook(),
+        initialChapters: [
+          BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
+          BookChapter(title: 'c1', index: 1, bookUrl: 'http://test.com/book'),
+          BookChapter(title: 'c2', index: 2, bookUrl: 'http://test.com/book'),
+          BookChapter(title: 'c3', index: 3, bookUrl: 'http://test.com/book'),
+        ],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      controller.pageTurnMode = PageAnim.slide;
+      controller.slidePages = [
+        ..._buildPages(0, [0], title: 'c0'),
+        ..._buildPages(1, [0], title: 'c1'),
+        ..._buildPages(2, [0], title: 'c2'),
+        ..._buildPages(3, [0], title: 'c3'),
+      ];
+      controller.currentChapterIndex = 0;
+      controller.visibleChapterIndex = 0;
+      controller.currentPageIndex = 2;
+
+      expect(controller.chapterNavigationIndex, 2);
+      controller.onScrubStart();
+      expect(controller.scrubIndex, 2);
+
+      final nextJump = controller.nextChapter();
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.loadRequests.single.chapterIndex, 3);
+      controller.loadCompleter!.complete();
+      await nextJump;
+
+      controller.loadRequests.clear();
+      controller.loadCompleter = Completer<void>();
+      controller.currentChapterIndex = 0;
+      controller.visibleChapterIndex = 0;
+      controller.currentPageIndex = 2;
+
+      final prevJump = controller.prevChapter(fromEnd: false);
+      await Future<void>.delayed(Duration.zero);
+      expect(controller.loadRequests.single.chapterIndex, 1);
+      expect(controller.loadRequests.single.fromEnd, isFalse);
+      controller.loadCompleter!.complete();
+      await prevJump;
+
       controller.dispose();
     });
 

@@ -19,15 +19,19 @@ mixin ReaderChapterNavigationMixin
   int? get pendingChapterNavigationIndex => _pendingChapterNavigationIndex;
   bool get hasPendingChapterNavigation =>
       _pendingChapterNavigationIndex != null;
+
+  int get chapterNavigationIndex => currentChapterIndex;
+
   bool get canNavigateToPrevChapter =>
-      currentChapterIndex > 0 && !hasPendingChapterNavigation;
+      chapterNavigationIndex > 0 && !hasPendingChapterNavigation;
   bool get canNavigateToNextChapter =>
-      currentChapterIndex < chapters.length - 1 && !hasPendingChapterNavigation;
+      chapterNavigationIndex < chapters.length - 1 &&
+      !hasPendingChapterNavigation;
 
   void onScrubStart() {
     if (hasPendingChapterNavigation) return;
     isScrubbing = true;
-    scrubIndex = currentChapterIndex;
+    scrubIndex = chapterNavigationIndex;
     notifyListeners();
   }
 
@@ -70,11 +74,9 @@ mixin ReaderChapterNavigationMixin
     bool fromEnd = false,
   }) async {
     if (targetIndex < 0 || targetIndex >= chapters.length) return;
-    if (_pendingChapterNavigationIndex == targetIndex ||
-        loadingChapters.contains(targetIndex)) {
+    if (_pendingChapterNavigationIndex == targetIndex) {
       return;
     }
-    if (targetIndex == currentChapterIndex && !fromEnd) return;
 
     isScrubbing = false;
     _setPendingChapterNavigation(targetIndex);
@@ -101,7 +103,7 @@ mixin ReaderChapterNavigationMixin
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
   }) async {
     await _navigateToChapter(
-      targetIndex: currentChapterIndex + 1,
+      targetIndex: chapterNavigationIndex + 1,
       reason: reason,
     );
   }
@@ -112,7 +114,7 @@ mixin ReaderChapterNavigationMixin
     ReaderCommandReason reason = ReaderCommandReason.chapterChange,
   }) async {
     await _navigateToChapter(
-      targetIndex: currentChapterIndex - 1,
+      targetIndex: chapterNavigationIndex - 1,
       fromEnd: fromEnd,
       reason: reason,
     );

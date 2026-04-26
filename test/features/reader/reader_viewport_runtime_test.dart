@@ -33,7 +33,7 @@ class _FakeBookDao implements BookDao {
 
 class _FakeChapterDao implements ChapterDao {
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) async => [];
+  Future<List<BookChapter>> getByBook(String bookUrl) async => [];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;

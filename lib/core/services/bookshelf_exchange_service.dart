@@ -35,7 +35,7 @@ class BookshelfExchangeService {
     List<Book>? books,
     String fileName = 'bookshelf-export.inkpage.json',
   }) async {
-    final shelfBooks = books ?? await _bookDao.getAllInBookshelf();
+    final shelfBooks = books ?? await _bookDao.getInBookshelf();
     final chapters = <BookChapter>[];
     final sourcesByUrl = <String, BookSource>{};
 

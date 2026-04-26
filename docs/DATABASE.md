@@ -7,7 +7,7 @@
 - 入口：`lib/core/database/app_database.dart`
 - 資料庫類別：`AppDatabase`
 - 連線模式：singleton
-- schema version：`8`
+- schema version：`1`
 - 檔案路徑：`<ApplicationSupportDirectory>/databases/inkpage_reader.db`
 
 ## 存取原則
@@ -27,6 +27,7 @@ flutter pub run build_runner build --delete-conflicting-outputs
 
 - `books`
 - `chapters`
+- `reader_chapter_contents`
 - `bookmarks`
 - `read_records`
 - `download_tasks`
@@ -35,7 +36,8 @@ flutter pub run build_runner build --delete-conflicting-outputs
 這組資料負責：
 
 - 書架中的書籍狀態
-- 章節快取
+- 章節目錄
+- 已儲存正文
 - 閱讀進度
 - 書籤
 - 離線下載任務
@@ -76,20 +78,8 @@ flutter pub run build_runner build --delete-conflicting-outputs
 
 ## migration 重點
 
-`AppDatabase.migration` 目前有兩個明確歷史節點：
-
-- `< 7`
-  - 移除舊 RSS 相關表：
-    - `rss_articles`
-    - `rss_sources`
-    - `rss_stars`
-    - `rss_read_records`
-- `< 8`
-  - `download_tasks` 新增：
-    - `startChapterIndex`
-    - `endChapterIndex`
-
-另外，`beforeOpen` 會補做一次保底建表，避免舊資料庫版本在表缺失時直接壞掉。
+目前以全新 app schema 為準，只保留 `onCreate: createAll()`。
+不保留舊資料庫升級路徑，也不在 `beforeOpen` 補做舊表或舊欄位修補。
 
 ## 與閱讀器直接相關的資料欄位
 
@@ -98,16 +88,16 @@ flutter pub run build_runner build --delete-conflicting-outputs
 閱讀器最核心的持久化欄位在 `books`：
 
 - `durChapterTitle`
-- `durChapterIndex`
-- `durChapterPos`
+- `chapterIndex`
+- `charOffset`
 - `durChapterTime`
 - `readConfig`
 - `isInBookshelf`
 
 其中：
 
-- `durChapterIndex`
-- `durChapterPos`
+- `chapterIndex`
+- `charOffset`
 
 是閱讀器 durable progress 的最主要資料落點。
 
@@ -118,7 +108,15 @@ flutter pub run build_runner build --delete-conflicting-outputs
 - 章節標題
 - 章節 URL
 - 章節索引
-- 已抓取正文內容
+
+### `reader_chapter_contents`
+
+`reader_chapter_contents` 保存：
+
+- 正文 storage key
+- 書籍 URL / 章節 URL / 章節索引
+- 已 materialize 的純文字正文
+- ready / failed 狀態與失敗訊息
 
 ### `read_records`
 
@@ -127,7 +125,7 @@ flutter pub run build_runner build --delete-conflicting-outputs
 ## 維護規則
 
 - 不在 UI 層自行拼裝 SQL
-- 不把暫時 migration 計畫寫進文件，只有已存在的 migration 才記錄
+- 目前以全新 app schema 為準，不保留舊資料庫 migration 路徑
 - schema 變更時，同步更新這份文件中的：
   - schema version
   - migration 節點

@@ -48,7 +48,7 @@ lib/
 
 ### `core/database/`
 
-- `AppDatabase`：Drift singleton，schema version `8`
+- `AppDatabase`：Drift singleton，schema version `1`
 - DAO：所有資料寫入與查詢的唯一正式入口
 - tables：資料表與 converter 定義
 

@@ -131,11 +131,6 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
       ..where((t) => t.origin.equals(origin) & t.bookUrl.equals(bookUrl))).go();
   }
 
-  Future<void> deleteContentByBook(String origin, String bookUrl) {
-    return (delete(readerChapterContents)
-      ..where((t) => t.origin.equals(origin) & t.bookUrl.equals(bookUrl))).go();
-  }
-
   Future<void> clearAllContent() {
     return delete(readerChapterContents).go();
   }

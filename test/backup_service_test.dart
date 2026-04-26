@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('BackupService manifest', () {
     // BackupService currently derives this from AppDatabase.schemaVersion.
-    const schemaVersion = 11;
+    const schemaVersion = 1;
 
     test('manifest contains expected fields', () {
       final manifest = {
@@ -23,8 +23,8 @@ void main() {
       expect(manifest.containsKey('timestamp'), true);
     });
 
-    test('schemaVersion matches Drift v11', () {
-      expect(schemaVersion, 11);
+    test('schemaVersion matches clean Drift schema', () {
+      expect(schemaVersion, 1);
     });
 
     test('manifest timestamp is a positive integer', () {

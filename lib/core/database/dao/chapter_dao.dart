@@ -43,6 +43,4 @@ class ChapterDao extends DatabaseAccessor<AppDatabase> with _$ChapterDaoMixin {
   Future<void> deleteByBook(String bookUrl) {
     return (delete(chapters)..where((t) => t.bookUrl.equals(bookUrl))).go();
   }
-
-  Future<List<BookChapter>> getChapters(String bookUrl) => getByBook(bookUrl);
 }

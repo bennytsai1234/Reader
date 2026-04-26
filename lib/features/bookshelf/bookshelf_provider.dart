@@ -26,12 +26,12 @@ class BookshelfProvider extends BookshelfProviderBase
     notifyListeners();
     try {
       if (currentGroupId == -1) {
-        books = await bookDao.getAllInBookshelf();
+        books = await bookDao.getInBookshelf();
       } else if (currentGroupId == 0) {
-        books = await bookDao.getBooksInGroup(0);
+        books = await bookDao.getInGroup(0);
       } else {
         // Bitwise logic usually, but here we'll follow simple match for now
-        final all = await bookDao.getAllInBookshelf();
+        final all = await bookDao.getInBookshelf();
         books = all.where((b) => (b.group & currentGroupId) != 0).toList();
       }
     } finally {

@@ -42,21 +42,22 @@ void main() {
       expect(fromJson.chapterIndex, 5);
     });
 
-    test('Book progress coordinate json supports legacy keys', () {
-      final book = Book.fromJson({
-        'bookUrl': 'book',
-        'name': 'Book B',
-        'durChapterIndex': 5,
-        'durChapterPos': 100,
-      });
+    test(
+      'Book progress coordinate json uses chapterIndex and charOffset only',
+      () {
+        final book = Book.fromJson({
+          'bookUrl': 'book',
+          'name': 'Book B',
+          'chapterIndex': 5,
+          'charOffset': 100,
+        });
 
-      expect(book.chapterIndex, 5);
-      expect(book.charOffset, 100);
-      expect(book.toJson().containsKey('durChapterIndex'), isFalse);
-      expect(book.toJson().containsKey('durChapterPos'), isFalse);
-      expect(book.toJson()['chapterIndex'], 5);
-      expect(book.toJson()['charOffset'], 100);
-    });
+        expect(book.chapterIndex, 5);
+        expect(book.charOffset, 100);
+        expect(book.toJson()['chapterIndex'], 5);
+        expect(book.toJson()['charOffset'], 100);
+      },
+    );
 
     test('ReadRecord serialization', () {
       final record = ReadRecord(

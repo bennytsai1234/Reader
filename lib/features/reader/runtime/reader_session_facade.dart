@@ -38,7 +38,7 @@ class ReaderSessionFacade {
     if (chapters.isNotEmpty) {
       return List<BookChapter>.from(chapters);
     }
-    return chapterDao.getChapters(book.bookUrl);
+    return chapterDao.getByBook(book.bookUrl);
   }
 
   Future<BookSource?> loadSource({

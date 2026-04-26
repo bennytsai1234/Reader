@@ -32,8 +32,8 @@ class BookProgress {
     return BookProgress(
       name: json['name'] ?? '',
       author: json['author'] ?? '',
-      chapterIndex: json['chapterIndex'] ?? json['durChapterIndex'] ?? 0,
-      charOffset: json['charOffset'] ?? json['durChapterPos'] ?? 0,
+      chapterIndex: json['chapterIndex'] ?? 0,
+      charOffset: json['charOffset'] ?? 0,
       durChapterTitle: json['durChapterTitle'] ?? '',
       durChapterTime: json['durChapterTime'] ?? 0,
     );

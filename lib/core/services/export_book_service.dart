@@ -16,7 +16,7 @@ class ExportBookService {
     Book book, {
     Function(double progress)? onProgress,
   }) async {
-    final chapters = await _chapterDao.getChapters(book.bookUrl);
+    final chapters = await _chapterDao.getByBook(book.bookUrl);
     if (chapters.isEmpty) return;
 
     final buffer = StringBuffer();

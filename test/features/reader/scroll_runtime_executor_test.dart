@@ -25,8 +25,7 @@ class _FakeBookDao implements BookDao {
 
 class _FakeChapterDao implements ChapterDao {
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) async =>
-      <BookChapter>[];
+  Future<List<BookChapter>> getByBook(String bookUrl) async => <BookChapter>[];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;

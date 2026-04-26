@@ -18,15 +18,17 @@ class _FakeBookDao extends Fake implements BookDao {
   List<Book> shelf = [];
 
   @override
-  Future<List<Book>> getAllInBookshelf() async => shelf;
+  Future<List<Book>> getInBookshelf() async => shelf;
 
   @override
-  Future<List<Book>> getBooksInGroup(int groupId) async =>
+  Future<List<Book>> getInGroup(int groupId) async =>
       shelf.where((b) => (b.group & groupId) != 0).toList();
 
   @override
-  Future<Book?> getByUrl(String url) async =>
-      shelf.cast<Book?>().firstWhere((b) => b?.bookUrl == url, orElse: () => null);
+  Future<Book?> getByUrl(String url) async => shelf.cast<Book?>().firstWhere(
+    (b) => b?.bookUrl == url,
+    orElse: () => null,
+  );
 
   @override
   Future<void> upsert(Book book) async {
@@ -55,7 +57,8 @@ class _FakeGroupDao extends Fake implements BookGroupDao {
   }
 
   @override
-  Future<void> deleteById(int id) async => groups.removeWhere((g) => g.id == id);
+  Future<void> deleteById(int id) async =>
+      groups.removeWhere((g) => g.id == id);
 
   @override
   Future<void> updateOrder(List<BookGroup> ordered) async {
@@ -173,7 +176,13 @@ void main() {
   group('BookshelfProvider - 書架書籍載入', () {
     test('loadBooks 從 DAO 取得書籍', () async {
       fakeBookDao.shelf = [
-        Book(bookUrl: 'http://a.com', name: 'A', author: 'Au', origin: 'o', originName: 'on'),
+        Book(
+          bookUrl: 'http://a.com',
+          name: 'A',
+          author: 'Au',
+          origin: 'o',
+          originName: 'on',
+        ),
       ];
       final p = _makeProvider();
       await Future.delayed(Duration.zero); // 等 constructor async 完成
@@ -182,7 +191,13 @@ void main() {
 
     test('removeFromBookshelf 刪除書籍並重新載入', () async {
       fakeBookDao.shelf = [
-        Book(bookUrl: 'http://a.com', name: 'A', author: 'Au', origin: 'o', originName: 'on'),
+        Book(
+          bookUrl: 'http://a.com',
+          name: 'A',
+          author: 'Au',
+          origin: 'o',
+          originName: 'on',
+        ),
       ];
       final p = _makeProvider();
       await Future.delayed(Duration.zero);
@@ -194,8 +209,20 @@ void main() {
   group('BookshelfProvider - selectAll', () {
     test('selectAll 選取所有書籍，再次呼叫則清空', () async {
       fakeBookDao.shelf = [
-        Book(bookUrl: 'http://a.com', name: 'A', author: 'Au', origin: 'o', originName: 'on'),
-        Book(bookUrl: 'http://b.com', name: 'B', author: 'Au', origin: 'o', originName: 'on'),
+        Book(
+          bookUrl: 'http://a.com',
+          name: 'A',
+          author: 'Au',
+          origin: 'o',
+          originName: 'on',
+        ),
+        Book(
+          bookUrl: 'http://b.com',
+          name: 'B',
+          author: 'Au',
+          origin: 'o',
+          originName: 'on',
+        ),
       ];
       final p = _makeProvider();
       await Future.delayed(Duration.zero);

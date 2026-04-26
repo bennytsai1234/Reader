@@ -24,7 +24,7 @@ class _FakeBookDao extends Fake implements BookDao {
 
 class _FakeChapterDao extends Fake implements ChapterDao {
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) async =>
+  Future<List<BookChapter>> getByBook(String bookUrl) async =>
       const <BookChapter>[];
 }
 

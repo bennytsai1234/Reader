@@ -29,7 +29,7 @@
 
 ### 開書與重進
 
-- 打開書籍時，會依 `Book.durChapterIndex` / `Book.durChapterPos` 還原
+- 打開書籍時，會依 `Book.chapterIndex` / `Book.charOffset` 還原
 - 關閉再進後，應回到相同章節與合理的章內位置
 
 ### `slide` / `scroll`

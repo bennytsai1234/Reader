@@ -465,6 +465,12 @@ class ReadBookController extends ReaderProviderBase
   }
 
   @override
+  int get chapterNavigationIndex {
+    if (chapters.isEmpty) return 0;
+    return _displayPageChapterIndex.clamp(0, chapters.length - 1).toInt();
+  }
+
+  @override
   Future<void> performChapterNavigation({
     required int targetIndex,
     required ReaderCommandReason reason,

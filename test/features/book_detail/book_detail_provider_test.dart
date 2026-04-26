@@ -34,7 +34,7 @@ class _FakeChapterDao extends Fake implements ChapterDao {
   final Map<String, List<BookChapter>> _store = {};
 
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) async =>
+  Future<List<BookChapter>> getByBook(String bookUrl) async =>
       _store[bookUrl] ?? [];
 
   @override
@@ -86,7 +86,7 @@ class _FakeChapterContentDao extends Fake implements ReaderChapterContentDao {
   }
 
   @override
-  Future<void> deleteContentByBook(String origin, String bookUrl) async {
+  Future<void> deleteByBook(String origin, String bookUrl) async {
     _storedIndices.clear();
   }
 }

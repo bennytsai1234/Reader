@@ -40,7 +40,7 @@ class _FakeChapterDao implements ChapterDao {
   List<BookChapter> chapterResults = <BookChapter>[];
 
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) async => chapterResults;
+  Future<List<BookChapter>> getByBook(String bookUrl) async => chapterResults;
 
   @override
   Future<void> insertChapters(List<BookChapter> chapterList) async {

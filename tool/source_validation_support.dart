@@ -108,10 +108,6 @@ class _FallbackChapterDao implements ChapterDao {
       const <BookChapter>[];
 
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) async =>
-      const <BookChapter>[];
-
-  @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
@@ -771,7 +767,11 @@ Future<SearchKeywordSeed?> pickKeywordFromHomepage(
         if (!looksLikeBookName(name)) {
           continue;
         }
-        final matched = await findWorkingKeywordCandidate(service, source, name);
+        final matched = await findWorkingKeywordCandidate(
+          service,
+          source,
+          name,
+        );
         if (matched != null) {
           return matched;
         }
@@ -790,7 +790,11 @@ Future<SearchKeywordSeed?> pickKeywordFromHomepage(
         if (!looksLikeBookName(name)) {
           continue;
         }
-        final matched = await findWorkingKeywordCandidate(service, source, name);
+        final matched = await findWorkingKeywordCandidate(
+          service,
+          source,
+          name,
+        );
         if (matched != null) {
           return matched;
         }

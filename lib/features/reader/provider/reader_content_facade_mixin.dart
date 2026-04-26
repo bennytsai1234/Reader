@@ -732,7 +732,14 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
   ReaderPresentationAnchor _presentationAnchorForChapter(
     int chapterIndex, {
     required bool fromEnd,
+    required ReaderCommandReason reason,
   }) {
+    if (_usesExplicitChapterStart(reason)) {
+      return ReaderPresentationAnchor(
+        location: ReaderLocation(chapterIndex: chapterIndex, charOffset: 0),
+        fromEnd: fromEnd,
+      );
+    }
     final committedLocation =
         _contentCallbacks.currentCommittedLocation?.call();
     final anchorLocation =
@@ -741,6 +748,21 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
             ? committedLocation
             : ReaderLocation(chapterIndex: chapterIndex, charOffset: 0);
     return ReaderPresentationAnchor(location: anchorLocation, fromEnd: fromEnd);
+  }
+
+  bool _usesExplicitChapterStart(ReaderCommandReason reason) {
+    switch (reason) {
+      case ReaderCommandReason.user:
+      case ReaderCommandReason.chapterChange:
+      case ReaderCommandReason.tts:
+      case ReaderCommandReason.autoPage:
+        return true;
+      case ReaderCommandReason.restore:
+      case ReaderCommandReason.userScroll:
+      case ReaderCommandReason.settingsRepaginate:
+      case ReaderCommandReason.system:
+        return false;
+    }
   }
 
   void _presentLoadedChapter(
@@ -755,7 +777,11 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     clearTransientViewportState(notify: false);
     final presentation = _contentOwner.resolvePresentation(
       ReaderPresentationRequest(
-        anchor: _presentationAnchorForChapter(chapterIndex, fromEnd: fromEnd),
+        anchor: _presentationAnchorForChapter(
+          chapterIndex,
+          fromEnd: fromEnd,
+          reason: reason,
+        ),
         isScrollMode: _isScrollMode,
         chapterPages: pages,
         slidePages: slidePages,
@@ -796,7 +822,11 @@ mixin ReaderContentFacadeMixin on ReaderProviderBase, ReaderSettingsMixin {
     final pages = chapterPagesCache[targetChapter] ?? const <TextPage>[];
     final presentation = _contentOwner.resolvePresentation(
       ReaderPresentationRequest(
-        anchor: _presentationAnchorForChapter(targetChapter, fromEnd: fromEnd),
+        anchor: _presentationAnchorForChapter(
+          targetChapter,
+          fromEnd: fromEnd,
+          reason: reason,
+        ),
         isScrollMode: _isScrollMode,
         chapterPages: pages,
         slidePages: slidePages,

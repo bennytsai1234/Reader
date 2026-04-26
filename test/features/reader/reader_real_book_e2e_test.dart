@@ -106,9 +106,6 @@ class _ReaderE2eChapterDao implements ChapterDao {
       _chapters.where((chapter) => chapter.bookUrl == bookUrl).toList();
 
   @override
-  Future<List<BookChapter>> getChapters(String bookUrl) => getByBook(bookUrl);
-
-  @override
   Future<void> insertChapters(List<BookChapter> chapterList) async {
     for (final chapter in chapterList) {
       final existingIndex = _chapters.indexWhere((c) => c.url == chapter.url);

@@ -147,7 +147,7 @@ class ReaderBottomMenu extends StatelessWidget {
     final displayIndex =
         provider.isScrubbing
             ? provider.scrubIndex
-            : (pendingIndex ?? provider.currentChapterIndex);
+            : (pendingIndex ?? provider.chapterNavigationIndex);
     final displayTitle =
         (chapterCount > 0 && displayIndex < chapterCount)
             ? provider.displayChapterTitleAt(displayIndex)

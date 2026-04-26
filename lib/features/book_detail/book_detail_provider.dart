@@ -172,7 +172,7 @@ class BookDetailProvider extends ChangeNotifier {
   }
 
   Future<void> _loadChapters() async {
-    _allChapters = await _chapterDao.getChapters(_book.bookUrl);
+    _allChapters = await _chapterDao.getByBook(_book.bookUrl);
 
     if (_allChapters.isEmpty && _currentSource != null) {
       if (!_currentSource!.isReadingEnabledByRuntime) {

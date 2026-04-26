@@ -22,7 +22,7 @@ class _FakeBookDao extends Fake implements BookDao {
   }
 
   @override
-  Future<List<Book>> getAllInBookshelf() async => storedBooks;
+  Future<List<Book>> getInBookshelf() async => storedBooks;
 }
 
 class _FakeChapterDao extends Fake implements ChapterDao {

@@ -35,7 +35,7 @@ mixin DownloadExecutor on DownloadBase, DownloadScheduler {
         throw Exception('書源不存在');
       }
 
-      var chapters = await chapterDao.getChapters(task.bookUrl);
+      var chapters = await chapterDao.getByBook(task.bookUrl);
       if (chapters.isEmpty) {
         if (source == null) {
           throw Exception('章節目錄不存在');
