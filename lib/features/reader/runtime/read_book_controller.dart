@@ -1709,18 +1709,9 @@ class ReadBookController extends ReaderProviderBase
     }
     final flushedLocation = await _progressCoordinator.flushPendingProgress();
     if (pageTurnMode == PageAnim.scroll) {
-      // Always attempt to persist the scroll position on exit.
-      // _persistCurrentScrollLocationNow() is the preferred path when the
-      // visible anchor has been confirmed by the scroll listener (pixel-
-      // precise).  When it skips (e.g. visibleConfirmed is false because
-      // the restore hasn't settled yet), fall back to a best-effort persist
-      // that uses the visible chapter/localOffset tracked by the provider.
       if (!isScrollRestoreUnconfirmed) {
         await _persistCurrentScrollLocationNow();
       }
-      // If the confirmed persist didn't run or was skipped, ensure we still
-      // write the best-known position so the user doesn't lose progress.
-      await _persistScrollLocationForExit();
     } else if (!isScrollRestoreUnconfirmed && flushedLocation == null) {
       final exitLocation = _sessionRuntime.resolveExitLocation(
         _currentSessionContext(),
@@ -1840,6 +1831,9 @@ class ReadBookController extends ReaderProviderBase
   @override
   Future<void> persistExitProgress() async {
     await flushNow();
+    if (pageTurnMode == PageAnim.scroll) {
+      await _persistScrollLocationForExit();
+    }
   }
 
   void _updateCommittedLocation(ReaderLocation location) {

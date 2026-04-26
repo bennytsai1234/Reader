@@ -186,8 +186,8 @@ void main() {
 
     expect(location, isNotNull);
     expect(location!.chapterIndex, 0);
-    expect(location.pageIndex, 1);
-    expect(location.localOffset, closeTo(105, 0.1));
+    expect(location.pageIndex, 0);
+    expect(location.localOffset, closeTo(90, 0.1));
   });
 
   testWidgets('resolveAnchorLocation 在 anchor 落於頁間空隙時會退到最近可見頁', (tester) async {

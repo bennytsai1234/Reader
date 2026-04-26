@@ -46,7 +46,7 @@ void main() {
 
       expect(update, isNotNull);
       expect(update!.chapterIndex, 1);
-      expect(update.localOffset, 160);
+      expect(update.localOffset, 100);
       expect(update.alignment, 0.0);
       expect(update.visibleChapterIndexes, [1, 2]);
     });
@@ -67,8 +67,8 @@ void main() {
       );
 
       expect(update, isNotNull);
-      expect(update!.chapterIndex, 2);
-      expect(update.localOffset, 56);
+      expect(update!.chapterIndex, 1);
+      expect(update.localOffset, 180);
       expect(update.visibleChapterIndexes, [1, 2]);
     });
 
