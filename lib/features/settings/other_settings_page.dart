@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/reader/settings/reader_prefs_repository.dart';
 import 'package:provider/provider.dart';
+import 'data_privacy_settings_page.dart';
 import 'settings_provider.dart';
 
 class OtherSettingsPage extends StatefulWidget {
@@ -37,15 +38,6 @@ class _OtherSettingsPageState extends State<OtherSettingsPage> {
         builder: (context, settings, child) {
           return ListView(
             children: [
-              _buildSectionTitle('區域與環境'),
-              ListTile(
-                title: const Text('語言 (Language)'),
-                subtitle: Text(_getLanguageName(settings.locale)),
-                leading: const Icon(Icons.language),
-                onTap: () => _showLanguageDialog(context, settings),
-              ),
-              const Divider(),
-
               _buildSectionTitle('閱讀行為'),
               SwitchListTile(
                 title: const Text('預設啟用替換規則'),
@@ -68,6 +60,21 @@ class _OtherSettingsPageState extends State<OtherSettingsPage> {
                           _prefsRepository.saveShowAddToShelfAlert(value);
                         },
               ),
+              const Divider(),
+              _buildSectionTitle('資料與隱私'),
+              ListTile(
+                leading: const Icon(Icons.privacy_tip_outlined),
+                title: const Text('資料與隱私'),
+                subtitle: const Text('清除 Cookie / WebView 資料、隱私與權限說明'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DataPrivacySettingsPage(),
+                      ),
+                    ),
+              ),
               const SizedBox(height: 24),
             ],
           );
@@ -87,67 +94,6 @@ class _OtherSettingsPageState extends State<OtherSettingsPage> {
           fontSize: 13,
         ),
       ),
-    );
-  }
-
-  String _getLanguageName(Locale? locale) {
-    if (locale == null) return '跟隨系統';
-    final code = locale.languageCode;
-    if (code == 'zh') {
-      return (locale.countryCode == 'TW' || locale.countryCode == 'HK')
-          ? '繁體中文'
-          : '简体中文';
-    }
-    return code == 'en' ? 'English' : locale.toString();
-  }
-
-  void _showLanguageDialog(BuildContext context, SettingsProvider settings) {
-    final languages = [
-      {'label': '跟隨系統', 'value': 'system'},
-      {'label': '繁體中文', 'value': 'zh_TW'},
-      {'label': '简体中文', 'value': 'zh_CN'},
-      {'label': 'English', 'value': 'en'},
-    ];
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('選擇語言'),
-            content: RadioGroup<String>(
-              groupValue:
-                  settings.locale == null
-                      ? 'system'
-                      : (languages.any(
-                            (l) =>
-                                l['value'] ==
-                                '${settings.locale!.languageCode}_${settings.locale!.countryCode}',
-                          )
-                          ? '${settings.locale!.languageCode}_${settings.locale!.countryCode}'
-                          : settings.locale!.languageCode),
-              onChanged: (val) {
-                if (val != null) {
-                  settings.setLanguage(val);
-                  Navigator.pop(context);
-                }
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children:
-                    languages
-                        .map(
-                          (lang) => RadioListTile<String>(
-                            title: Text(lang['label']!),
-                            value: lang['value']!,
-                            // ignore: deprecated_member_use
-                            groupValue: null,
-                            // ignore: deprecated_member_use
-                            onChanged: null,
-                          ),
-                        )
-                        .toList(),
-              ),
-            ),
-          ),
     );
   }
 }

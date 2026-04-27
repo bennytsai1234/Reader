@@ -18,18 +18,18 @@ class CookieStore {
       final uri = Uri.parse(url);
       final host = uri.host;
       final parts = host.split('.');
-      
+
       if (parts.length >= 3) {
         final lastPart = parts.last;
         final secondLastPart = parts[parts.length - 2];
-        
+
         // 處理常見的兩段式後綴 (例如 .com.cn, .co.uk, .org.tw)
         final twoPartSuffixes = ['com', 'co', 'org', 'net', 'edu', 'gov'];
         if (twoPartSuffixes.contains(secondLastPart) && lastPart.length == 2) {
           return parts.sublist(parts.length - 3).join('.');
         }
       }
-      
+
       if (parts.length >= 2) {
         return parts.sublist(parts.length - 2).join('.');
       }
@@ -84,6 +84,12 @@ class CookieStore {
     await _cookieDao.deleteByUrl(domain);
   }
 
+  /// 清除所有由 App 自行保存的 Cookie
+  Future<void> clearAll() async {
+    _memoryCache.clear();
+    await _cookieDao.clearAll();
+  }
+
   /// 將 Cookie 字串轉換為 Map
   Map<String, String> cookieToMap(String cookie) {
     final cookieMap = <String, String>{};
@@ -108,4 +114,3 @@ class CookieStore {
     return map.entries.map((e) => '${e.key}=${e.value}').join('; ');
   }
 }
-

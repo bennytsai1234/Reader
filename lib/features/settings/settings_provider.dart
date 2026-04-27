@@ -519,9 +519,15 @@ class SettingsProvider extends SettingsProviderBase {
     speechRate = prefs.getDouble(PreferKey.ttsSpeechRate) ?? 1.0;
     speechPitch = prefs.getDouble(PreferKey.speechPitch) ?? 1.0;
     speechVolume = prefs.getDouble(PreferKey.speechVolume) ?? 1.0;
-    ttsSourceKey = ReaderTtsSourcePreference.normalize(
-      prefs.getString(PreferKey.ttsSource),
-    );
+    final savedTtsSource = prefs.getString(PreferKey.ttsSource);
+    ttsSourceKey = ReaderTtsSourcePreference.systemKey;
+    if (savedTtsSource != null &&
+        savedTtsSource != ReaderTtsSourcePreference.systemKey) {
+      await prefs.setString(
+        PreferKey.ttsSource,
+        ReaderTtsSourcePreference.systemKey,
+      );
+    }
     TTSService().setRate(speechRate);
     TTSService().setPitch(speechPitch);
     TTSService().setVolume(speechVolume);
@@ -647,8 +653,8 @@ class SettingsProvider extends SettingsProviderBase {
     update();
   }
 
-  void setTtsSourceKey(String sourceKey) {
-    ttsSourceKey = ReaderTtsSourcePreference.normalize(sourceKey);
+  void setTtsSourceKey(String _) {
+    ttsSourceKey = ReaderTtsSourcePreference.systemKey;
     save(PreferKey.ttsSource, ttsSourceKey);
     update();
   }

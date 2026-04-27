@@ -170,7 +170,7 @@ class SettingsPage extends StatelessWidget {
                 context,
                 icon: Icons.settings_outlined,
                 title: '其他設定',
-                summary: '語言、本地空間、閱讀行為',
+                summary: '資料隱私、閱讀行為',
                 onTap:
                     () => Navigator.push(
                       context,

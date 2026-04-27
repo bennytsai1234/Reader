@@ -1,147 +1,152 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:inkpage_reader/core/services/tts_service.dart';
 import 'package:provider/provider.dart';
-import 'package:inkpage_reader/features/reader/runtime/reader_tts_source.dart';
+
 import 'settings_provider.dart';
-import 'http_tts_provider.dart';
-import 'http_tts_manager_page.dart';
 
 class TtsSettingsPage extends StatelessWidget {
   const TtsSettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => HttpTtsProvider(),
-      child: Scaffold(
-        appBar: AppBar(title: const Text('朗讀與語音')),
-        body: Consumer2<SettingsProvider, HttpTtsProvider>(
-          builder: (context, settings, httpTts, child) {
-            final availableHttpEngines =
-                httpTts.engines
-                    .where((engine) => engine.url.trim().isNotEmpty)
-                    .toList()
-                  ..sort((a, b) => a.name.compareTo(b.name));
-            final selectedSourceKey = _effectiveSourceKey(
-              settings.ttsSourceKey,
-              availableHttpEngines.map((engine) => engine.id).toSet(),
-            );
+    final tts = TTSService();
 
-            return ListView(
-              children: [
-                _buildSectionTitle('朗讀參數'),
-                ListTile(
-                  title: const Text('語速'),
-                  subtitle: Slider(
-                    value: settings.speechRate,
-                    min: 0.1,
-                    max: 1.0,
-                    onChanged: (v) => settings.setSpeechRate(v),
-                  ),
-                  trailing: Text(settings.speechRate.toStringAsFixed(1)),
-                ),
-                ListTile(
-                  title: const Text('音調'),
-                  subtitle: Slider(
-                    value: settings.speechPitch,
-                    min: 0.5,
-                    max: 2.0,
-                    onChanged: (v) => settings.setSpeechPitch(v),
-                  ),
-                  trailing: Text(settings.speechPitch.toStringAsFixed(1)),
-                ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('朗讀與語音')),
+      body: Consumer<SettingsProvider>(
+        builder: (context, settings, child) {
+          return ListenableBuilder(
+            listenable: tts,
+            builder: (context, child) {
+              final engines = tts.engines;
+              final voices = [...tts.voices]..sort(
+                (a, b) => tts.voiceLabelOf(a).compareTo(tts.voiceLabelOf(b)),
+              );
+              final selectedEngine =
+                  engines.contains(tts.selectedEngine)
+                      ? tts.selectedEngine ?? ''
+                      : '';
+              final selectedVoice =
+                  voices.any(
+                        (voice) =>
+                            tts.voiceKeyOf(voice) == tts.selectedVoiceKey,
+                      )
+                      ? tts.selectedVoiceKey ?? ''
+                      : '';
 
-                const Divider(),
-                _buildSectionTitle('語音來源'),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: DropdownButtonFormField<String>(
-                    initialValue: selectedSourceKey,
-                    decoration: const InputDecoration(
-                      labelText: '朗讀來源',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String>(
-                        value: ReaderTtsSourcePreference.systemKey,
-                        child: Text('系統 TTS'),
-                      ),
-                      ...availableHttpEngines.map(
-                        (engine) => DropdownMenuItem<String>(
-                          value: ReaderTtsSourcePreference.httpKeyForId(
-                            engine.id,
-                          ),
-                          child: Text('HTTP TTS · ${engine.name}'),
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      settings.setTtsSourceKey(value);
-                    },
-                  ),
-                ),
-                if (ReaderTtsSourcePreference.httpIdFromKey(
-                      selectedSourceKey,
-                    ) !=
-                    null)
+              return ListView(
+                children: [
+                  _buildSectionTitle(context, '朗讀參數'),
                   ListTile(
-                    leading: const Icon(Icons.cloud_done_outlined),
-                    title: const Text('目前 HTTP 引擎'),
-                    subtitle: Text(
-                      availableHttpEngines
-                          .firstWhere(
-                            (engine) =>
-                                engine.id ==
-                                ReaderTtsSourcePreference.httpIdFromKey(
-                                  selectedSourceKey,
-                                ),
-                          )
-                          .name,
+                    title: const Text('語速'),
+                    subtitle: Slider(
+                      value: settings.speechRate,
+                      min: 0.1,
+                      max: 1.0,
+                      onChanged: (v) => settings.setSpeechRate(v),
+                    ),
+                    trailing: Text(settings.speechRate.toStringAsFixed(1)),
+                  ),
+                  ListTile(
+                    title: const Text('音調'),
+                    subtitle: Slider(
+                      value: settings.speechPitch,
+                      min: 0.5,
+                      max: 2.0,
+                      onChanged: (v) => settings.setSpeechPitch(v),
+                    ),
+                    trailing: Text(settings.speechPitch.toStringAsFixed(1)),
+                  ),
+                  ListTile(
+                    title: const Text('音量'),
+                    subtitle: Slider(
+                      value: settings.speechVolume,
+                      min: 0.0,
+                      max: 1.0,
+                      onChanged: (v) => settings.setSpeechVolume(v),
+                    ),
+                    trailing: Text(settings.speechVolume.toStringAsFixed(1)),
+                  ),
+                  const Divider(),
+                  _buildSectionTitle(context, '系統語音'),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('engine-$selectedEngine'),
+                      initialValue: selectedEngine,
+                      decoration: const InputDecoration(
+                        labelText: '語音引擎',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('系統預設'),
+                        ),
+                        ...engines.map(
+                          (engine) => DropdownMenuItem<String>(
+                            value: engine,
+                            child: Text(engine),
+                          ),
+                        ),
+                      ],
+                      onChanged:
+                          (value) => unawaited(
+                            tts.setEngine(
+                              value == null || value.isEmpty ? null : value,
+                            ),
+                          ),
                     ),
                   ),
-
-                const Divider(),
-                _buildSectionTitle('語音引擎'),
-                ListTile(
-                  title: const Text('HTTP TTS 管理'),
-                  subtitle: const Text('設定網路自定義語音引擎'),
-                  leading: const Icon(Icons.cloud_queue),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const HttpTtsManagerPage(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('voice-$selectedVoice-${voices.length}'),
+                      initialValue: selectedVoice,
+                      decoration: const InputDecoration(
+                        labelText: '音色',
+                        border: OutlineInputBorder(),
                       ),
-                    );
-                    if (!context.mounted) return;
-                    await context.read<HttpTtsProvider>().loadEngines();
-                  },
-                ),
-              ],
-            );
-          },
-        ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('系統預設'),
+                        ),
+                        ...voices.map(
+                          (voice) => DropdownMenuItem<String>(
+                            value: tts.voiceKeyOf(voice),
+                            child: Text(tts.voiceLabelOf(voice)),
+                          ),
+                        ),
+                      ],
+                      onChanged:
+                          voices.isEmpty
+                              ? null
+                              : (value) => unawaited(
+                                tts.setVoiceByKey(
+                                  value == null || value.isEmpty ? null : value,
+                                ),
+                              ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
       ),
     );
   }
 
-  String _effectiveSourceKey(String rawKey, Set<int> availableHttpIds) {
-    final normalized = ReaderTtsSourcePreference.normalize(rawKey);
-    final httpId = ReaderTtsSourcePreference.httpIdFromKey(normalized);
-    if (httpId != null && !availableHttpIds.contains(httpId)) {
-      return ReaderTtsSourcePreference.systemKey;
-    }
-    return normalized;
-  }
-
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(
         title,
-        style: const TextStyle(
-          color: Colors.blue,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.primary,
           fontWeight: FontWeight.bold,
           fontSize: 13,
         ),
