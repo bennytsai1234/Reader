@@ -199,7 +199,12 @@ mixin ReaderSettingsMixin on ReaderProviderBase {
 
   void _triggerRepaginate() {
     onBeforeRepaginate?.call();
-    onSettingsChangedRepaginate?.call();
+    final callback = onSettingsChangedRepaginate;
+    if (callback != null) {
+      callback();
+    } else {
+      notifyListeners();
+    }
   }
 
   void _rememberDayNightThemeIndex(int index) {

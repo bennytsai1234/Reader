@@ -27,7 +27,6 @@ import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dar
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
 import 'package:inkpage_reader/shared/theme/app_theme.dart';
 import 'package:provider/provider.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../tool/source_validation_support.dart';
@@ -39,7 +38,7 @@ const _readyTimeout = Duration(seconds: 90);
 const _fixedLocalBookPath = 'test/fixtures/reader/local_real_e2e_novel.txt';
 const _fixedNetworkKeyword = '我的';
 
-bool get _runRealE2e => Platform.environment['RUN_READER_REAL_E2E'] != '0';
+bool get _runRealE2e => Platform.environment['RUN_READER_REAL_E2E'] == '1';
 
 String? _env(String name) {
   final value = Platform.environment[name]?.trim();
@@ -459,14 +458,14 @@ Future<void> _waitForReadyReaderWidget(
           runtimeChapter != null &&
           runtimeChapter.pages.isNotEmpty &&
           !controller.hasChapterFailure(chapterIndex) &&
-          find.byType(ScrollablePositionedList).evaluate().isNotEmpty;
+          find.byType(ReaderPage).evaluate().isNotEmpty;
     }, timeout: const Duration(seconds: 5));
   } on StateError catch (_) {
     throw StateError(
       'reader widget not ready '
       '(lifecycle=${controller.lifecycle}, isLoading=${controller.isLoading}, '
       'pages=${controller.pagesForChapter(chapterIndex).length}, '
-      'hasList=${find.byType(ScrollablePositionedList).evaluate().isNotEmpty})',
+      'hasReader=${find.byType(ReaderPage).evaluate().isNotEmpty})',
     );
   }
 }
@@ -476,8 +475,8 @@ Future<void> _dragReaderWidgetToTargetOffset(
   ReaderProvider provider,
   double targetLocalOffset,
 ) async {
-  final list = find.byType(ScrollablePositionedList);
-  expect(list, findsOneWidget);
+  final reader = find.byType(ReaderPage);
+  expect(reader, findsOneWidget);
 
   for (var i = 0; i < 16; i++) {
     if (provider.visibleChapterIndex == _targetChapterIndex &&
@@ -486,7 +485,7 @@ Future<void> _dragReaderWidgetToTargetOffset(
     }
 
     await tester.timedDrag(
-      list,
+      reader,
       const Offset(0, -80),
       const Duration(milliseconds: 120),
     );

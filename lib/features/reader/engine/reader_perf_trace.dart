@@ -7,10 +7,7 @@ class ReaderPerfTrace {
     debugPrint('ReaderPerf: $label');
   }
 
-  static T measureSync<T>(
-    String label,
-    T Function() action,
-  ) {
+  static T measureSync<T>(String label, T Function() action) {
     if (kReleaseMode) {
       return action();
     }

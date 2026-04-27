@@ -1,31 +1,95 @@
-/// TextLine - 單行文字資訊
-/// (原 Android ui/book/read/page/entities/TextLine.kt)
-class TextLine {
-  final String text;
+import 'line_box.dart';
+
+/// Compatibility adapter for old reader code plus the new LineBox data model.
+class TextLine extends LineBox {
+  TextLine({
+    required super.text,
+    this.width = 0,
+    double? height,
+    super.isTitle = false,
+    super.isParagraphStart = false,
+    super.isParagraphEnd = false,
+    this.shouldJustify = false,
+    int chapterPosition = 0,
+    this.lineTop = 0,
+    double? lineBottom,
+    this.paragraphNum = 0,
+    int? startCharOffset,
+    int? endCharOffset,
+    double? baseline,
+  }) : chapterPosition = startCharOffset ?? chapterPosition,
+       lineBottom = lineBottom ?? lineTop + (height ?? 0),
+       super(
+         startCharOffset: startCharOffset ?? chapterPosition,
+         endCharOffset:
+             endCharOffset ??
+             (startCharOffset ?? chapterPosition) + text.length,
+         top: lineTop,
+         bottom: lineBottom ?? lineTop + (height ?? 0),
+         baseline:
+             baseline ??
+             lineTop +
+                 ((lineBottom ?? lineTop + (height ?? 0)) - lineTop) * 0.82,
+       );
+
   final double width;
-  final double height;
-  final bool isTitle;
-  final bool isParagraphStart;
-  final bool isParagraphEnd;
+  @override
+  double get height => lineBottom - lineTop;
   final bool shouldJustify;
   final int chapterPosition;
   final double lineTop;
   final double lineBottom;
   final int paragraphNum;
 
-  TextLine({
-    required this.text,
-    required this.width,
-    required this.height,
-    this.isTitle = false,
-    this.isParagraphStart = false,
-    this.isParagraphEnd = false,
-    this.shouldJustify = false,
-    this.chapterPosition = 0,
-    this.lineTop = 0,
-    this.lineBottom = 0,
-    this.paragraphNum = 0,
-  });
+  TextLine copyWith({
+    String? text,
+    double? width,
+    double? height,
+    bool? isTitle,
+    bool? isParagraphStart,
+    bool? isParagraphEnd,
+    bool? shouldJustify,
+    int? chapterPosition,
+    double? lineTop,
+    double? lineBottom,
+    int? paragraphNum,
+    int? startCharOffset,
+    int? endCharOffset,
+    double? baseline,
+  }) {
+    return TextLine(
+      text: text ?? this.text,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      isTitle: isTitle ?? this.isTitle,
+      isParagraphStart: isParagraphStart ?? this.isParagraphStart,
+      isParagraphEnd: isParagraphEnd ?? this.isParagraphEnd,
+      shouldJustify: shouldJustify ?? this.shouldJustify,
+      chapterPosition: chapterPosition ?? this.chapterPosition,
+      lineTop: lineTop ?? this.lineTop,
+      lineBottom: lineBottom ?? this.lineBottom,
+      paragraphNum: paragraphNum ?? this.paragraphNum,
+      startCharOffset: startCharOffset ?? this.startCharOffset,
+      endCharOffset: endCharOffset ?? this.endCharOffset,
+      baseline: baseline ?? this.baseline,
+    );
+  }
+
+  TextLine shiftedBy(double dy) {
+    return copyWith(
+      lineTop: lineTop + dy,
+      lineBottom: lineBottom + dy,
+      baseline: baseline + dy,
+    );
+  }
+
+  TextLine toPageLocal(double pageTop) {
+    return copyWith(
+      lineTop: top - pageTop,
+      lineBottom: bottom - pageTop,
+      baseline: baseline - pageTop,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -40,6 +104,9 @@ class TextLine {
       'lineTop': lineTop,
       'lineBottom': lineBottom,
       'paragraphNum': paragraphNum,
+      'startCharOffset': startCharOffset,
+      'endCharOffset': endCharOffset,
+      'baseline': baseline,
     };
   }
 
@@ -56,28 +123,55 @@ class TextLine {
       lineTop: (json['lineTop'] ?? 0).toDouble(),
       lineBottom: (json['lineBottom'] ?? 0).toDouble(),
       paragraphNum: json['paragraphNum'] ?? 0,
+      startCharOffset: json['startCharOffset'] ?? json['chapterPosition'] ?? 0,
+      endCharOffset: json['endCharOffset'],
+      baseline: (json['baseline'] as num?)?.toDouble(),
     );
   }
 }
 
-/// TextPage - 單頁文字資訊
-/// (原 Android ui/book/read/page/entities/TextPage.kt)
 class TextPage {
-  final int index;
-  final List<TextLine> lines;
-  final String title;
-  final int chapterIndex;
-  final int chapterSize; // 總章節數
-  final int pageSize; // 本章總頁數
-
   TextPage({
-    required this.index,
-    required this.lines,
-    required this.title,
+    int? index,
+    int? pageIndex,
+    required List<TextLine> lines,
+    this.title = '',
     required this.chapterIndex,
     this.chapterSize = 0,
     this.pageSize = 0,
-  });
+    int? startCharOffset,
+    int? endCharOffset,
+    double? height,
+    bool? isChapterStart,
+    bool? isChapterEnd,
+    this.isLoading = false,
+    this.errorMessage,
+  }) : pageIndex = pageIndex ?? index ?? 0,
+       lines = List<TextLine>.unmodifiable(lines),
+       startCharOffset = startCharOffset ?? _firstOffset(lines),
+       endCharOffset = endCharOffset ?? _lastOffset(lines),
+       height = height ?? _pageHeight(lines),
+       isChapterStart = isChapterStart ?? ((pageIndex ?? index ?? 0) == 0),
+       isChapterEnd =
+           isChapterEnd ??
+           (pageSize > 0 && (pageIndex ?? index ?? 0) >= pageSize - 1);
+
+  /// Old slide/PageView code uses [index]. New engine uses [pageIndex].
+  int get index => pageIndex;
+  final int pageIndex;
+  final List<TextLine> lines;
+  final String title;
+  final int chapterIndex;
+  final int chapterSize;
+  final int pageSize;
+  final int startCharOffset;
+  final int endCharOffset;
+  final double height;
+  final bool isChapterStart;
+  final bool isChapterEnd;
+  final bool isLoading;
+  final String? errorMessage;
+  bool get isPlaceholder => isLoading || errorMessage != null;
 
   int get lineSize => lines.length;
 
@@ -98,31 +192,63 @@ class TextPage {
     return formatted;
   }
 
+  bool containsCharOffset(int charOffset) {
+    if (lines.isEmpty) return charOffset == startCharOffset;
+    return charOffset >= startCharOffset && charOffset <= endCharOffset;
+  }
+
   TextPage copyWith({
     int? index,
+    int? pageIndex,
     List<TextLine>? lines,
     String? title,
     int? chapterIndex,
     int? chapterSize,
     int? pageSize,
+    int? startCharOffset,
+    int? endCharOffset,
+    double? height,
+    bool? isChapterStart,
+    bool? isChapterEnd,
+    bool? isLoading,
+    String? errorMessage,
+    bool clearErrorMessage = false,
   }) {
+    final nextPageIndex = pageIndex ?? index ?? this.pageIndex;
+    final nextLines = lines ?? this.lines;
     return TextPage(
-      index: index ?? this.index,
-      lines: lines ?? this.lines,
+      pageIndex: nextPageIndex,
+      lines: nextLines,
       title: title ?? this.title,
       chapterIndex: chapterIndex ?? this.chapterIndex,
       chapterSize: chapterSize ?? this.chapterSize,
       pageSize: pageSize ?? this.pageSize,
+      startCharOffset: startCharOffset ?? this.startCharOffset,
+      endCharOffset: endCharOffset ?? this.endCharOffset,
+      height: height ?? this.height,
+      isChapterStart: isChapterStart ?? this.isChapterStart,
+      isChapterEnd: isChapterEnd ?? this.isChapterEnd,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage:
+          clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'index': index,
+      'pageIndex': pageIndex,
       'title': title,
       'chapterIndex': chapterIndex,
       'chapterSize': chapterSize,
       'pageSize': pageSize,
+      'startCharOffset': startCharOffset,
+      'endCharOffset': endCharOffset,
+      'height': height,
+      'isChapterStart': isChapterStart,
+      'isChapterEnd': isChapterEnd,
+      'isLoading': isLoading,
+      'errorMessage': errorMessage,
       'lines': lines.map((line) => line.toJson()).toList(),
     };
   }
@@ -130,11 +256,18 @@ class TextPage {
   factory TextPage.fromJson(Map<String, dynamic> json) {
     final rawLines = json['lines'] as List? ?? const [];
     return TextPage(
-      index: json['index'] ?? 0,
+      pageIndex: json['pageIndex'] ?? json['index'] ?? 0,
       title: json['title'] ?? '',
       chapterIndex: json['chapterIndex'] ?? 0,
       chapterSize: json['chapterSize'] ?? 0,
       pageSize: json['pageSize'] ?? 0,
+      startCharOffset: json['startCharOffset'],
+      endCharOffset: json['endCharOffset'],
+      height: (json['height'] as num?)?.toDouble(),
+      isChapterStart: json['isChapterStart'],
+      isChapterEnd: json['isChapterEnd'],
+      isLoading: json['isLoading'] ?? false,
+      errorMessage: json['errorMessage'],
       lines:
           rawLines
               .map(
@@ -143,5 +276,26 @@ class TextPage {
               )
               .toList(),
     );
+  }
+
+  static int _firstOffset(List<TextLine> lines) {
+    for (final line in lines) {
+      if (line.text.isNotEmpty) return line.startCharOffset;
+    }
+    return 0;
+  }
+
+  static int _lastOffset(List<TextLine> lines) {
+    for (final line in lines.reversed) {
+      if (line.text.isNotEmpty) return line.endCharOffset;
+    }
+    return _firstOffset(lines);
+  }
+
+  static double _pageHeight(List<TextLine> lines) {
+    if (lines.isEmpty) return 0;
+    return lines
+        .map((line) => line.lineBottom)
+        .fold<double>(0, (max, bottom) => bottom > max ? bottom : max);
   }
 }

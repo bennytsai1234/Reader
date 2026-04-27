@@ -4,10 +4,7 @@ class ReaderParagraph {
   int num;
   final List<TextLine> textLines;
 
-  ReaderParagraph({
-    required this.num,
-    required this.textLines,
-  });
+  ReaderParagraph({required this.num, required this.textLines});
 
   String get text => textLines.map((line) => line.text).join();
   int get length => text.length;

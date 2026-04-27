@@ -37,9 +37,10 @@ class PaginationMetrics {
   }) {
     return PaginationMetrics(
       width: viewSize.width - (padding * 2),
-      height: (viewSize.height - contentPaddingTop - contentPaddingBottom)
-          .clamp(1.0, double.infinity)
-          .toDouble(),
+      height:
+          (viewSize.height - contentPaddingTop - contentPaddingBottom)
+              .clamp(1.0, double.infinity)
+              .toDouble(),
       titleTopSpacing: titleTopSpacing,
       titleBottomSpacing: titleBottomSpacing,
       paragraphSpacing: paragraphSpacing,

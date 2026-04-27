@@ -15,12 +15,13 @@ class ReaderPageFactory {
     required this.chapterCharOffset,
   });
 
-  int get pageIndex => currentChapter?.getPageIndexByCharIndex(chapterCharOffset) ?? 0;
+  int get pageIndex =>
+      currentChapter?.getPageIndexByCharIndex(chapterCharOffset) ?? 0;
   List<ReaderChapter> get orderedChapters => [
-        if (prevChapter != null) prevChapter!,
-        if (currentChapter != null) currentChapter!,
-        if (nextChapter != null) nextChapter!,
-      ];
+    if (prevChapter != null) prevChapter!,
+    if (currentChapter != null) currentChapter!,
+    if (nextChapter != null) nextChapter!,
+  ];
   List<TextPage> get windowPages =>
       orderedChapters.expand((chapter) => chapter.pages).toList();
   int get currentGlobalPageIndex =>

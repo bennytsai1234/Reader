@@ -47,18 +47,15 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
   }
 
   Future<void> _handleChapterTap(int index) async {
-    if (widget.provider.hasPendingChapterNavigation) return;
     await widget.provider.jumpToChapter(index);
-    if (mounted) {
+    if (mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
   }
 
   void _scrollToCurrentChapter() {
     if (!mounted || !_scrollController.hasClients) return;
-    final currentChapterIndex =
-        widget.provider.pendingChapterNavigationIndex ??
-        widget.provider.currentChapterIndex;
+    final currentChapterIndex = widget.provider.currentChapterIndex;
     if (currentChapterIndex == _lastScrolledChapterIndex) return;
     _lastScrolledChapterIndex = currentChapterIndex;
 
@@ -104,26 +101,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
                   itemBuilder: (context, index) {
                     final isCurrentChapter =
                         provider.currentChapterIndex == index;
-                    final isPendingChapter =
-                        provider.pendingChapterNavigationIndex == index;
-                    final tileColor =
-                        isPendingChapter
-                            ? Theme.of(context).colorScheme.primaryContainer
-                                .withValues(alpha: 0.4)
-                            : null;
                     return ListTile(
-                      tileColor: tileColor,
-                      enabled: !provider.hasPendingChapterNavigation,
-                      leading:
-                          isPendingChapter
-                              ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : null,
                       title: Text(
                         provider.displayChapterTitleAt(index),
                         style: TextStyle(

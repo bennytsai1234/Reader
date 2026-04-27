@@ -1,39 +1,4 @@
-class ReaderLocation {
-  final int chapterIndex;
-  final int charOffset;
-
-  const ReaderLocation({
-    required this.chapterIndex,
-    required this.charOffset,
-  });
-
-  ReaderLocation normalized() {
-    return ReaderLocation(
-      chapterIndex: chapterIndex < 0 ? 0 : chapterIndex,
-      charOffset: charOffset < 0 ? 0 : charOffset,
-    );
-  }
-
-  ReaderLocation copyWith({
-    int? chapterIndex,
-    int? charOffset,
-  }) {
-    return ReaderLocation(
-      chapterIndex: chapterIndex ?? this.chapterIndex,
-      charOffset: charOffset ?? this.charOffset,
-    );
-  }
-
-  @override
-  bool operator ==(Object other) {
-    return other is ReaderLocation &&
-        other.chapterIndex == chapterIndex &&
-        other.charOffset == charOffset;
-  }
-
-  @override
-  int get hashCode => Object.hash(chapterIndex, charOffset);
-}
+export 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 
 class ReaderScrollTarget {
   final int chapterIndex;

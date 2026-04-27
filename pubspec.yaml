@@ -113,7 +113,6 @@ dependencies:
   synchronized: ^3.3.1
   get_it: ^9.2.1
   logger: ^2.6.2
-  scrollable_positioned_list: ^0.3.8
 
 
 dev_dependencies:

@@ -177,37 +177,30 @@ void main() {
     expect(find.text('c20'), findsOneWidget);
   });
 
-  testWidgets('ReaderChaptersDrawer 在 pending chapter navigation 時顯示目標章並鎖定重入', (
+  testWidgets('ReaderChaptersDrawer 點選章節會發出跳章請求，不依賴 pending lock', (
     tester,
   ) async {
     final provider = _DrawerReaderProvider(
       book: _makeBook(),
-      initialChapters: _buildChapters(30),
+      initialChapters: _buildChapters(5),
     );
     await tester.pump(const Duration(milliseconds: 10));
     addTearDown(provider.dispose);
 
     await _pumpDrawer(tester, provider);
 
-    unawaited(provider.jumpToChapter(18));
-    await tester.pump();
+    await tester.tap(find.text('c3'));
     await tester.pump();
 
-    expect(find.text('c18'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(
-      tester.widget<ListTile>(find.widgetWithText(ListTile, 'c18')).enabled,
-      isFalse,
-    );
-
-    await tester.tap(find.text('c18'));
-    await tester.pump();
-    expect(provider.loadRequests, [18]);
-
-    provider.loadCompleter!.complete();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
+    expect(provider.currentChapterIndex, 3);
+    expect(provider.visibleChapterIndex, 3);
+    final jump = provider.consumePendingChapterJump();
+    expect(jump, isNotNull);
+    expect(jump!.chapterIndex, 3);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+      tester.widget<ListTile>(find.widgetWithText(ListTile, 'c3')).enabled,
+      isTrue,
+    );
   });
 }
