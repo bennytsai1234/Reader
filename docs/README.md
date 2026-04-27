@@ -13,6 +13,10 @@
 
 - [architecture.md](architecture.md)
   - app 啟動、技術棧、分層、主要資料流與模組邊界。
+- [app_flow_architecture.md](app_flow_architecture.md)
+  - 整個 app 的 Mermaid 架構圖、啟動流程、主導航、找書到閱讀、閱讀器、書源管理、備份還原與背景任務流程。
+- [app_user_flows.md](app_user_flows.md)
+  - 從使用者操作角度整理 app 流程圖；目前包含 A 類啟動與主入口流程。
 - [reader_runtime.md](reader_runtime.md)
   - 閱讀器目前真正接線的 runtime、內容載入、分頁、viewport、進度與 TTS。
 - [reader_spec.md](reader_spec.md)
@@ -26,7 +30,9 @@
 
 1. [../README.md](../README.md)
 2. [architecture.md](architecture.md)
-3. [DATABASE.md](DATABASE.md)
-4. [reader_runtime.md](reader_runtime.md)
-5. [reader_spec.md](reader_spec.md)
-6. [release.md](release.md)
+3. [app_flow_architecture.md](app_flow_architecture.md)
+4. [app_user_flows.md](app_user_flows.md)
+5. [DATABASE.md](DATABASE.md)
+6. [reader_runtime.md](reader_runtime.md)
+7. [reader_spec.md](reader_spec.md)
+8. [release.md](release.md)

@@ -1,98 +1,158 @@
 # AGENTS.md
 
-This file provides guidance to coding agents working in this repository.
+This file gives coding agents a compact orientation for working in this repository.
 
-## Scope
+## Project
 
-These rules are specific to `reader`. Follow them before running Dart or Flutter commands.
+墨頁 Inkpage is a Flutter novel reader package named `inkpage_reader`.
 
-## Why These Notes Exist
+Current project facts:
 
-This repository has a non-trivial Flutter test suite plus Drift code generation. On some WSL setups, running several expensive Dart/Flutter commands at once can spike memory usage or destabilize the editor session.
+- App: Flutter / Dart
+- State management: `provider` / `ChangeNotifier`
+- DI: `get_it`
+- Database: Drift / SQLite, schema version `1`
+- Routing: `Navigator` + `MaterialPageRoute`
+- JS engine: `flutter_js`
+- Release version source: tag `vX.Y.Z`; release workflow rewrites `pubspec.yaml` to `X.Y.Z+<github.run_number>`
 
-`.vscode/settings.json` only limits editor-side indexing. It does **not** control CLI workload. Use judgment based on the current machine state.
+## Architecture
 
-## Resource-Intensive Commands
+```text
+lib/
+  main.dart
+  app_providers.dart
+  core/
+    database/        Drift tables, DAOs, AppDatabase
+    di/              get_it registration
+    engine/          book source rules, JS bridge, WebBook parsers
+    local_book/      TXT / EPUB / UMD parsers
+    models/          domain models
+    network/         Dio API and interceptors
+    services/        book source, backup, restore, TTS, download services
+    storage/         app-owned filesystem paths
+    utils/           pure utilities
+    widgets/         domain-aware shared widgets
+  features/
+    bookshelf/
+    book_detail/
+    explore/
+    reader/
+    search/
+    settings/
+    source_manager/
+    ...
+  shared/
+    theme/
+    widgets/
+docs/
+test/
+release-notes/
+```
 
-The commands below are typically expensive and may compile, analyze, generate code, watch files, or traverse large parts of the repo:
+## Main Runtime Paths
 
-- `flutter test ...`
-- `dart test ...`
-- `flutter analyze ...`
-- `dart analyze ...`
-- `flutter pub run build_runner build ...`
-- `dart run build_runner build ...`
-- any `build_runner watch`
-- any `flutter test --watch` / `dart test --watch`
-- `flutter run ...`
-- `flutter build ...`
-- `dart run ...` commands that traverse large parts of the repo
+App startup:
 
-If a command will compile, analyze, generate code, watch files, or run the full test graph, treat it as resource-intensive.
+```text
+main.dart
+  -> configureDependencies()
+  -> MultiProvider(AppProviders.providers)
+  -> LegadoReaderApp
+  -> SplashPage
+  -> MainPage
+```
 
-## Execution Guidance
+Reader mainline:
 
-1. Resource-intensive Dart/Flutter commands may be run in parallel when it materially helps and the environment can support it.
-2. If the task does not require a full-repo check, prefer targeted commands.
-3. Do not use any `--watch` mode unless the user explicitly asks for it.
-4. If VS Code is already open on this repo, avoid redundant analyzer runs unless they are required for the task.
-5. After an interrupted command, make sure the previous process has actually exited before reusing the same outputs, ports, or locks.
-6. Never create or publish a release without first running `flutter analyze` on the current worktree.
-7. If any code changed after the last `flutter analyze`, run `flutter analyze` again before tagging, pushing a release commit, or creating a GitHub release.
-8. If WSL appears unstable or memory usage spikes, reduce concurrency and report what was running.
+```text
+ReaderPage
+  -> ReaderDependencies
+  -> ChapterRepository
+  -> ReaderRuntime
+  -> PageResolver / LayoutEngine
+  -> EngineReaderScreen
+  -> SlideReaderViewport / ScrollReaderViewport
+```
 
-## Default Execution Strategy
+Durable reader progress is:
 
-Use this order when a broad verification pass is needed:
+```text
+ReaderLocation(chapterIndex, charOffset)
+```
 
-1. `flutter pub get` only if dependencies changed.
-2. `build_runner build --delete-conflicting-outputs` only if Drift schema or generator inputs changed.
-3. `flutter analyze` once.
-4. `flutter test` once, or a targeted test file if full-suite coverage is unnecessary.
+## Common Commands
 
-These steps are a recommended baseline, not a mandatory serialization rule. Parallelize when appropriate, but account for command dependencies.
+Dependencies:
 
-## Release Gate
+```bash
+flutter pub get
+```
 
-If the task includes any release action such as:
+Code generation:
 
-- bumping the app version
-- creating a release commit
-- creating or pushing a tag
-- creating a GitHub release
-- building a release artifact for distribution
+```bash
+flutter pub run build_runner build --delete-conflicting-outputs
+```
 
-then the minimum verification flow is:
+Analyze:
 
-1. `flutter pub get` only if dependencies changed.
-2. `build_runner build --delete-conflicting-outputs` only if Drift schema or generator inputs changed.
-3. `flutter analyze` once on the current worktree.
-4. Run targeted tests for the changed areas, or `flutter test` if the release scope is broad.
-5. Only after steps 1-4 pass, proceed with commit/tag/push/release actions.
+```bash
+flutter analyze
+```
 
-Do not skip step 3 for release work, even if targeted tests already passed.
+Tests:
 
-## Preferred Commands
+```bash
+flutter test
+flutter test test/features/reader
+tool/flutter_test_with_quickjs.sh
+```
 
-- Prefer `flutter test test/path/to/file_test.dart` over full `flutter test` when a targeted test is enough.
-- Prefer one-time `build_runner build` over any watch mode.
-- Prefer one analyzer invocation, not both `flutter analyze` and `dart analyze`.
+Run:
 
-## Drift-Specific Rule
+```bash
+flutter run
+```
 
-If a change touches `lib/core/database/tables/`, `lib/core/database/app_database.dart`, or any Drift DAO definition:
+Build:
 
-1. Run `build_runner build --delete-conflicting-outputs`.
-2. Run `flutter analyze` against the resulting generated code.
-3. Run targeted tests unless the change clearly requires the full suite.
+```bash
+flutter build apk --split-per-abi --release
+flutter build ios --release --no-codesign
+```
 
-If downstream commands depend on generated outputs, ensure `build_runner` has completed before relying on those outputs.
+## Release Commands
 
-## Agent Behavior
+Create release notes:
 
-When working in this repo, agents should use judgment:
+```bash
+mkdir -p release-notes
+$EDITOR release-notes/vX.Y.Z.md
+```
 
-- Parallelize verification when it saves time and the commands do not block on each other.
-- Do not start a background watcher unless the user asked for it.
-- If the user asks for broad verification, explain the command set you intend to run.
-- If WSL appears unstable or memory usage spikes, stop increasing concurrency and report what was running.
+Create and push a tag:
+
+```bash
+git tag vX.Y.Z
+git push origin main
+git push origin vX.Y.Z
+```
+
+After the release workflow rewrites `pubspec.yaml`, sync local `main`:
+
+```bash
+git pull --ff-only origin main
+```
+
+## Docs
+
+Useful references:
+
+- `README.md`
+- `docs/architecture.md`
+- `docs/app_flow_architecture.md`
+- `docs/DATABASE.md`
+- `docs/reader_runtime.md`
+- `docs/reader_spec.md`
+- `docs/release.md`
