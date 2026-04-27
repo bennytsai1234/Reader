@@ -56,35 +56,40 @@ class _ExploreShowContent extends StatelessWidget {
 
     // 錯誤且無數據
     if (provider.errorMessage != null && provider.books.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              Text(
-                provider.errorMessage!,
-                style: const TextStyle(color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () => provider.refresh(),
-                icon: const Icon(Icons.refresh),
-                label: const Text('重試'),
-              ),
-            ],
+      return _buildStatePanel(
+        context,
+        icon: Icons.error_outline,
+        message: '分類載入失敗',
+        detail: provider.errorMessage,
+        actions: [
+          TextButton.icon(
+            onPressed:
+                () => _showErrorDialog(context, provider.errorMessage ?? ''),
+            icon: const Icon(Icons.info_outline),
+            label: const Text('查看錯誤'),
           ),
-        ),
+          FilledButton.icon(
+            onPressed: () => provider.refresh(),
+            icon: const Icon(Icons.refresh),
+            label: const Text('重試'),
+          ),
+        ],
       );
     }
 
     // 空數據
     if (provider.isEmpty) {
-      return const Center(
-        child: Text('暫無內容', style: TextStyle(color: Colors.grey)),
+      return _buildStatePanel(
+        context,
+        icon: Icons.inbox_outlined,
+        message: '暫無內容',
+        actions: [
+          FilledButton.icon(
+            onPressed: () => provider.refresh(),
+            icon: const Icon(Icons.refresh),
+            label: const Text('重新整理'),
+          ),
+        ],
       );
     }
 
@@ -128,6 +133,71 @@ class _ExploreShowContent extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.all(16),
       child: Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildStatePanel(
+    BuildContext context, {
+    required IconData icon,
+    required String message,
+    String? detail,
+    required List<Widget> actions,
+  }) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 52, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurface,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (detail != null && detail.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                detail,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: actions,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showErrorDialog(BuildContext context, String message) {
+    showDialog<void>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('錯誤原因'),
+            content: SelectableText(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('關閉'),
+              ),
+            ],
+          ),
     );
   }
 }

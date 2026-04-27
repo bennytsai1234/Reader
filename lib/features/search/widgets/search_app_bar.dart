@@ -131,7 +131,7 @@ class SearchAppBar extends StatelessWidget implements PreferredSizeWidget {
               CheckedPopupMenuItem<String>(
                 value: 'precision',
                 checked: provider.precisionSearch,
-                child: const Text('精準搜尋'),
+                child: const Text('精準搜尋（完全匹配）'),
               ),
             ];
           },

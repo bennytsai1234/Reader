@@ -84,7 +84,9 @@ class _SearchScopeSheetState extends State<SearchScopeSheet>
   Future<void> _loadSources() async {
     final dao = getIt<BookSourceDao>();
     _allSources =
-        await dao.getAll()
+        (await dao.getAll())
+            .where((source) => source.isSearchEnabledByRuntime)
+            .toList()
           ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
     _filteredSources = List.from(_allSources);
 

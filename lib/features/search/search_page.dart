@@ -113,10 +113,12 @@ class _SearchPageContentState extends State<_SearchPageContent> {
               ],
               // 失敗書源提示
               if (!provider.isSearching && provider.failedSources > 0)
-                _buildFailedSourcesPanel(provider),
+                _buildFailedSourcesPanel(context, provider),
               // 篩選狀態提示
               if (provider.precisionSearch || !provider.searchScope.isAll)
                 _buildFilterStatusPanel(provider),
+              if (provider.hasUnfilteredResults && !provider.isSearching)
+                _buildResultToolbar(context, provider),
               // 主體內容
               Expanded(
                 child:
@@ -147,6 +149,33 @@ class _SearchPageContentState extends State<_SearchPageContent> {
   }
 
   Widget _buildEmptyOrHistory(SearchProvider provider) {
+    if (provider.hasUnfilteredResults &&
+        provider.results.isEmpty &&
+        provider.hasActiveResultFilters) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.filter_alt_off, size: 48, color: Colors.grey),
+              const SizedBox(height: 12),
+              const Text(
+                '沒有符合篩選的結果',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: provider.clearResultFilters,
+                icon: const Icon(Icons.clear),
+                label: const Text('清除篩選'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (provider.lastSearchKey.isNotEmpty && provider.results.isEmpty) {
       return Center(
         child: Column(
@@ -183,21 +212,37 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     );
   }
 
-  Widget _buildFailedSourcesPanel(SearchProvider p) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-    width: double.infinity,
-    color: Colors.red.withValues(alpha: 0.08),
-    child: Row(
-      children: [
-        Icon(Icons.warning_amber_rounded, size: 14, color: Colors.red.shade700),
-        const SizedBox(width: 8),
-        Text(
-          '${p.failedSources} 個書源搜尋失敗（共 ${p.totalSources} 個）',
-          style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+  Widget _buildFailedSourcesPanel(BuildContext context, SearchProvider p) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        width: double.infinity,
+        color: Colors.red.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              size: 14,
+              color: Colors.red.shade700,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${p.failedSources} 個書源搜尋失敗（共 ${p.totalSources} 個）',
+                style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+              ),
+            ),
+            TextButton(
+              onPressed: () => _showFailureSheet(context),
+              child: const Text('查看'),
+            ),
+            if (p.sourceFailures.isNotEmpty)
+              TextButton(
+                onPressed: p.retryFailedSources,
+                child: const Text('重試失敗'),
+              ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 
   Widget _buildCurrentSourcePanel(SearchProvider p) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -244,21 +289,293 @@ class _SearchPageContentState extends State<_SearchPageContent> {
     ),
   );
 
-  Widget _buildResults(SearchProvider p) => ListView.separated(
-    itemCount: p.results.length,
-    separatorBuilder: (ctx, i) => const Divider(height: 1),
-    itemBuilder: (ctx, i) {
-      final book = p.results[i];
-      return SearchResultItem(
-        result: AggregatedSearchBook(
-          book: book,
-          sources:
-              book.sourceLabels.isNotEmpty
-                  ? book.sourceLabels
-                  : [book.originName ?? '未知來源'],
+  Widget _buildResultToolbar(BuildContext context, SearchProvider p) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        border: Border(
+          bottom: BorderSide(color: theme.dividerColor.withValues(alpha: 0.35)),
         ),
-        isInBookshelf: p.isInBookshelf(book),
-      );
-    },
-  );
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Text(
+              '${p.resultCount}/${p.unfilteredResultCount}',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<SearchResultSortMode>(
+              tooltip: '排序',
+              onSelected: p.updateSortMode,
+              itemBuilder:
+                  (context) =>
+                      SearchResultSortMode.values
+                          .map(
+                            (mode) =>
+                                CheckedPopupMenuItem<SearchResultSortMode>(
+                                  value: mode,
+                                  checked: p.sortMode == mode,
+                                  child: Text(mode.displayName),
+                                ),
+                          )
+                          .toList(),
+              child: Chip(
+                avatar: const Icon(Icons.sort, size: 16),
+                label: Text('排序: ${p.sortMode.displayName}'),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 8),
+            ActionChip(
+              avatar: Icon(
+                p.hasActiveResultFilters
+                    ? Icons.filter_alt
+                    : Icons.filter_alt_outlined,
+                size: 16,
+              ),
+              label: Text(p.hasActiveResultFilters ? '篩選中' : '篩選'),
+              onPressed: () => _showResultFilterSheet(context),
+              visualDensity: VisualDensity.compact,
+            ),
+            if (p.hasActiveResultFilters) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: '清除篩選',
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: p.clearResultFilters,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFailureSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder:
+          (sheetContext) => Consumer<SearchProvider>(
+            builder: (context, provider, _) {
+              final failures = provider.sourceFailures;
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '失敗書源',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const Spacer(),
+                          if (failures.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: provider.retryFailedSources,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('重試失敗'),
+                            ),
+                        ],
+                      ),
+                      if (failures.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Text('沒有可查看的失敗明細'),
+                        )
+                      else
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+                          ),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: failures.length,
+                            separatorBuilder:
+                                (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final failure = failures[index];
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(failure.source.bookSourceName),
+                                subtitle: Text(
+                                  failure.message,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap:
+                                    () => _showTextDialog(
+                                      context,
+                                      title: failure.source.bookSourceName,
+                                      text: failure.message,
+                                    ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+    );
+  }
+
+  void _showResultFilterSheet(BuildContext context) {
+    final provider = context.read<SearchProvider>();
+    final authorController = TextEditingController(text: provider.authorFilter);
+    final kindController = TextEditingController(text: provider.kindFilter);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder:
+          (sheetContext) => Consumer<SearchProvider>(
+            builder: (context, p, _) {
+              final sources = p.availableSourceFilters;
+              return SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    bottom: MediaQuery.viewInsetsOf(sheetContext).bottom + 16,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '篩選搜尋結果',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () {
+                                authorController.clear();
+                                kindController.clear();
+                                p.clearResultFilters();
+                              },
+                              child: const Text('清除'),
+                            ),
+                          ],
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: p.onlyInBookshelf,
+                          onChanged: p.setOnlyInBookshelf,
+                          title: const Text('只看已加入書架'),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: p.onlyWithCover,
+                          onChanged: p.setOnlyWithCover,
+                          title: const Text('只看有封面'),
+                        ),
+                        TextField(
+                          controller: authorController,
+                          decoration: const InputDecoration(
+                            labelText: '作者包含',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                          onChanged: p.setAuthorFilter,
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: kindController,
+                          decoration: const InputDecoration(
+                            labelText: '分類包含',
+                            prefixIcon: Icon(Icons.category_outlined),
+                          ),
+                          onChanged: p.setKindFilter,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '書源',
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        if (sources.isEmpty)
+                          const Text('目前沒有可篩選的書源')
+                        else
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children:
+                                sources.map((source) {
+                                  return FilterChip(
+                                    label: Text(source),
+                                    selected: p.sourceFilters.contains(source),
+                                    onSelected:
+                                        (_) => p.toggleSourceFilter(source),
+                                  );
+                                }).toList(),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+    ).whenComplete(() {
+      authorController.dispose();
+      kindController.dispose();
+    });
+  }
+
+  void _showTextDialog(
+    BuildContext context, {
+    required String title,
+    required String text,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: Text(title),
+            content: SelectableText(text),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('關閉'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Widget _buildResults(SearchProvider p) {
+    final results = p.results;
+    return ListView.separated(
+      itemCount: results.length,
+      separatorBuilder: (ctx, i) => const Divider(height: 1),
+      itemBuilder: (ctx, i) {
+        final book = results[i];
+        return SearchResultItem(
+          result: AggregatedSearchBook(
+            book: book,
+            sources:
+                book.sourceLabels.isNotEmpty
+                    ? book.sourceLabels
+                    : [book.originName ?? '未知來源'],
+          ),
+          isInBookshelf: p.isInBookshelf(book),
+        );
+      },
+    );
+  }
 }

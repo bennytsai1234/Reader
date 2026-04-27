@@ -17,6 +17,8 @@
   - 整個 app 的 Mermaid 架構圖、啟動流程、主導航、找書到閱讀、閱讀器、書源管理、備份還原與背景任務流程。
 - [app_user_flows.md](app_user_flows.md)
   - 從使用者操作角度整理 app 流程圖；目前包含 A 類啟動與主入口流程。
+- [c_search_discovery_validation.md](c_search_discovery_validation.md)
+  - C 系列搜尋與發現功能驗證手冊；包含功能表、驗證步驟、相關檔案與常見故障定位。
 - [reader_runtime.md](reader_runtime.md)
   - 閱讀器目前真正接線的 runtime、內容載入、分頁、viewport、進度與 TTS。
 - [reader_spec.md](reader_spec.md)
@@ -32,7 +34,8 @@
 2. [architecture.md](architecture.md)
 3. [app_flow_architecture.md](app_flow_architecture.md)
 4. [app_user_flows.md](app_user_flows.md)
-5. [DATABASE.md](DATABASE.md)
-6. [reader_runtime.md](reader_runtime.md)
-7. [reader_spec.md](reader_spec.md)
-8. [release.md](release.md)
+5. [c_search_discovery_validation.md](c_search_discovery_validation.md)
+6. [DATABASE.md](DATABASE.md)
+7. [reader_runtime.md](reader_runtime.md)
+8. [reader_spec.md](reader_spec.md)
+9. [release.md](release.md)

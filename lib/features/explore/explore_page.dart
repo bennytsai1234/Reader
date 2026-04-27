@@ -173,14 +173,44 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     if (provider.isEmpty &&
         provider.searchQuery.isEmpty &&
         provider.selectedGroup == null) {
-      return const Center(
-        child: Text('目前無可用發現規則的書源', style: TextStyle(color: Colors.grey)),
+      return _buildEmptyState(
+        theme: theme,
+        icon: Icons.travel_explore_outlined,
+        message: '目前無可用發現規則的書源',
+        actions: [
+          FilledButton.icon(
+            onPressed: provider.refresh,
+            icon: const Icon(Icons.refresh),
+            label: const Text('重新整理'),
+          ),
+        ],
       );
     }
 
     if (provider.isEmpty) {
-      return Center(
-        child: Text('找不到符合條件的書源', style: TextStyle(color: Colors.grey[600])),
+      return _buildEmptyState(
+        theme: theme,
+        icon: Icons.search_off,
+        message: '找不到符合條件的書源',
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              _searchController.clear();
+              if (provider.selectedGroup != null) {
+                provider.setGroupFilter(null);
+              } else {
+                provider.setSearchQuery('');
+              }
+            },
+            icon: const Icon(Icons.clear),
+            label: const Text('清除條件'),
+          ),
+          FilledButton.icon(
+            onPressed: provider.refresh,
+            icon: const Icon(Icons.refresh),
+            label: const Text('重新整理'),
+          ),
+        ],
       );
     }
 
@@ -193,6 +223,40 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         final isExpanded = provider.expandedIndex == index;
         return _buildSourceItem(provider, source, index, isExpanded, theme);
       },
+    );
+  }
+
+  Widget _buildEmptyState({
+    required ThemeData theme,
+    required IconData icon,
+    required String message,
+    required List<Widget> actions,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 52, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: actions,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
