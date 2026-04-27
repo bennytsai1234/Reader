@@ -19,6 +19,8 @@
   - 從使用者操作角度整理 app 流程圖；目前包含 A 類啟動與主入口流程。
 - [a_startup_validation.md](a_startup_validation.md)
   - A 系列啟動與主入口功能驗證手冊；包含功能表、手動驗證步驟、故障定位與已移除項目。
+- [b_bookshelf_validation.md](b_bookshelf_validation.md)
+  - B 系列書架功能驗證手冊；包含功能表、驗證步驟、相關檔案與常見故障定位。
 - [c_search_discovery_validation.md](c_search_discovery_validation.md)
   - C 系列搜尋與發現功能驗證手冊；包含功能表、驗證步驟、相關檔案與常見故障定位。
 - [d_book_detail_validation.md](d_book_detail_validation.md)
@@ -45,11 +47,13 @@
 3. [app_flow_architecture.md](app_flow_architecture.md)
 4. [app_user_flows.md](app_user_flows.md)
 5. [a_startup_validation.md](a_startup_validation.md)
-6. [c_search_discovery_validation.md](c_search_discovery_validation.md)
-7. [d_book_detail_validation.md](d_book_detail_validation.md)
-8. [g_settings_tools_validation.md](g_settings_tools_validation.md)
-9. [h_background_download_validation.md](h_background_download_validation.md)
-10. [DATABASE.md](DATABASE.md)
-11. [reader_runtime.md](reader_runtime.md)
-12. [reader_spec.md](reader_spec.md)
-13. [release.md](release.md)
+6. [b_bookshelf_validation.md](b_bookshelf_validation.md)
+7. [c_search_discovery_validation.md](c_search_discovery_validation.md)
+8. [d_book_detail_validation.md](d_book_detail_validation.md)
+9. [e_reader_validation.md](e_reader_validation.md)
+10. [g_settings_tools_validation.md](g_settings_tools_validation.md)
+11. [h_background_download_validation.md](h_background_download_validation.md)
+12. [DATABASE.md](DATABASE.md)
+13. [reader_runtime.md](reader_runtime.md)
+14. [reader_spec.md](reader_spec.md)
+15. [release.md](release.md)
