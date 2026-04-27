@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
-import 'package:inkpage_reader/features/reader/provider/reader_prefs_repository.dart';
+import 'package:inkpage_reader/features/reader/settings/reader_prefs_repository.dart';
 import 'package:inkpage_reader/features/reader/widgets/settings/setting_components.dart';
 import 'package:provider/provider.dart';
 

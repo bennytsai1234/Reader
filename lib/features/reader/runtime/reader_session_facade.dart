@@ -8,7 +8,7 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
-import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart'
+import 'package:inkpage_reader/features/reader/runtime/reader_host_base.dart'
     show ReaderCommandReason;
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 import 'package:inkpage_reader/core/services/source_switch_service.dart';

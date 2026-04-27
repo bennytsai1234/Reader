@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/features/reader/engine/book_content.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_repository.dart';
 import 'package:inkpage_reader/features/reader/engine/layout_engine.dart';
 import 'package:inkpage_reader/features/reader/engine/layout_spec.dart';
@@ -18,15 +20,23 @@ import 'reader_state.dart';
 class ReaderRuntime extends ChangeNotifier {
   ReaderRuntime({
     required Book book,
-    required this.repository,
+    required ChapterRepository repository,
     required LayoutEngine layoutEngine,
     required ReaderProgressController progressController,
     required LayoutSpec initialLayoutSpec,
     required ReaderMode initialMode,
-  }) : _book = book,
-       _layoutEngine = layoutEngine,
+    ReaderLocation? initialLocation,
+  }) : _layoutEngine = layoutEngine,
+       _repository = repository,
        _progressController = progressController,
-       resolver = PageResolver(
+       _initialLocation =
+           (initialLocation ??
+                   ReaderLocation(
+                     chapterIndex: book.chapterIndex,
+                     charOffset: book.charOffset,
+                   ))
+               .normalized(),
+       _resolver = PageResolver(
          repository: repository,
          layoutEngine: layoutEngine,
          layoutSpec: initialLayoutSpec,
@@ -35,41 +45,55 @@ class ReaderRuntime extends ChangeNotifier {
          mode: initialMode,
          phase: ReaderPhase.cold,
          committedLocation:
-             ReaderLocation(
-               chapterIndex: book.chapterIndex,
-               charOffset: book.charOffset,
-             ).normalized(),
+             (initialLocation ??
+                     ReaderLocation(
+                       chapterIndex: book.chapterIndex,
+                       charOffset: book.charOffset,
+                     ))
+                 .normalized(),
          visibleLocation:
-             ReaderLocation(
-               chapterIndex: book.chapterIndex,
-               charOffset: book.charOffset,
-             ).normalized(),
+             (initialLocation ??
+                     ReaderLocation(
+                       chapterIndex: book.chapterIndex,
+                       charOffset: book.charOffset,
+                     ))
+                 .normalized(),
          layoutSpec: initialLayoutSpec,
          layoutGeneration: 0,
        ) {
-    preloadScheduler = ReaderPreloadScheduler(resolver: resolver);
+    _preloadScheduler = ReaderPreloadScheduler(resolver: _resolver);
   }
 
-  final Book _book;
-  final ChapterRepository repository;
+  final ChapterRepository _repository;
   final LayoutEngine _layoutEngine;
   final ReaderProgressController _progressController;
-  final PageResolver resolver;
-  late final ReaderPreloadScheduler preloadScheduler;
+  final ReaderLocation _initialLocation;
+  final PageResolver _resolver;
+  late final ReaderPreloadScheduler _preloadScheduler;
   ReaderState state;
 
   bool _disposed = false;
 
+  PageResolver get debugResolver => _resolver;
+
+  int get chapterCount => _repository.chapterCount;
+
+  List<BookChapter> get chapters => _repository.chapters;
+
+  BookChapter? chapterAt(int index) => _repository.chapterAt(index);
+
+  String titleFor(int index) => _repository.titleFor(index);
+
+  String chapterUrlAt(int index) => chapterAt(index)?.url ?? '';
+
   Future<void> openBook() async {
     _setState(state.copyWith(phase: ReaderPhase.loading, clearError: true));
     try {
-      await repository.ensureChapters();
-      final location = ReaderLocation(
-        chapterIndex: _book.chapterIndex,
-        charOffset: _book.charOffset,
-      ).normalized(chapterCount: repository.chapterCount);
+      await _repository.ensureChapters();
+      final location = _initialLocation.normalized(
+        chapterCount: _repository.chapterCount,
+      );
       await jumpToLocation(location, immediateSave: false);
-      preloadScheduler.preloadAround(location.chapterIndex, radius: 1);
     } catch (e) {
       _setState(
         state.copyWith(phase: ReaderPhase.error, errorMessage: e.toString()),
@@ -79,8 +103,8 @@ class ReaderRuntime extends ChangeNotifier {
 
   Future<void> updateLayoutSpec(LayoutSpec spec) async {
     if (state.layoutSpec.layoutSignature == spec.layoutSignature) return;
-    final generation = preloadScheduler.bumpGeneration();
-    resolver.updateLayoutSpec(spec);
+    final generation = _preloadScheduler.bumpGeneration();
+    _resolver.updateLayoutSpec(spec);
     _layoutEngine.invalidateWhere((layout) {
       return layout.layoutSignature != spec.layoutSignature;
     });
@@ -100,6 +124,30 @@ class ReaderRuntime extends ChangeNotifier {
     );
   }
 
+  Future<void> reloadContentPreservingLocation() async {
+    final location = state.visibleLocation;
+    _repository.clearContentCache();
+    _resolver.clearCachedLayouts();
+    await jumpToLocation(location, immediateSave: false);
+  }
+
+  Future<String> textFromVisibleLocation() async {
+    final location = state.visibleLocation.normalized(
+      chapterCount: _repository.chapterCount,
+    );
+    final content = await loadContentForTts(location);
+    final safeOffset =
+        location.charOffset.clamp(0, content.plainText.length).toInt();
+    return content.plainText.substring(safeOffset).trim();
+  }
+
+  Future<BookContent> loadContentForTts(ReaderLocation location) {
+    final normalized = location.normalized(
+      chapterCount: _repository.chapterCount,
+    );
+    return _repository.loadContent(normalized.chapterIndex);
+  }
+
   Future<void> jumpToChapter(int chapterIndex) {
     return jumpToLocation(
       ReaderLocation(chapterIndex: chapterIndex, charOffset: 0),
@@ -115,11 +163,11 @@ class ReaderRuntime extends ChangeNotifier {
     _setState(state.copyWith(phase: ReaderPhase.layingOut, clearError: true));
     try {
       final normalized = location.normalized(
-        chapterCount: repository.chapterCount,
+        chapterCount: _repository.chapterCount,
       );
-      final page = await resolver.pageForLocation(normalized);
+      final page = await _resolver.pageForLocation(normalized);
       if (generation != state.layoutGeneration) return;
-      final window = await resolver.buildWindowAround(normalized);
+      final window = await _resolver.buildWindowAround(normalized);
       if (generation != state.layoutGeneration) return;
       final resolvedLocation = ReaderLocation(
         chapterIndex: page.chapterIndex,
@@ -141,7 +189,7 @@ class ReaderRuntime extends ChangeNotifier {
       if (immediateSave) {
         await _progressController.saveImmediately(resolvedLocation);
       }
-      preloadScheduler.preloadAround(resolvedLocation.chapterIndex, radius: 1);
+      unawaited(_preloadScheduler.scheduleJump(resolvedLocation.chapterIndex));
     } catch (e) {
       _setState(
         state.copyWith(phase: ReaderPhase.error, errorMessage: e.toString()),
@@ -163,7 +211,7 @@ class ReaderRuntime extends ChangeNotifier {
       _scheduleMissingNeighborPreload(forward: true);
       return false;
     }
-    final newNext = resolver.nextPageOrPlaceholder(next);
+    final newNext = _resolver.nextPageOrPlaceholder(next);
     final newWindow = PageWindow(
       prev: window.current,
       current: next,
@@ -184,7 +232,7 @@ class ReaderRuntime extends ChangeNotifier {
       ),
     );
     _progressController.schedule(location);
-    _scheduleMissingNeighborPreload(forward: true);
+    unawaited(_preloadScheduler.scheduleScrollSettled(next));
     return true;
   }
 
@@ -195,7 +243,7 @@ class ReaderRuntime extends ChangeNotifier {
       _scheduleMissingNeighborPreload(forward: false);
       return false;
     }
-    final newPrev = resolver.prevPageOrPlaceholder(prev);
+    final newPrev = _resolver.prevPageOrPlaceholder(prev);
     final newWindow = PageWindow(
       prev: newPrev,
       current: prev,
@@ -216,7 +264,7 @@ class ReaderRuntime extends ChangeNotifier {
       ),
     );
     _progressController.schedule(location);
-    _scheduleMissingNeighborPreload(forward: false);
+    unawaited(_preloadScheduler.scheduleScrollSettled(prev));
     return true;
   }
 
@@ -243,7 +291,7 @@ class ReaderRuntime extends ChangeNotifier {
     bool debounceSave = true,
   }) {
     final normalized = location.normalized(
-      chapterCount: repository.chapterCount,
+      chapterCount: _repository.chapterCount,
     );
     _setState(
       state.copyWith(
@@ -269,28 +317,24 @@ class ReaderRuntime extends ChangeNotifier {
       ),
     );
     _progressController.schedule(location);
-    if (page.pageIndex >= page.pageSize - 2) {
-      preloadScheduler.preloadAround(page.chapterIndex + 1, radius: 0);
-    } else if (page.pageIndex <= 1) {
-      preloadScheduler.preloadAround(page.chapterIndex - 1, radius: 0);
-    }
+    unawaited(_preloadScheduler.scheduleSlidePageSettled(page));
   }
 
   Future<void> refreshNeighbors() async {
     final window = state.pageWindow;
     if (window == null) return;
     final prev =
-        resolver.prevPageSync(window.current) ??
-        await resolver.prevPage(window.current, allowAsyncLoad: false);
+        _resolver.prevPageSync(window.current) ??
+        await _resolver.prevPage(window.current, allowAsyncLoad: false);
     final next =
-        resolver.nextPageSync(window.current) ??
-        await resolver.nextPage(window.current, allowAsyncLoad: false);
+        _resolver.nextPageSync(window.current) ??
+        await _resolver.nextPage(window.current, allowAsyncLoad: false);
     _setState(
       state.copyWith(
         pageWindow: PageWindow(
-          prev: prev ?? resolver.prevPageOrPlaceholder(window.current),
+          prev: prev ?? _resolver.prevPageOrPlaceholder(window.current),
           current: window.current,
-          next: next ?? resolver.nextPageOrPlaceholder(window.current),
+          next: next ?? _resolver.nextPageOrPlaceholder(window.current),
           lookAhead: const <TextPage>[],
         ),
       ),
@@ -332,16 +376,11 @@ class ReaderRuntime extends ChangeNotifier {
     final window = state.pageWindow;
     if (window == null) return;
     final target = window.current.chapterIndex + (forward ? 1 : -1);
-    if (target < 0 || target >= repository.chapterCount) return;
+    if (target < 0 || target >= _repository.chapterCount) return;
     unawaited(
-      resolver
-          .ensureLayout(target)
-          .then((_) {
-            if (!_disposed) unawaited(refreshNeighbors());
-          })
-          .catchError((_) {
-            if (!_disposed) unawaited(refreshNeighbors());
-          }),
+      _preloadScheduler.scheduleLayout(target, priority: true).whenComplete(() {
+        if (!_disposed) unawaited(refreshNeighbors());
+      }),
     );
   }
 
@@ -354,6 +393,7 @@ class ReaderRuntime extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _preloadScheduler.dispose();
     _progressController.dispose();
     super.dispose();
   }

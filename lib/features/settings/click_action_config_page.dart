@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/reader/models/reader_tap_action.dart';
-import 'package:inkpage_reader/features/reader/provider/reader_prefs_repository.dart';
+import 'package:inkpage_reader/features/reader/settings/reader_prefs_repository.dart';
 
 class ClickActionConfigPage extends StatefulWidget {
   const ClickActionConfigPage({super.key});

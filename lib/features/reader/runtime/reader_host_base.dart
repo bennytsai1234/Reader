@@ -27,7 +27,7 @@ enum ReaderCommandReason {
   system,
 }
 
-abstract class ReaderProviderBase extends ChangeNotifier {
+abstract class ReaderHostBase extends ChangeNotifier {
   final BookDao bookDao = getIt<BookDao>();
   final ChapterDao chapterDao = getIt<ChapterDao>();
   final ReplaceRuleDao replaceDao = getIt<ReplaceRuleDao>();
@@ -107,7 +107,7 @@ abstract class ReaderProviderBase extends ChangeNotifier {
     super.notifyListeners();
   }
 
-  ReaderProviderBase(this.book);
+  ReaderHostBase(this.book);
 
   bool updateContentInsets({required double top, required double bottom}) {
     final normalizedTop = top < 0 ? 0.0 : top;

@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
 
 class ReaderChaptersDrawer extends StatefulWidget {
-  final ReaderProvider provider;
+  const ReaderChaptersDrawer({
+    super.key,
+    required this.chapters,
+    required this.currentChapterIndex,
+    required this.titleFor,
+    required this.onChapterTap,
+    this.listenable,
+  });
 
-  const ReaderChaptersDrawer({super.key, required this.provider});
+  final List<BookChapter> chapters;
+  final int currentChapterIndex;
+  final String Function(int index) titleFor;
+  final Future<void> Function(int index) onChapterTap;
+  final Listenable? listenable;
 
   @override
   State<ReaderChaptersDrawer> createState() => _ReaderChaptersDrawerState();
@@ -19,7 +30,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
   @override
   void initState() {
     super.initState();
-    widget.provider.addListener(_handleProviderChanged);
+    widget.listenable?.addListener(_handleChanged);
   }
 
   @override
@@ -31,9 +42,9 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
   @override
   void didUpdateWidget(covariant ReaderChaptersDrawer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.provider != widget.provider) {
-      oldWidget.provider.removeListener(_handleProviderChanged);
-      widget.provider.addListener(_handleProviderChanged);
+    if (oldWidget.listenable != widget.listenable) {
+      oldWidget.listenable?.removeListener(_handleChanged);
+      widget.listenable?.addListener(_handleChanged);
       _lastScrolledChapterIndex = -1;
     }
     _scheduleScrollToCurrentChapter();
@@ -41,13 +52,13 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
 
   @override
   void dispose() {
-    widget.provider.removeListener(_handleProviderChanged);
+    widget.listenable?.removeListener(_handleChanged);
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _handleChapterTap(int index) async {
-    await widget.provider.jumpToChapter(index);
+    await widget.onChapterTap(index);
     if (mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
@@ -55,7 +66,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
 
   void _scrollToCurrentChapter() {
     if (!mounted || !_scrollController.hasClients) return;
-    final currentChapterIndex = widget.provider.currentChapterIndex;
+    final currentChapterIndex = widget.currentChapterIndex;
     if (currentChapterIndex == _lastScrolledChapterIndex) return;
     _lastScrolledChapterIndex = currentChapterIndex;
 
@@ -68,7 +79,7 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
     _scrollController.jumpTo(safeOffset);
   }
 
-  void _handleProviderChanged() {
+  void _handleChanged() {
     _scheduleScrollToCurrentChapter();
   }
 
@@ -81,43 +92,36 @@ class _ReaderChaptersDrawerState extends State<ReaderChaptersDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: widget.provider,
-      builder: (context, _) {
-        final provider = widget.provider;
-        return Drawer(
-          child: Column(
-            children: [
-              AppBar(
-                title: const Text('目錄'),
-                automaticallyImplyLeading: false,
-                elevation: 0,
-              ),
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  itemCount: provider.chapters.length,
-                  itemExtent: _tileExtent,
-                  itemBuilder: (context, index) {
-                    final isCurrentChapter =
-                        provider.currentChapterIndex == index;
-                    return ListTile(
-                      title: Text(
-                        provider.displayChapterTitleAt(index),
-                        style: TextStyle(
-                          color: isCurrentChapter ? Colors.blue : null,
-                          fontWeight: isCurrentChapter ? FontWeight.bold : null,
-                        ),
-                      ),
-                      onTap: () => _handleChapterTap(index),
-                    );
-                  },
-                ),
-              ),
-            ],
+    return Drawer(
+      child: Column(
+        children: [
+          AppBar(
+            title: const Text('目錄'),
+            automaticallyImplyLeading: false,
+            elevation: 0,
           ),
-        );
-      },
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              itemCount: widget.chapters.length,
+              itemExtent: _tileExtent,
+              itemBuilder: (context, index) {
+                final isCurrentChapter = widget.currentChapterIndex == index;
+                return ListTile(
+                  title: Text(
+                    widget.titleFor(index),
+                    style: TextStyle(
+                      color: isCurrentChapter ? Colors.blue : null,
+                      fontWeight: isCurrentChapter ? FontWeight.bold : null,
+                    ),
+                  ),
+                  onTap: () => _handleChapterTap(index),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

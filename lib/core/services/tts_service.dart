@@ -104,7 +104,7 @@ class TTSService extends ChangeNotifier {
       notifyListeners();
     });
 
-    // 【關鍵修復】完成時：更新狀態並廣播事件給 ReaderProvider
+    // 【關鍵修復】完成時：更新狀態並廣播事件給閱讀器端控制器
     _flutterTts.setCompletionHandler(() {
       _isPlaying = false;
       _audioHandler?.setPlaying(false);

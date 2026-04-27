@@ -11,7 +11,7 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/replace_rule.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
-import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
+import 'package:inkpage_reader/features/reader/engine/chapter_fetch_result.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_store.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_storage.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_perf_trace.dart';

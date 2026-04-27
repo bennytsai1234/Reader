@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/features/book_detail/book_detail_provider.dart';
-import 'package:inkpage_reader/features/reader/provider/change_source_provider.dart';
+import 'package:inkpage_reader/features/reader/source/change_source_provider.dart';
 import 'package:inkpage_reader/features/reader/widgets/change_source_item.dart';
 
 class ChangeSourceSheet extends StatelessWidget {

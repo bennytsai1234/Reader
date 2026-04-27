@@ -26,6 +26,9 @@ class ReadStyle {
     required this.paddingRight,
     this.fontFamily,
     this.bold = false,
+    this.textIndent = 0,
+    this.textFullJustify = false,
+    this.selectText = true,
     required this.pageMode,
   });
 
@@ -39,6 +42,9 @@ class ReadStyle {
   final double paddingRight;
   final String? fontFamily;
   final bool bold;
+  final int textIndent;
+  final bool textFullJustify;
+  final bool selectText;
   final ReaderPageMode pageMode;
 
   ReadStyle copyWith({
@@ -52,6 +58,9 @@ class ReadStyle {
     double? paddingRight,
     String? fontFamily,
     bool? bold,
+    int? textIndent,
+    bool? textFullJustify,
+    bool? selectText,
     ReaderPageMode? pageMode,
   }) {
     return ReadStyle(
@@ -65,6 +74,9 @@ class ReadStyle {
       paddingRight: paddingRight ?? this.paddingRight,
       fontFamily: fontFamily ?? this.fontFamily,
       bold: bold ?? this.bold,
+      textIndent: textIndent ?? this.textIndent,
+      textFullJustify: textFullJustify ?? this.textFullJustify,
+      selectText: selectText ?? this.selectText,
       pageMode: pageMode ?? this.pageMode,
     );
   }

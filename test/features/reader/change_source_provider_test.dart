@@ -7,7 +7,7 @@ import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
-import 'package:inkpage_reader/features/reader/provider/change_source_provider.dart';
+import 'package:inkpage_reader/features/reader/source/change_source_provider.dart';
 
 class _FakeBookSourceDao extends Fake implements BookSourceDao {
   List<BookSource> sources = <BookSource>[];

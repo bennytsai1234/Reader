@@ -1,37 +1,52 @@
 import 'package:flutter/material.dart';
-import '../../reader_provider.dart';
 import 'reader_menu_palette.dart';
 
 class ReaderTopMenu extends StatelessWidget {
-  final ReaderProvider provider;
-  final VoidCallback onBack;
-  final VoidCallback onMore;
-
   const ReaderTopMenu({
     super.key,
-    required this.provider,
+    required this.controlsVisible,
+    required this.readBarStyleFollowPage,
+    required this.pageBackgroundColor,
+    required this.pageTextColor,
+    required this.bookName,
+    required this.chapterTitle,
+    required this.chapterUrl,
+    required this.originName,
+    required this.showReadTitleAddition,
     required this.onBack,
     required this.onMore,
   });
+
+  final bool controlsVisible;
+  final bool readBarStyleFollowPage;
+  final Color pageBackgroundColor;
+  final Color pageTextColor;
+  final String bookName;
+  final String chapterTitle;
+  final String chapterUrl;
+  final String originName;
+  final bool showReadTitleAddition;
+  final VoidCallback onBack;
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
     final menuStyle = ReaderMenuStyle.resolve(
       context: context,
-      followPageStyle: provider.readBarStyleFollowPage,
-      pageBackgroundColor: provider.currentTheme.backgroundColor,
-      pageTextColor: provider.currentTheme.textColor,
+      followPageStyle: readBarStyleFollowPage,
+      pageBackgroundColor: pageBackgroundColor,
+      pageTextColor: pageTextColor,
     );
     return Positioned(
       top: 0,
       left: 0,
       right: 0,
       child: IgnorePointer(
-        ignoring: !provider.showControls,
+        ignoring: !controlsVisible,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
-          offset: provider.showControls ? Offset.zero : const Offset(0, -1.15),
+          offset: controlsVisible ? Offset.zero : const Offset(0, -1.15),
           child: Container(
             decoration: BoxDecoration(
               color: menuStyle.background,
@@ -48,9 +63,8 @@ class ReaderTopMenu extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildAppBar(context, menuStyle),
-                if (provider.showReadTitleAddition)
-                  _buildAdditionInfo(context, menuStyle),
+                _buildAppBar(menuStyle),
+                if (showReadTitleAddition) _buildAdditionInfo(menuStyle),
               ],
             ),
           ),
@@ -59,7 +73,7 @@ class ReaderTopMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildAppBar(BuildContext context, ReaderMenuStyle menuStyle) {
+  Widget _buildAppBar(ReaderMenuStyle menuStyle) {
     return Row(
       children: [
         IconButton(
@@ -68,7 +82,7 @@ class ReaderTopMenu extends StatelessWidget {
         ),
         Expanded(
           child: Text(
-            provider.book.name,
+            bookName,
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -84,8 +98,7 @@ class ReaderTopMenu extends StatelessWidget {
     );
   }
 
-  /// 頂部附加資訊 (對標 Android title_bar_addition)
-  Widget _buildAdditionInfo(BuildContext context, ReaderMenuStyle menuStyle) {
+  Widget _buildAdditionInfo(ReaderMenuStyle menuStyle) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
@@ -95,7 +108,7 @@ class ReaderTopMenu extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  provider.currentChapterTitle,
+                  chapterTitle,
                   style: TextStyle(
                     color: menuStyle.mutedForeground,
                     fontSize: 12,
@@ -103,9 +116,9 @@ class ReaderTopMenu extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (provider.currentChapterUrl.isNotEmpty)
+                if (chapterUrl.isNotEmpty)
                   Text(
-                    provider.currentChapterUrl,
+                    chapterUrl,
                     style: TextStyle(
                       color: menuStyle.mutedForeground,
                       fontSize: 10,
@@ -117,28 +130,23 @@ class ReaderTopMenu extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _buildSourceTag(context, menuStyle),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: menuStyle.accentMuted,
+              border: Border.all(color: menuStyle.accent),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              originName,
+              style: TextStyle(
+                color: menuStyle.foreground,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
-      ),
-    );
-  }
-
-  /// 書源標籤 (對標 Android tv_source_action)
-  Widget _buildSourceTag(BuildContext context, ReaderMenuStyle menuStyle) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: menuStyle.accentMuted,
-        border: Border.all(color: menuStyle.accent),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        provider.book.originName,
-        style: TextStyle(
-          color: menuStyle.foreground,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
       ),
     );
   }

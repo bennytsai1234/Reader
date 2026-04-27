@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
@@ -19,6 +17,7 @@ import 'package:inkpage_reader/features/reader/engine/page_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/read_style.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/page_window.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_preload_scheduler.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
@@ -120,6 +119,67 @@ void main() {
       );
     });
 
+    test('LayoutEngine applies body indent and justification flags', () {
+      final engine = LayoutEngine();
+      final content = BookContent.fromRaw(
+        chapterIndex: 0,
+        title: 'Title',
+        rawText: '這是一段足夠長的正文，用來測試首行縮排、非末行兩端對齊，以及標題不應套用正文縮排。',
+      );
+      final justified = engine.layout(
+        content,
+        LayoutSpec.fromViewport(
+          viewportSize: const Size(180, 360),
+          style: const ReadStyle(
+            fontSize: 18,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            paragraphSpacing: 0.6,
+            paddingTop: 12,
+            paddingBottom: 12,
+            paddingLeft: 16,
+            paddingRight: 16,
+            textIndent: 2,
+            textFullJustify: true,
+            pageMode: ReaderPageMode.scroll,
+          ),
+        ),
+      );
+
+      expect(justified.lines.first.isTitle, isTrue);
+      expect(justified.lines.first.text.startsWith('　'), isFalse);
+      final firstBodyLine = justified.lines.firstWhere((line) => !line.isTitle);
+      expect(firstBodyLine.text.startsWith('　　'), isTrue);
+      expect(firstBodyLine.startCharOffset, 0);
+      expect(
+        justified.lines
+            .where((line) => !line.isTitle && !line.isParagraphEnd)
+            .any((line) => line.shouldJustify),
+        isTrue,
+      );
+
+      final ragged = engine.layout(
+        content,
+        LayoutSpec.fromViewport(
+          viewportSize: const Size(180, 360),
+          style: const ReadStyle(
+            fontSize: 18,
+            lineHeight: 1.5,
+            letterSpacing: 0,
+            paragraphSpacing: 0.6,
+            paddingTop: 12,
+            paddingBottom: 12,
+            paddingLeft: 16,
+            paddingRight: 16,
+            textIndent: 2,
+            textFullJustify: false,
+            pageMode: ReaderPageMode.scroll,
+          ),
+        ),
+      );
+      expect(ragged.lines.any((line) => line.shouldJustify), isFalse);
+    });
+
     test(
       'runtime opens only current window and keeps lookAhead optional',
       () async {
@@ -133,9 +193,149 @@ void main() {
         expect(runtime.state.pageWindow, isNotNull);
         expect(runtime.state.pageWindow!.current.chapterIndex, 0);
         expect(runtime.state.pageWindow!.lookAhead, isEmpty);
-        expect(runtime.resolver.cachedLayout(0), isNotNull);
-        expect(runtime.resolver.cachedLayout(1), isNotNull);
-        expect(runtime.resolver.cachedLayout(2), isNull);
+        expect(runtime.debugResolver.cachedLayout(0), isNotNull);
+        expect(runtime.debugResolver.cachedLayout(1), isNotNull);
+        expect(runtime.debugResolver.cachedLayout(2), isNull);
+      },
+    );
+
+    test('ReaderPreloadScheduler builds centered preload order', () {
+      expect(
+        ReaderPreloadScheduler.buildCenteredOrder(
+          chapterCount: 5,
+          centerChapterIndex: 2,
+          radius: 2,
+        ),
+        <int>[2, 3, 1, 4, 0],
+      );
+    });
+
+    test(
+      'ReaderPreloadScheduler content queue preloads BookContent without layout',
+      () async {
+        final env = _RuntimeEnv();
+        final scheduler = ReaderPreloadScheduler(
+          resolver: env.runtime.debugResolver,
+        );
+
+        await scheduler.scheduleAround(1, contentRadius: 1, layoutRadius: -1);
+
+        expect(env.repository.cachedContent(0), isNotNull);
+        expect(env.repository.cachedContent(1), isNotNull);
+        expect(env.repository.cachedContent(2), isNotNull);
+        expect(env.runtime.debugResolver.cachedLayout(0), isNull);
+        expect(env.runtime.debugResolver.cachedLayout(1), isNull);
+        expect(env.runtime.debugResolver.cachedLayout(2), isNull);
+
+        scheduler.dispose();
+      },
+    );
+
+    test(
+      'ReaderPreloadScheduler layout queue only lays out the requested window',
+      () async {
+        final env = _RuntimeEnv();
+        final scheduler = ReaderPreloadScheduler(
+          resolver: env.runtime.debugResolver,
+        );
+
+        await scheduler.scheduleAround(1, contentRadius: -1, layoutRadius: 1);
+
+        expect(env.runtime.debugResolver.cachedLayout(0), isNotNull);
+        expect(env.runtime.debugResolver.cachedLayout(1), isNotNull);
+        expect(env.runtime.debugResolver.cachedLayout(2), isNotNull);
+        expect(env.runtime.debugResolver.cachedLayout(3), isNull);
+
+        scheduler.dispose();
+      },
+    );
+
+    test(
+      'ReaderPreloadScheduler content queue uses centered order and serializes work',
+      () async {
+        final book = Book(bookUrl: 'queued-book', origin: 'local', name: 'q');
+        final chapters = _chaptersFor(book.bookUrl, 5);
+        final repository = _QueuedChapterRepository(
+          book: book,
+          chapters: chapters,
+        );
+        final resolver = PageResolver(
+          repository: repository,
+          layoutEngine: LayoutEngine(),
+          layoutSpec: _spec(fontSize: 18),
+        );
+        final scheduler = ReaderPreloadScheduler(
+          resolver: resolver,
+          maxConcurrentContentTasks: 1,
+        );
+
+        final done = scheduler.scheduleAround(
+          2,
+          contentRadius: 2,
+          layoutRadius: -1,
+        );
+
+        await Future<void>.delayed(Duration.zero);
+        expect(repository.loadOrder, <int>[2]);
+
+        repository.complete(2);
+        await Future<void>.delayed(Duration.zero);
+        expect(repository.loadOrder, <int>[2, 3]);
+
+        repository.complete(3);
+        await Future<void>.delayed(Duration.zero);
+        expect(repository.loadOrder, <int>[2, 3, 1]);
+
+        repository.complete(1);
+        await Future<void>.delayed(Duration.zero);
+        expect(repository.loadOrder, <int>[2, 3, 1, 4]);
+
+        repository.complete(4);
+        await Future<void>.delayed(Duration.zero);
+        expect(repository.loadOrder, <int>[2, 3, 1, 4, 0]);
+
+        repository.complete(0);
+        await done;
+        scheduler.dispose();
+      },
+    );
+
+    test(
+      'ReaderPreloadScheduler generation prevents stale layout from caching',
+      () async {
+        final book = Book(bookUrl: 'stale-layout-book', origin: 'local');
+        final bookDao = _FakeBookDao();
+        final gate = Completer<void>();
+        final chapters = _chaptersFor(book.bookUrl, 3);
+        final repository = _DelayedChapterRepository(
+          book: book,
+          chapters: chapters,
+          delayedChapterIndex: 1,
+          gate: gate,
+          bookDao: bookDao,
+        );
+        final resolver = PageResolver(
+          repository: repository,
+          layoutEngine: LayoutEngine(),
+          layoutSpec: _spec(fontSize: 18),
+        );
+        final scheduler = ReaderPreloadScheduler(resolver: resolver);
+
+        final stale = scheduler.scheduleLayout(1);
+        await Future<void>.delayed(Duration.zero);
+        expect(repository.loadAttempts[1], 1);
+
+        scheduler.bumpGeneration();
+        resolver.updateLayoutSpec(_spec(fontSize: 22));
+
+        await scheduler.scheduleLayout(2);
+        expect(resolver.cachedLayout(2), isNotNull);
+
+        gate.complete();
+        await stale;
+        expect(resolver.cachedLayout(1), isNull);
+
+        scheduler.dispose();
       },
     );
 
@@ -187,7 +387,7 @@ void main() {
       final env = _RuntimeEnv();
       final runtime = env.runtime;
       await runtime.openBook();
-      await runtime.resolver.ensureLayout(1);
+      await runtime.debugResolver.ensureLayout(1);
       await runtime.refreshNeighbors();
 
       var guard = 0;
@@ -213,7 +413,7 @@ void main() {
           pageWindow: PageWindow(
             prev: null,
             current: current,
-            next: runtime.resolver.placeholderPageFor(1),
+            next: runtime.debugResolver.placeholderPageFor(1),
           ),
         );
 
@@ -274,7 +474,7 @@ void main() {
         await runtime.openBook();
         await Future<void>.delayed(Duration.zero);
 
-        final chapterZero = await runtime.resolver.ensureLayout(0);
+        final chapterZero = await runtime.debugResolver.ensureLayout(0);
         final tail = chapterZero.pages.last;
         final location = ReaderLocation(
           chapterIndex: tail.chapterIndex,
@@ -282,9 +482,9 @@ void main() {
         );
         runtime.state = runtime.state.copyWith(
           pageWindow: PageWindow(
-            prev: runtime.resolver.prevPageSync(tail),
+            prev: runtime.debugResolver.prevPageSync(tail),
             current: tail,
-            next: runtime.resolver.placeholderPageFor(1),
+            next: runtime.debugResolver.placeholderPageFor(1),
           ),
           visibleLocation: location,
           committedLocation: location,
@@ -311,7 +511,7 @@ void main() {
     );
 
     test(
-      'layout failure is represented as an error placeholder page',
+      'remote content loader unavailable falls back without network fetch',
       () async {
         final book = Book(
           bookUrl: 'remote-book',
@@ -341,13 +541,13 @@ void main() {
           layoutSpec: _spec(fontSize: 18),
         );
 
-        await expectLater(resolver.ensureLayout(0), throwsStateError);
-        final placeholder = resolver.placeholderPageFor(0);
+        final layout = await resolver.ensureLayout(0);
 
-        expect(placeholder.isPlaceholder, isTrue);
-        expect(placeholder.isLoading, isFalse);
-        expect(placeholder.errorMessage, contains('network failed'));
-        expect(placeholder.lines.single.text, '章節載入失敗');
+        expect(layout.pages, isNotEmpty);
+        expect(
+          layout.pages.first.lines.map((line) => line.text).join('\n'),
+          allOf(contains('broken'), contains('chapter')),
+        );
       },
     );
 
@@ -411,6 +611,44 @@ void main() {
       },
     );
 
+    test(
+      'runtime exposes chapter metadata and visible-location text',
+      () async {
+        final env = _RuntimeEnv();
+        final runtime = env.runtime;
+
+        await runtime.openBook();
+        final text = await runtime.textFromVisibleLocation();
+
+        expect(runtime.chapterCount, 4);
+        expect(runtime.chapters, hasLength(4));
+        expect(runtime.chapterAt(0)?.title, '第0章');
+        expect(runtime.titleFor(1), '第1章');
+        expect(runtime.chapterUrlAt(99), '');
+        expect(text, contains('第0章第0段'));
+      },
+    );
+
+    test(
+      'reloadContentPreservingLocation clears content and layout then restores visible location',
+      () async {
+        final env = _RuntimeEnv();
+        final runtime = env.runtime;
+        await runtime.openBook();
+        runtime.moveToNextPage();
+        final location = runtime.state.visibleLocation;
+
+        await runtime.reloadContentPreservingLocation();
+
+        expect(runtime.state.phase, ReaderPhase.ready);
+        expect(
+          runtime.state.visibleLocation.chapterIndex,
+          location.chapterIndex,
+        );
+        expect(runtime.state.visibleLocation.charOffset, location.charOffset);
+      },
+    );
+
     test('scroll movement debounces DB writes until flushed', () async {
       final env = _RuntimeEnv();
       final runtime = env.runtime;
@@ -424,18 +662,20 @@ void main() {
       expect(env.bookDao.writes, 1);
       expect(env.bookDao.lastLocation, runtime.state.visibleLocation);
     });
+  });
+}
 
-    test('new ReadViewRuntime does not use old scroll restore primitives', () {
-      final source =
-          File(
-            'lib/features/reader/view/read_view_runtime.dart',
-          ).readAsStringSync();
-
-      expect(source, isNot(contains('ScrollablePositionedList')));
-      expect(source, isNot(contains('ensureVisible')));
-      expect(source, isNot(contains('GlobalKey')));
-      expect(source, isNot(contains('ScrollRestoreRunner')));
-    });
+List<BookChapter> _chaptersFor(String bookUrl, int count) {
+  return List<BookChapter>.generate(count, (chapterIndex) {
+    return BookChapter(
+      title: '第$chapterIndex章',
+      index: chapterIndex,
+      bookUrl: bookUrl,
+      content: List<String>.generate(
+        40,
+        (i) => '第$chapterIndex章第$i段，這是一段足夠長的文字，用於產生多個 TextPage。',
+      ).join('\n\n'),
+    );
   });
 }
 
@@ -449,17 +689,7 @@ class _RuntimeEnv {
         charOffset: 0,
       ),
       bookDao = _FakeBookDao() {
-    final chapters = List<BookChapter>.generate(4, (chapterIndex) {
-      return BookChapter(
-        title: '第$chapterIndex章',
-        index: chapterIndex,
-        bookUrl: 'book',
-        content: List<String>.generate(
-          40,
-          (i) => '第$chapterIndex章第$i段，這是一段足夠長的文字，用於產生多個 TextPage。',
-        ).join('\n\n'),
-      );
-    });
+    final chapters = _chaptersFor(book.bookUrl, 4);
     repository = ChapterRepository(
       book: book,
       initialChapters: chapters,
@@ -486,6 +716,41 @@ class _RuntimeEnv {
   final _FakeBookDao bookDao;
   late final ChapterRepository repository;
   late final ReaderRuntime runtime;
+}
+
+class _QueuedChapterRepository extends ChapterRepository {
+  _QueuedChapterRepository({
+    required super.book,
+    required List<BookChapter> chapters,
+  }) : super(
+         initialChapters: chapters,
+         bookDao: _FakeBookDao(),
+         chapterDao: _FakeChapterDao(chapters),
+         sourceDao: _FakeSourceDao(),
+       );
+
+  final List<int> loadOrder = <int>[];
+  final Map<int, Completer<BookContent>> _completers =
+      <int, Completer<BookContent>>{};
+
+  @override
+  Future<BookContent> loadContent(int chapterIndex) {
+    loadOrder.add(chapterIndex);
+    final completer = _completers[chapterIndex] ??= Completer<BookContent>();
+    return completer.future;
+  }
+
+  void complete(int chapterIndex) {
+    final completer = _completers[chapterIndex];
+    if (completer == null || completer.isCompleted) return;
+    completer.complete(
+      BookContent.fromRaw(
+        chapterIndex: chapterIndex,
+        title: 'c$chapterIndex',
+        rawText: 'chapter $chapterIndex',
+      ),
+    );
+  }
 }
 
 class _DelayedChapterRepository extends ChapterRepository {

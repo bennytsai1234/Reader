@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import '../provider/change_source_provider.dart';
+import '../source/change_source_provider.dart';
 
 class ChangeSourceFilterBar extends StatelessWidget {
   final ChangeSourceProvider provider;
   final TextEditingController filterController;
 
-  const ChangeSourceFilterBar({super.key, required this.provider, required this.filterController});
+  const ChangeSourceFilterBar({
+    super.key,
+    required this.provider,
+    required this.filterController,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +27,13 @@ class ChangeSourceFilterBar extends StatelessWidget {
                 final group = provider.groups[index];
                 final isSelected = provider.selectedGroup == group;
                 return FilterChip(
-                  label: Text(group, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : null)),
+                  label: Text(
+                    group,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isSelected ? Colors.white : null,
+                    ),
+                  ),
                   selected: isSelected,
                   onSelected: (val) => provider.updateSelectedGroup(group),
                   selectedColor: Colors.blue,
@@ -43,7 +53,9 @@ class ChangeSourceFilterBar extends StatelessWidget {
               prefixIcon: const Icon(Icons.search, size: 18),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onChanged: provider.applyFilter,
           ),
@@ -52,4 +64,3 @@ class ChangeSourceFilterBar extends StatelessWidget {
     );
   }
 }
-

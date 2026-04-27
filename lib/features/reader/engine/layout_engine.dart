@@ -44,6 +44,8 @@ class LayoutEngine {
         top: y,
         startOffset: paragraphOffset,
         paragraphNum: paragraphNum,
+        textIndent: spec.style.textIndent,
+        textFullJustify: spec.style.textFullJustify,
       );
       lines.addAll(paragraphLines);
       if (paragraphLines.isNotEmpty) {
@@ -104,10 +106,16 @@ class LayoutEngine {
     required int startOffset,
     bool isTitle = false,
     int paragraphNum = 0,
+    int textIndent = 0,
+    bool textFullJustify = false,
   }) {
     if (text.isEmpty) return const <TextLine>[];
+    final indentText =
+        !isTitle && textIndent > 0 ? '　' * textIndent.clamp(0, 8) : '';
+    final laidOutText = indentText.isEmpty ? text : '$indentText$text';
+    final indentLength = indentText.length;
     final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
+      text: TextSpan(text: laidOutText, style: style),
       textDirection: TextDirection.ltr,
       textScaler: TextScaler.noScaling,
       maxLines: null,
@@ -119,12 +127,18 @@ class LayoutEngine {
     for (var i = 0; i < metrics.length; i++) {
       final metric = metrics[i];
       final boundary = painter.getLineBoundary(
-        TextPosition(offset: searchOffset.clamp(0, text.length)),
+        TextPosition(offset: searchOffset.clamp(0, laidOutText.length)),
       );
-      final localStart = boundary.start.clamp(0, text.length).toInt();
-      final localEnd = boundary.end.clamp(localStart, text.length).toInt();
-      searchOffset = localEnd >= text.length ? text.length : localEnd;
-      final lineText = text.substring(localStart, localEnd);
+      final localStart = boundary.start.clamp(0, laidOutText.length).toInt();
+      final localEnd =
+          boundary.end.clamp(localStart, laidOutText.length).toInt();
+      searchOffset =
+          localEnd >= laidOutText.length ? laidOutText.length : localEnd;
+      final lineText = laidOutText.substring(localStart, localEnd);
+      final contentStart =
+          (localStart - indentLength).clamp(0, text.length).toInt();
+      final contentEnd =
+          (localEnd - indentLength).clamp(contentStart, text.length).toInt();
       final lineTop = top + metric.baseline - metric.ascent;
       final lineBottom = top + metric.baseline + metric.descent;
       lines.add(
@@ -135,17 +149,17 @@ class LayoutEngine {
           isTitle: isTitle,
           isParagraphStart: i == 0,
           isParagraphEnd: i == metrics.length - 1,
-          shouldJustify: false,
-          chapterPosition: startOffset + localStart,
+          shouldJustify: !isTitle && textFullJustify && i < metrics.length - 1,
+          chapterPosition: startOffset + contentStart,
           lineTop: lineTop,
           lineBottom: lineBottom,
           paragraphNum: paragraphNum,
-          startCharOffset: startOffset + localStart,
-          endCharOffset: startOffset + localEnd,
+          startCharOffset: startOffset + contentStart,
+          endCharOffset: startOffset + contentEnd,
           baseline: top + metric.baseline,
         ),
       );
-      if (searchOffset >= text.length) break;
+      if (searchOffset >= laidOutText.length) break;
     }
     return lines;
   }

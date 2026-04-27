@@ -51,10 +51,19 @@ class ReaderPainter extends CustomPainter {
   void _drawPage(Canvas canvas, TextPage page, double pageY, Size size) {
     final left = style.paddingLeft;
     final top = style.paddingTop + pageY;
+    final contentWidth =
+        (size.width - style.paddingLeft - style.paddingRight)
+            .clamp(1.0, double.infinity)
+            .toDouble();
     for (final line in page.lines) {
       if (top + line.bottom < 0 || top + line.top > size.height) continue;
-      final painter = _painterFor(line);
-      painter.paint(canvas, Offset(left, top + line.top));
+      final offset = Offset(left, top + line.top);
+      if (_canJustify(line, contentWidth)) {
+        _paintJustifiedLine(canvas, line, offset, contentWidth);
+      } else {
+        final painter = _painterFor(line);
+        painter.paint(canvas, offset);
+      }
     }
     if (debugOverlay) {
       final debugPainter = TextPainter(
@@ -73,9 +82,42 @@ class ReaderPainter extends CustomPainter {
     }
   }
 
+  bool _canJustify(TextLine line, double contentWidth) {
+    if (!line.shouldJustify || line.isTitle || line.isParagraphEnd) {
+      return false;
+    }
+    if (line.text.trimRight().length < 2) return false;
+    return contentWidth > line.width + 1;
+  }
+
+  void _paintJustifiedLine(
+    Canvas canvas,
+    TextLine line,
+    Offset offset,
+    double contentWidth,
+  ) {
+    final glyphs = line.text.characters.toList(growable: false);
+    if (glyphs.length < 2) {
+      _painterFor(line).paint(canvas, offset);
+      return;
+    }
+    final extra = (contentWidth - line.width).clamp(0.0, style.fontSize * 1.5);
+    final gap = extra / (glyphs.length - 1);
+    var dx = offset.dx;
+    for (var i = 0; i < glyphs.length; i++) {
+      final painter = _painterForText(glyphs[i], line);
+      painter.paint(canvas, Offset(dx, offset.dy));
+      dx += painter.width + (i == glyphs.length - 1 ? 0 : gap);
+    }
+  }
+
   TextPainter _painterFor(TextLine line) {
+    return _painterForText(line.text, line);
+  }
+
+  TextPainter _painterForText(String text, TextLine line) {
     final key = <Object?>[
-      line.text,
+      text,
       line.isTitle,
       style.fontSize,
       style.lineHeight,
@@ -96,7 +138,7 @@ class ReaderPainter extends CustomPainter {
           line.isTitle || style.bold ? FontWeight.bold : FontWeight.normal,
     );
     final painter = TextPainter(
-      text: TextSpan(text: line.text, style: textStyle),
+      text: TextSpan(text: text, style: textStyle),
       textDirection: TextDirection.ltr,
       textScaler: TextScaler.noScaling,
     )..layout(maxWidth: double.infinity);

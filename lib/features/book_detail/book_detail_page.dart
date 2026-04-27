@@ -12,7 +12,6 @@ import 'package:inkpage_reader/core/services/export_book_service.dart';
 import 'package:inkpage_reader/features/source_manager/source_editor_page.dart';
 import 'package:inkpage_reader/features/source_manager/source_debug_page.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
-import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 
 import 'widgets/book_info_header.dart';
@@ -264,14 +263,10 @@ class BookDetailPage extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder:
-            (ctx) => ChangeNotifierProvider(
-              create:
-                  (_) => ReaderProvider(
-                    book: b,
-                    openTarget: openTarget,
-                    initialChapters: initialChapters,
-                  ),
-              child: ReaderPage(book: b),
+            (_) => ReaderPage(
+              book: b,
+              openTarget: openTarget,
+              initialChapters: initialChapters,
             ),
       ),
     );

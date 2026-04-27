@@ -9,7 +9,7 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/core/services/reader_chapter_content_store.dart';
-import 'package:inkpage_reader/features/reader/engine/chapter_content_manager.dart';
+import 'package:inkpage_reader/features/reader/engine/chapter_fetch_result.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_loader.dart';
 
 import 'book_content.dart';
@@ -54,6 +54,8 @@ class ChapterRepository {
   List<BookChapter> _chapters;
   BookSource? _source;
   final Map<int, BookContent> _contentCache = <int, BookContent>{};
+  final Map<int, Future<BookContent>> _contentInFlight =
+      <int, Future<BookContent>>{};
 
   List<BookChapter> get chapters => List<BookChapter>.unmodifiable(_chapters);
   int get chapterCount => _chapters.length;
@@ -87,8 +89,55 @@ class ChapterRepository {
 
   Future<BookContent> loadContent(int chapterIndex) async {
     await ensureChapters();
-    final cached = _contentCache[chapterIndex];
+    final safeIndex = _normalizeChapterIndex(chapterIndex);
+    final cached = _contentCache[safeIndex];
     if (cached != null) return cached;
+    final inFlight = _contentInFlight[safeIndex];
+    if (inFlight != null) return inFlight;
+    late final Future<BookContent> task;
+    task = _loadContentUncached(safeIndex);
+    _contentInFlight[safeIndex] = task;
+    try {
+      return await task;
+    } finally {
+      if (identical(_contentInFlight[safeIndex], task)) {
+        _contentInFlight.remove(safeIndex);
+      }
+    }
+  }
+
+  Future<BookContent?> preloadContent(int chapterIndex) async {
+    await ensureChapters();
+    if (!_isValidChapterIndex(chapterIndex)) return null;
+    return loadContent(chapterIndex);
+  }
+
+  Future<void> preloadContentAround(int chapterIndex, {int radius = 1}) async {
+    await ensureChapters();
+    if (_chapters.isEmpty) return;
+    final safeCenter = _normalizeChapterIndex(chapterIndex);
+    final tasks = <Future<BookContent?>>[];
+    for (
+      var index = safeCenter - radius;
+      index <= safeCenter + radius;
+      index++
+    ) {
+      if (_isValidChapterIndex(index)) {
+        tasks.add(preloadContent(index));
+      }
+    }
+    await Future.wait(tasks);
+  }
+
+  BookContent? cachedContent(int chapterIndex) {
+    return _contentCache[chapterIndex];
+  }
+
+  bool isContentLoading(int chapterIndex) {
+    return _contentInFlight.containsKey(chapterIndex);
+  }
+
+  Future<BookContent> _loadContentUncached(int chapterIndex) async {
     final chapter = chapterAt(chapterIndex);
     if (chapter == null) {
       return BookContent.fromRaw(
@@ -108,68 +157,18 @@ class ChapterRepository {
       return content;
     }
 
-    var raw = (chapter.content ?? '').trim();
-    if (raw.isEmpty) {
-      raw = (await _readCachedContent(chapterIndex, chapter) ?? '').trim();
-    }
-    if (raw.isEmpty) {
-      raw = (await _fetchRemoteContent(chapterIndex, chapter) ?? '').trim();
-    }
     final content = BookContent.fromRaw(
       chapterIndex: chapterIndex,
       title: chapter.title,
-      rawText: raw,
+      rawText: (chapter.content ?? '').trim(),
     );
     _contentCache[chapterIndex] = content;
     return content;
   }
 
-  void clearContentCache() => _contentCache.clear();
-
-  Future<String?> _readCachedContent(
-    int chapterIndex,
-    BookChapter chapter,
-  ) async {
-    final dao = contentDao;
-    if (dao == null) return null;
-    final contentKey = ReaderChapterContentDao.contentKey(
-      origin: book.origin,
-      bookUrl: book.bookUrl,
-      chapterUrl: chapter.url,
-    );
-    return dao.getContent(contentKey: contentKey);
-  }
-
-  Future<String?> _fetchRemoteContent(
-    int chapterIndex,
-    BookChapter chapter,
-  ) async {
-    final source = await _ensureSource();
-    if (source == null) return chapter.content;
-    final nextChapter = chapterAt(chapterIndex + 1);
-    final raw = await service.getContent(
-      source,
-      book,
-      chapter,
-      nextChapterUrl: nextChapter?.url,
-    );
-    final dao = contentDao;
-    if (dao != null && raw.trim().isNotEmpty) {
-      await dao.saveContent(
-        contentKey: ReaderChapterContentDao.contentKey(
-          origin: book.origin,
-          bookUrl: book.bookUrl,
-          chapterUrl: chapter.url,
-        ),
-        origin: book.origin,
-        bookUrl: book.bookUrl,
-        chapterUrl: chapter.url,
-        chapterIndex: chapterIndex,
-        content: raw,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    }
-    return raw;
+  void clearContentCache() {
+    _contentCache.clear();
+    _contentInFlight.clear();
   }
 
   Future<BookSource?> _ensureSource() async {
@@ -177,6 +176,15 @@ class ChapterRepository {
     if (book.origin.isEmpty || book.origin == 'local') return null;
     _source = await sourceDao.getByUrl(book.origin);
     return _source;
+  }
+
+  bool _isValidChapterIndex(int chapterIndex) {
+    return chapterIndex >= 0 && chapterIndex < _chapters.length;
+  }
+
+  int _normalizeChapterIndex(int chapterIndex) {
+    if (_chapters.isEmpty) return chapterIndex < 0 ? 0 : chapterIndex;
+    return chapterIndex.clamp(0, _chapters.length - 1).toInt();
   }
 
   Future<FetchResult?> _loadViaExistingContentPipeline(

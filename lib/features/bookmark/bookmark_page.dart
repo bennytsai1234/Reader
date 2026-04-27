@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'bookmark_provider.dart';
 import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/features/reader/reader_page.dart';
-import 'package:inkpage_reader/features/reader/reader_provider.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 
 class BookmarkPage extends StatefulWidget {
@@ -148,13 +147,9 @@ class _BookmarkPageState extends State<BookmarkPage> {
         context,
         MaterialPageRoute(
           builder:
-              (_) => ChangeNotifierProvider(
-                create:
-                    (_) => ReaderProvider(
-                      book: book,
-                      openTarget: ReaderOpenTarget.bookmark(bookmark),
-                    ),
-                child: ReaderPage(book: book),
+              (_) => ReaderPage(
+                book: book,
+                openTarget: ReaderOpenTarget.bookmark(bookmark),
               ),
         ),
       );

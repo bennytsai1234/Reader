@@ -38,6 +38,12 @@ class PageResolver {
 
   ChapterLayout? cachedLayout(int chapterIndex) => _layouts[chapterIndex];
 
+  void clearCachedLayouts() {
+    _layouts.clear();
+    _inFlight.clear();
+    _layoutErrors.clear();
+  }
+
   Future<ChapterLayout> ensureLayout(int chapterIndex) async {
     await repository.ensureChapters();
     final safeIndex = _normalizeChapterIndex(chapterIndex);

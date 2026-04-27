@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:inkpage_reader/core/models/book.dart';
+import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
-import 'package:inkpage_reader/features/reader/provider/change_source_provider.dart';
-import 'package:inkpage_reader/features/reader/reader_provider.dart';
+import 'package:inkpage_reader/features/reader/reader_page.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
+import 'package:inkpage_reader/features/reader/source/change_source_provider.dart';
 import 'package:inkpage_reader/features/reader/widgets/change_source_item.dart';
 
 class ReaderSourceFallbackSheet extends StatefulWidget {
@@ -153,6 +155,7 @@ class _ReaderSourceFallbackSheetState extends State<ReaderSourceFallbackSheet> {
                                         ? null
                                         : () => _handleSelected(
                                           context,
+                                          provider,
                                           searchBook,
                                         ),
                               );
@@ -170,11 +173,11 @@ class _ReaderSourceFallbackSheetState extends State<ReaderSourceFallbackSheet> {
 
   Future<void> _handleSelected(
     BuildContext context,
+    ChangeSourceProvider provider,
     SearchBook searchBook,
   ) async {
     final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    final readerProvider = context.read<ReaderProvider>();
 
     showDialog(
       context: context,
@@ -190,10 +193,33 @@ class _ReaderSourceFallbackSheetState extends State<ReaderSourceFallbackSheet> {
     }
 
     try {
-      await readerProvider.changeBookSourceTo(searchBook);
+      final source = await provider.findSourceByUrl(searchBook.origin);
+      if (source == null) {
+        dismissLoading();
+        if (context.mounted) {
+          messenger.showSnackBar(const SnackBar(content: Text('找不到對應書源')));
+        }
+        return;
+      }
+      final hydrated = await provider.service.getBookInfo(
+        source,
+        searchBook.toBook(),
+      );
+      final chapters = await provider.service.getChapterList(source, hydrated);
+      final migrated = widget.book.migrateTo(hydrated, chapters);
       dismissLoading();
       if (context.mounted) {
-        nav.pop();
+        nav.pop(); // sheet
+        nav.pushReplacement(
+          MaterialPageRoute(
+            builder:
+                (_) => ReaderPage(
+                  book: migrated,
+                  initialChapters: _normalizeChapters(migrated, chapters),
+                  openTarget: ReaderOpenTarget.resume(migrated),
+                ),
+          ),
+        );
       }
     } catch (error) {
       dismissLoading();
@@ -201,5 +227,11 @@ class _ReaderSourceFallbackSheetState extends State<ReaderSourceFallbackSheet> {
         messenger.showSnackBar(SnackBar(content: Text('換源失敗: $error')));
       }
     }
+  }
+
+  List<BookChapter> _normalizeChapters(Book book, List<BookChapter> chapters) {
+    return List<BookChapter>.generate(chapters.length, (index) {
+      return chapters[index].copyWith(index: index, bookUrl: book.bookUrl);
+    });
   }
 }

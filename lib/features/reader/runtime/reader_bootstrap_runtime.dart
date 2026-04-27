@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
-import 'package:inkpage_reader/features/reader/provider/reader_provider_base.dart'
+import 'package:inkpage_reader/features/reader/runtime/reader_host_base.dart'
     show ReaderLifecycle;
 import 'package:inkpage_reader/features/reader/runtime/models/reader_session_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_viewport_lifecycle_runtime.dart';

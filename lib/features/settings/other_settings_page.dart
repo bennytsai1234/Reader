@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:inkpage_reader/features/reader/provider/reader_prefs_repository.dart';
+import 'package:inkpage_reader/features/reader/settings/reader_prefs_repository.dart';
 import 'package:provider/provider.dart';
 import 'settings_provider.dart';
 

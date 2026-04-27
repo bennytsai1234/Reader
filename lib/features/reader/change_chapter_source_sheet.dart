@@ -1,34 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
+import 'package:inkpage_reader/core/database/dao/reader_chapter_content_dao.dart';
+import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
+import 'package:inkpage_reader/core/services/reader_chapter_content_store.dart';
 import 'package:inkpage_reader/shared/widgets/app_bottom_sheet.dart';
-import 'provider/change_source_provider.dart';
+import 'source/change_source_provider.dart';
 import 'widgets/change_source_filter_bar.dart';
 import 'widgets/change_source_item.dart';
-import 'reader_provider.dart';
 import 'reader_page.dart';
 import 'runtime/models/reader_open_target.dart';
 
 class ChangeChapterSourceSheet extends StatefulWidget {
-  final Book book;
-  final int chapterIndex;
-  final String chapterTitle;
-
   const ChangeChapterSourceSheet({
     super.key,
     required this.book,
     required this.chapterIndex,
     required this.chapterTitle,
+    this.onChapterContentChanged,
   });
+
+  final Book book;
+  final int chapterIndex;
+  final String chapterTitle;
+  final Future<void> Function()? onChapterContentChanged;
 
   static void show(
     BuildContext context,
     Book book,
     int chapterIndex,
-    String chapterTitle,
-  ) {
+    String chapterTitle, {
+    Future<void> Function()? onChapterContentChanged,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -38,6 +44,7 @@ class ChangeChapterSourceSheet extends StatefulWidget {
             book: book,
             chapterIndex: chapterIndex,
             chapterTitle: chapterTitle,
+            onChapterContentChanged: onChapterContentChanged,
           ),
     );
   }
@@ -215,7 +222,6 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
   ) async {
     final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    final readerProvider = context.read<ReaderProvider>();
 
     final source = await provider.findSourceByUrl(searchBook.origin);
     if (!context.mounted) return;
@@ -286,7 +292,8 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
       }
 
       dismissLoading();
-      readerProvider.replaceChapterSource(widget.chapterIndex, source, content);
+      await _saveReplacementContent(chapters[targetIndex], content);
+      await widget.onChapterContentChanged?.call();
       nav.pop(); // Pop sheet
     } catch (e) {
       if (mounted) {
@@ -294,6 +301,26 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
         messenger.showSnackBar(SnackBar(content: Text('換源失敗: $e')));
       }
     }
+  }
+
+  Future<void> _saveReplacementContent(
+    BookChapter chapter,
+    String content,
+  ) async {
+    if (!getIt.isRegistered<ReaderChapterContentDao>()) return;
+    final normalized = chapter.copyWith(
+      index: widget.chapterIndex,
+      bookUrl: widget.book.bookUrl,
+    );
+    await ReaderChapterContentStore(
+      chapterDao: getIt<ChapterDao>(),
+      contentDao: getIt<ReaderChapterContentDao>(),
+    ).saveRawContent(
+      book: widget.book,
+      chapter: normalized,
+      content: content,
+      saveChapterMetadata: false,
+    );
   }
 
   String? _nextReadableChapterUrl(
@@ -330,13 +357,9 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
                   nav.pushReplacement(
                     MaterialPageRoute(
                       builder:
-                          (_) => ChangeNotifierProvider(
-                            create:
-                                (_) => ReaderProvider(
-                                  book: newBook,
-                                  openTarget: ReaderOpenTarget.resume(newBook),
-                                ),
-                            child: ReaderPage(book: newBook),
+                          (_) => ReaderPage(
+                            book: newBook,
+                            openTarget: ReaderOpenTarget.resume(newBook),
                           ),
                     ),
                   );
