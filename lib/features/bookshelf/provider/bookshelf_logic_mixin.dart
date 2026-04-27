@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:inkpage_reader/core/constant/prefer_key.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/book_group.dart';
 import 'package:inkpage_reader/core/services/book_storage_service.dart';
@@ -11,6 +12,12 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     isGridView = prefs.getBool('bookshelf_is_grid') ?? isGridView;
     showLastUpdate =
         prefs.getBool('bookshelf_show_last_update') ?? showLastUpdate;
+    final savedSort = prefs.getInt(PreferKey.bookshelfSort);
+    if (savedSort != null &&
+        savedSort >= 0 &&
+        savedSort < BookshelfSortMode.values.length) {
+      sortMode = BookshelfSortMode.values[savedSort];
+    }
     notifyListeners();
   }
 
@@ -36,6 +43,32 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     SharedPreferences.getInstance().then(
       (p) => p.setBool('bookshelf_show_last_update', showLastUpdate),
     );
+    notifyListeners();
+  }
+
+  Future<void> setSortMode(BookshelfSortMode value) async {
+    if (sortMode == value) return;
+    sortMode = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(PreferKey.bookshelfSort, value.index);
+    await loadBooks();
+  }
+
+  Future<void> reorderBooks(int oldIndex, int newIndex) async {
+    if (sortMode != BookshelfSortMode.custom) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (oldIndex < 0 ||
+        oldIndex >= books.length ||
+        newIndex < 0 ||
+        newIndex > books.length) {
+      return;
+    }
+    final item = books.removeAt(oldIndex);
+    books.insert(newIndex, item);
+    for (var i = 0; i < books.length; i++) {
+      books[i].order = i;
+      await bookDao.upsert(books[i]);
+    }
     notifyListeners();
   }
 
@@ -135,21 +168,27 @@ mixin BookshelfLogicMixin on BookshelfProviderBase {
     }
   }
 
-  Future<void> createGroup(String name) async {
+  Future<void> createGroup(String name, {String? coverPath}) async {
     final nextMask = _nextGroupMask();
     await groupDao.upsert(
-      BookGroup(groupId: nextMask, groupName: name, order: groups.length),
+      BookGroup(
+        groupId: nextMask,
+        groupName: name,
+        coverPath: coverPath,
+        order: groups.length,
+      ),
     );
     await loadGroups();
   }
 
-  Future<void> renameGroup(int id, String name) async {
+  Future<void> renameGroup(int id, String name, {String? coverPath}) async {
     final group = groups.cast<BookGroup?>().firstWhere(
       (g) => g?.id == id,
       orElse: () => null,
     );
     if (group != null) {
       group.name = name;
+      group.coverPath = coverPath;
       await groupDao.upsert(group);
       notifyListeners();
     }

@@ -341,6 +341,9 @@ class BookDetailProvider extends ChangeNotifier {
     _book.isInBookshelf = _isInBookshelf;
 
     if (_isInBookshelf) {
+      if (_book.syncTime == 0) {
+        _book.syncTime = DateTime.now().millisecondsSinceEpoch;
+      }
       _isLoading = true;
       notifyListeners();
       try {

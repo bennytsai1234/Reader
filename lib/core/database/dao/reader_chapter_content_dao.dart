@@ -48,6 +48,64 @@ class ReaderChapterContentDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  Future<List<ReaderChapterContentEntry>> getAllEntries() async {
+    final rows = await select(readerChapterContents).get();
+    return rows
+        .map(
+          (row) => ReaderChapterContentEntry(
+            contentKey: row.contentKey,
+            origin: row.origin,
+            bookUrl: row.bookUrl,
+            chapterUrl: row.chapterUrl,
+            chapterIndex: row.chapterIndex,
+            status: ReaderChapterContentStatus.fromCode(row.status),
+            content: row.content,
+            failureMessage: row.failureMessage,
+            updatedAt: row.updatedAt,
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<ReaderChapterContentEntry>> getEntriesByBookUrls(
+    Iterable<String> bookUrls,
+  ) async {
+    final urls = bookUrls.where((url) => url.isNotEmpty).toSet();
+    if (urls.isEmpty) return const <ReaderChapterContentEntry>[];
+    final rows =
+        await (select(readerChapterContents)
+          ..where((t) => t.bookUrl.isIn(urls))).get();
+    return rows
+        .map(
+          (row) => ReaderChapterContentEntry(
+            contentKey: row.contentKey,
+            origin: row.origin,
+            bookUrl: row.bookUrl,
+            chapterUrl: row.chapterUrl,
+            chapterIndex: row.chapterIndex,
+            status: ReaderChapterContentStatus.fromCode(row.status),
+            content: row.content,
+            failureMessage: row.failureMessage,
+            updatedAt: row.updatedAt,
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> upsertEntry(ReaderChapterContentEntry entry) {
+    return saveContent(
+      contentKey: entry.contentKey,
+      origin: entry.origin,
+      bookUrl: entry.bookUrl,
+      chapterUrl: entry.chapterUrl,
+      chapterIndex: entry.chapterIndex,
+      content: entry.content ?? '',
+      updatedAt: entry.updatedAt,
+      status: entry.status,
+      failureMessage: entry.failureMessage,
+    );
+  }
+
   Future<bool> hasContent({required String contentKey}) async {
     return hasReadyContent(contentKey: contentKey);
   }

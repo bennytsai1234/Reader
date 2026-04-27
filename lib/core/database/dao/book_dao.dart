@@ -59,10 +59,16 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
 
   Future<List<Book>> getInGroup(int groupId) {
     if (groupId == BookGroup.idAll) return getInBookshelf();
+    if (groupId == 0) {
+      return (select(books)
+        ..where((t) => t.isInBookshelf.equals(true) & t.group.equals(0))).get();
+    }
     return (select(books)..where(
-      (t) => t.group
-          .bitwiseAnd(Variable<int>(groupId))
-          .isBiggerThan(const Constant(0)),
+      (t) =>
+          t.isInBookshelf.equals(true) &
+          t.group
+              .bitwiseAnd(Variable<int>(groupId))
+              .isBiggerThan(const Constant(0)),
     )).get();
   }
 

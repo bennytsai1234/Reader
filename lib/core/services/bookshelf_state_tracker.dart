@@ -36,6 +36,7 @@ class BookshelfStateTracker {
       name: book.name,
       author: book.author,
       bookUrl: book.bookUrl,
+      origin: book.origin,
     );
   }
 
@@ -44,6 +45,7 @@ class BookshelfStateTracker {
       name: book.name,
       author: book.author,
       bookUrl: book.bookUrl,
+      origin: book.origin,
     );
   }
 
@@ -51,9 +53,10 @@ class BookshelfStateTracker {
     required String name,
     required String? author,
     required String bookUrl,
+    String? origin,
   }) {
-    final key = makeBookshelfKey(name, author);
-    return _bookshelfKeys.contains(key) || _bookshelfKeys.contains(bookUrl);
+    final exactKey = makeBookshelfKey(bookUrl: bookUrl, origin: origin);
+    return _bookshelfKeys.contains(exactKey);
   }
 
   void dispose() {
@@ -68,24 +71,21 @@ class BookshelfStateTracker {
   }
 
   Iterable<String> _bookshelfKeysForBook(Book book) sync* {
-    if (book.bookUrl.isNotEmpty) {
-      yield book.bookUrl;
-    }
-
-    final normalizedKey = makeBookshelfKey(book.name, book.author);
+    final normalizedKey = makeBookshelfKey(
+      bookUrl: book.bookUrl,
+      origin: book.origin,
+    );
     if (normalizedKey.isNotEmpty) {
       yield normalizedKey;
     }
   }
 
-  static String makeBookshelfKey(String name, String? author) {
-    final normalizedName = name.trim();
-    final normalizedAuthor = author?.trim() ?? '';
-    if (normalizedName.isEmpty) {
-      return '';
-    }
-    return normalizedAuthor.isNotEmpty
-        ? '$normalizedName-$normalizedAuthor'
-        : normalizedName;
+  static String makeBookshelfKey({required String bookUrl, String? origin}) {
+    final normalizedUrl = bookUrl.trim();
+    if (normalizedUrl.isEmpty) return '';
+    final normalizedOrigin = origin?.trim() ?? '';
+    return normalizedOrigin.isEmpty
+        ? normalizedUrl
+        : '$normalizedOrigin\n$normalizedUrl';
   }
 }

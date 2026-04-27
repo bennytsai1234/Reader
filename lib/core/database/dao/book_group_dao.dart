@@ -6,20 +6,28 @@ import '../app_database.dart';
 part 'book_group_dao.g.dart';
 
 @DriftAccessor(tables: [BookGroups])
-class BookGroupDao extends DatabaseAccessor<AppDatabase> with _$BookGroupDaoMixin {
+class BookGroupDao extends DatabaseAccessor<AppDatabase>
+    with _$BookGroupDaoMixin {
   BookGroupDao(super.db);
 
-  Future<List<BookGroup>> getAll() => select(bookGroups).get();
+  Future<List<BookGroup>> getAll() {
+    return (select(bookGroups)
+      ..orderBy([(t) => OrderingTerm(expression: t.order)])).get();
+  }
 
   Stream<List<BookGroup>> watchAll() => select(bookGroups).watch();
 
   Future<BookGroup?> getById(int id) {
-    return (select(bookGroups)..where((t) => t.groupId.equals(id))).getSingleOrNull();
+    return (select(bookGroups)
+      ..where((t) => t.groupId.equals(id))).getSingleOrNull();
   }
 
-  Future<void> upsert(BookGroup group) => into(bookGroups).insertOnConflictUpdate(BookGroupToInsertable(group).toInsertable());
+  Future<void> upsert(BookGroup group) => into(
+    bookGroups,
+  ).insertOnConflictUpdate(BookGroupToInsertable(group).toInsertable());
 
-  Future<void> deleteById(int id) => (delete(bookGroups)..where((t) => t.groupId.equals(id))).go();
+  Future<void> deleteById(int id) =>
+      (delete(bookGroups)..where((t) => t.groupId.equals(id))).go();
 
   Future<void> initDefaultGroups() async {
     await upsert(BookGroup(groupId: 1, groupName: '默認分組', order: 0));
@@ -27,8 +35,9 @@ class BookGroupDao extends DatabaseAccessor<AppDatabase> with _$BookGroupDaoMixi
 
   Future<void> updateOrder(List<BookGroup> groups) async {
     for (var i = 0; i < groups.length; i++) {
-      await (update(bookGroups)..where((t) => t.groupId.equals(groups[i].groupId)))
-          .write(BookGroupsCompanion(order: Value(i)));
+      await (update(bookGroups)..where(
+        (t) => t.groupId.equals(groups[i].groupId),
+      )).write(BookGroupsCompanion(order: Value(i)));
     }
   }
 }

@@ -18,6 +18,7 @@ import 'package:inkpage_reader/core/storage/app_storage_paths.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:inkpage_reader/core/database/app_database.dart';
 import 'package:inkpage_reader/core/database/dao/download_dao.dart';
+import 'package:inkpage_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 
 class BackupService {
@@ -30,7 +31,9 @@ class BackupService {
 
   /// 執行全量備份並返回 ZIP 檔案路徑
   Future<File?> createBackupZip() async {
-    final backupTempDir = await AppStoragePaths.backupTempDir(ensureExists: true);
+    final backupTempDir = await AppStoragePaths.backupTempDir(
+      ensureExists: true,
+    );
     final backupFolder = Directory(p.join(backupTempDir.path, 'legado_backup'));
     if (await backupFolder.exists()) await backupFolder.delete(recursive: true);
     await backupFolder.create();
@@ -97,6 +100,11 @@ class BackupService {
         backupFolder,
         'downloadTask.json',
         await getIt<DownloadDao>().getAll(),
+      );
+      await _writeJson(
+        backupFolder,
+        'readerChapterContent.json',
+        await getIt<ReaderChapterContentDao>().getAllEntries(),
       );
 
       // 2. 導出偏好設定 (對標 config.xml)

@@ -22,8 +22,10 @@ import 'package:inkpage_reader/core/models/book_group.dart';
 import 'package:inkpage_reader/core/models/http_tts.dart';
 import 'package:inkpage_reader/core/models/txt_toc_rule.dart';
 import 'package:inkpage_reader/core/models/download_task.dart';
+import 'package:inkpage_reader/core/models/reader_chapter_content.dart';
 import 'package:inkpage_reader/core/database/app_database.dart';
 import 'package:inkpage_reader/core/database/dao/download_dao.dart';
+import 'package:inkpage_reader/core/database/dao/reader_chapter_content_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:path/path.dart' as p;
 
@@ -44,6 +46,8 @@ class RestoreService {
   final HttpTtsDao _httpTtsDao = getIt<HttpTtsDao>();
   final TxtTocRuleDao _txtTocRuleDao = getIt<TxtTocRuleDao>();
   final DownloadDao _downloadDao = getIt<DownloadDao>();
+  final ReaderChapterContentDao _chapterContentDao =
+      getIt<ReaderChapterContentDao>();
 
   /// 從備份包 (ZIP) 恢復所有數據
   Future<bool> restoreFromZip(File zipFile) async {
@@ -141,6 +145,12 @@ class RestoreService {
           case 'downloadTask.json':
           case 'downloadTasks.json':
             await _downloadDao.upsert(DownloadTask.fromJson(item));
+            break;
+          case 'readerChapterContent.json':
+          case 'readerChapterContents.json':
+            await _chapterContentDao.upsertEntry(
+              ReaderChapterContentEntry.fromJson(item),
+            );
             break;
         }
       }

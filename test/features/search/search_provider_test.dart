@@ -8,6 +8,7 @@ import 'package:inkpage_reader/core/database/dao/search_keyword_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/search_keyword.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
+import 'package:inkpage_reader/features/search/search_model.dart';
 import 'package:inkpage_reader/features/search/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -82,12 +83,13 @@ Book _makeBook({
   required String bookUrl,
   required String name,
   required String author,
+  String origin = 'source://main',
 }) {
   return Book(
     bookUrl: bookUrl,
     name: name,
     author: author,
-    origin: 'source://main',
+    origin: origin,
     originName: '主書源',
     isInBookshelf: true,
   );
@@ -97,13 +99,23 @@ SearchBook _makeSearchBook({
   required String bookUrl,
   required String name,
   required String author,
+  String origin = 'source://main',
+  String originName = '主書源',
+  String? kind,
+  String? coverUrl,
+  String? latestChapterTitle,
+  int originOrder = 0,
 }) {
   return SearchBook(
     bookUrl: bookUrl,
     name: name,
     author: author,
-    origin: 'source://main',
-    originName: '主書源',
+    origin: origin,
+    originName: originName,
+    kind: kind,
+    coverUrl: coverUrl,
+    latestChapterTitle: latestChapterTitle,
+    originOrder: originOrder,
   );
 }
 
@@ -257,7 +269,7 @@ void main() {
   });
 
   group('SearchProvider - 書架狀態', () {
-    test('初始載入會同步 bookUrl 與書名作者鍵值', () async {
+    test('初始載入只同步相同書源與 bookUrl', () async {
       fakeBookDao.shelf = [
         _makeBook(
           bookUrl: 'https://example.com/books/1',
@@ -281,12 +293,24 @@ void main() {
       expect(
         p.isInBookshelf(
           _makeSearchBook(
+            bookUrl: 'https://example.com/books/1',
+            name: '測試書',
+            author: '作者甲',
+            origin: 'source://other',
+          ),
+        ),
+        isFalse,
+      );
+
+      expect(
+        p.isInBookshelf(
+          _makeSearchBook(
             bookUrl: 'https://example.com/books/redirected',
             name: '測試書',
             author: '作者甲',
           ),
         ),
-        isTrue,
+        isFalse,
       );
 
       expect(
@@ -325,6 +349,87 @@ void main() {
       AppEventBus().fire(AppEventBus.upBookshelf);
       await _settleAsync();
       expect(p.isInBookshelf(targetSearchBook), isFalse);
+    });
+  });
+
+  group('SearchProvider - 結果排序與篩選', () {
+    test('sorts search results by name', () async {
+      final p = await makeProvider();
+      p.onSearchSuccess([
+        _makeSearchBook(
+          bookUrl: 'https://example.com/b',
+          name: 'Book B',
+          author: '作者乙',
+        ),
+        _makeSearchBook(
+          bookUrl: 'https://example.com/a',
+          name: 'Book A',
+          author: '作者甲',
+        ),
+      ]);
+
+      p.updateSortMode(SearchResultSortMode.name);
+      expect(p.results.map((book) => book.name), ['Book A', 'Book B']);
+    });
+
+    test(
+      'filters by source, author, kind, cover, and bookshelf state',
+      () async {
+        fakeBookDao.shelf = [
+          _makeBook(
+            bookUrl: 'https://example.com/a',
+            name: '甲書',
+            author: '作者甲',
+            origin: 'source://a',
+          ),
+        ];
+        final p = await makeProvider();
+        p.onSearchSuccess([
+          _makeSearchBook(
+            bookUrl: 'https://example.com/a',
+            name: '甲書',
+            author: '作者甲',
+            origin: 'source://a',
+            originName: '來源甲',
+            kind: '玄幻',
+            coverUrl: 'https://example.com/a.jpg',
+          ),
+          _makeSearchBook(
+            bookUrl: 'https://example.com/b',
+            name: '乙書',
+            author: '作者乙',
+            origin: 'source://b',
+            originName: '來源乙',
+            kind: '都市',
+          ),
+        ]);
+
+        p.toggleSourceFilter('來源甲');
+        p.setAuthorFilter('作者甲');
+        p.setKindFilter('玄幻');
+        p.setOnlyWithCover(true);
+        p.setOnlyInBookshelf(true);
+
+        expect(p.results, hasLength(1));
+        expect(p.results.single.name, '甲書');
+
+        p.clearResultFilters();
+        expect(p.results, hasLength(2));
+      },
+    );
+
+    test('records searchable failure details', () async {
+      final p = await makeProvider();
+      final source = BookSource(
+        bookSourceUrl: 'source://failed',
+        bookSourceName: '失敗源',
+      );
+
+      p.onSearchFailure(SearchFailure(source: source, message: '連線逾時'));
+
+      expect(p.sourceFailures, hasLength(1));
+      expect(p.sourceFailures.single.source.bookSourceName, '失敗源');
+      expect(p.sourceFailures.single.message, '連線逾時');
     });
   });
 }

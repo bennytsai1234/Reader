@@ -11,6 +11,34 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models/search_scope.dart';
 import 'search_model.dart';
 
+enum SearchResultSortMode {
+  relevance,
+  sourceCount,
+  sourceOrder,
+  name,
+  author,
+  latestChapter,
+}
+
+extension SearchResultSortModeDisplay on SearchResultSortMode {
+  String get displayName {
+    switch (this) {
+      case SearchResultSortMode.relevance:
+        return '相關度';
+      case SearchResultSortMode.sourceCount:
+        return '書源數';
+      case SearchResultSortMode.sourceOrder:
+        return '書源順序';
+      case SearchResultSortMode.name:
+        return '書名';
+      case SearchResultSortMode.author:
+        return '作者';
+      case SearchResultSortMode.latestChapter:
+        return '最新章節';
+    }
+  }
+}
+
 /// SearchProvider - 搜尋頁面狀態管理
 /// (對標 Legado SearchViewModel.kt)
 ///
@@ -35,15 +63,25 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   int _failedSources = 0;
   int _totalSources = 0;
   int _completedSources = 0;
+  final List<SearchFailure> _sourceFailures = [];
 
   // --- 搜尋設定 ---
   bool _precisionSearch = false;
   List<String> _sourceGroups = [];
+  SearchResultSortMode _sortMode = SearchResultSortMode.relevance;
+  final Set<String> _sourceFilters = {};
+  String _authorFilter = '';
+  String _kindFilter = '';
+  bool _onlyInBookshelf = false;
+  bool _onlyWithCover = false;
 
   // --- Getters ---
   List<SearchKeyword> get historyKeywords => _history;
   List<String> get history => _history.map((e) => e.word).toList();
-  List<SearchBook> get results => _results;
+  List<SearchBook> get results => _sortedResults(_filteredResults());
+  int get unfilteredResultCount => _results.length;
+  int get resultCount => results.length;
+  bool get hasUnfilteredResults => _results.isNotEmpty;
   bool get isSearching => _isSearching;
   String get currentSource => _currentSource;
   String get lastSearchKey => _lastSearchKey;
@@ -57,6 +95,26 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
   List<String> get sourceGroups => _sourceGroups;
   SearchScope get searchScope => _searchScope;
   bool get scopeLoaded => _scopeLoaded;
+  SearchResultSortMode get sortMode => _sortMode;
+  Set<String> get sourceFilters => Set.unmodifiable(_sourceFilters);
+  String get authorFilter => _authorFilter;
+  String get kindFilter => _kindFilter;
+  bool get onlyInBookshelf => _onlyInBookshelf;
+  bool get onlyWithCover => _onlyWithCover;
+  List<SearchFailure> get sourceFailures => List.unmodifiable(_sourceFailures);
+  bool get hasActiveResultFilters =>
+      _sourceFilters.isNotEmpty ||
+      _authorFilter.trim().isNotEmpty ||
+      _kindFilter.trim().isNotEmpty ||
+      _onlyInBookshelf ||
+      _onlyWithCover;
+  List<String> get availableSourceFilters {
+    final labels = <String>{};
+    for (final book in _results) {
+      labels.addAll(_sourceLabelsFor(book));
+    }
+    return labels.toList()..sort();
+  }
 
   SearchProvider({
     BookshelfStateTracker? bookshelfTracker,
@@ -81,6 +139,104 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
 
   bool isInBookshelf(SearchBook book) =>
       _bookshelfTracker.containsSearchBook(book);
+
+  List<String> _sourceLabelsFor(SearchBook book) =>
+      book.sourceLabels.isNotEmpty
+          ? book.sourceLabels
+          : [book.originName ?? book.origin];
+
+  List<SearchBook> _filteredResults() {
+    final authorKey = normalizeSearchText(_authorFilter);
+    final kindKey = normalizeSearchText(_kindFilter);
+    return _results.where((book) {
+      if (_sourceFilters.isNotEmpty) {
+        final labels = _sourceLabelsFor(book).toSet();
+        if (!_sourceFilters.any(labels.contains)) return false;
+      }
+      if (_onlyInBookshelf && !isInBookshelf(book)) return false;
+      if (_onlyWithCover && (book.coverUrl ?? '').trim().isEmpty) return false;
+      if (authorKey.isNotEmpty &&
+          !normalizeSearchText(book.author).contains(authorKey)) {
+        return false;
+      }
+      if (kindKey.isNotEmpty &&
+          !normalizeSearchText(book.kind).contains(kindKey)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  List<SearchBook> _sortedResults(List<SearchBook> books) {
+    if (_sortMode == SearchResultSortMode.relevance) return books;
+    final sorted = List<SearchBook>.from(books);
+    int compareText(String? left, String? right) =>
+        normalizeSearchText(left).compareTo(normalizeSearchText(right));
+    sorted.sort((a, b) {
+      switch (_sortMode) {
+        case SearchResultSortMode.relevance:
+          return 0;
+        case SearchResultSortMode.sourceCount:
+          final byCount = b.origins.length.compareTo(a.origins.length);
+          return byCount != 0
+              ? byCount
+              : a.originOrder.compareTo(b.originOrder);
+        case SearchResultSortMode.sourceOrder:
+          return a.originOrder.compareTo(b.originOrder);
+        case SearchResultSortMode.name:
+          return compareText(a.name, b.name);
+        case SearchResultSortMode.author:
+          return compareText(a.author, b.author);
+        case SearchResultSortMode.latestChapter:
+          return compareText(a.latestChapterTitle, b.latestChapterTitle);
+      }
+    });
+    return sorted;
+  }
+
+  void updateSortMode(SearchResultSortMode mode) {
+    if (_sortMode == mode) return;
+    _sortMode = mode;
+    notifyListeners();
+  }
+
+  void toggleSourceFilter(String sourceLabel) {
+    if (_sourceFilters.contains(sourceLabel)) {
+      _sourceFilters.remove(sourceLabel);
+    } else {
+      _sourceFilters.add(sourceLabel);
+    }
+    notifyListeners();
+  }
+
+  void setAuthorFilter(String value) {
+    _authorFilter = value;
+    notifyListeners();
+  }
+
+  void setKindFilter(String value) {
+    _kindFilter = value;
+    notifyListeners();
+  }
+
+  void setOnlyInBookshelf(bool value) {
+    _onlyInBookshelf = value;
+    notifyListeners();
+  }
+
+  void setOnlyWithCover(bool value) {
+    _onlyWithCover = value;
+    notifyListeners();
+  }
+
+  void clearResultFilters() {
+    _sourceFilters.clear();
+    _authorFilter = '';
+    _kindFilter = '';
+    _onlyInBookshelf = false;
+    _onlyWithCover = false;
+    notifyListeners();
+  }
 
   // ═══════════════════════════════════════════
   // 搜尋範圍管理
@@ -135,6 +291,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (keyword.isEmpty) return;
     _lastSearchKey = keyword;
     _results = [];
+    _sourceFailures.clear();
+    clearResultFilters();
     notifyListeners();
 
     // 儲存搜尋歷史
@@ -154,6 +312,8 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     if (keyword.isEmpty) return;
     _lastSearchKey = keyword;
     _results = [];
+    _sourceFailures.clear();
+    clearResultFilters();
 
     // 使用單一書源的 scope
     final singleScope = SearchScope.fromSource(source);
@@ -163,6 +323,28 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
       key: keyword,
       scope: singleScope,
       precisionSearch: _precisionSearch,
+    );
+  }
+
+  Future<void> retryFailedSources() async {
+    if (_lastSearchKey.isEmpty || _sourceFailures.isEmpty || _isSearching) {
+      return;
+    }
+    final sources =
+        _sourceFailures
+            .map((failure) => failure.source)
+            .where((source) => source.isSearchEnabledByRuntime)
+            .toList();
+    if (sources.isEmpty) return;
+
+    final existingResults = List<SearchBook>.from(_results);
+    _sourceFailures.clear();
+    notifyListeners();
+    await _searchModel.searchSources(
+      key: _lastSearchKey,
+      sources: sources,
+      precisionSearch: _precisionSearch,
+      initialResults: existingResults,
     );
   }
 
@@ -203,12 +385,21 @@ class SearchProvider extends ChangeNotifier implements SearchModelCallback {
     _isSearching = true;
     _failedSources = 0;
     _completedSources = 0;
+    _totalSources = 0;
+    _currentSource = '';
+    _sourceFailures.clear();
     notifyListeners();
   }
 
   @override
   void onSearchSuccess(List<SearchBook> searchBooks) {
     _results = searchBooks;
+    notifyListeners();
+  }
+
+  @override
+  void onSearchFailure(SearchFailure failure) {
+    _sourceFailures.add(failure);
     notifyListeners();
   }
 

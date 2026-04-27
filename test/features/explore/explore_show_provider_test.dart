@@ -31,12 +31,13 @@ Book _makeBook({
   required String bookUrl,
   required String name,
   required String author,
+  String origin = 'source://main',
 }) {
   return Book(
     bookUrl: bookUrl,
     name: name,
     author: author,
-    origin: 'source://main',
+    origin: origin,
     originName: '主書源',
     isInBookshelf: true,
   );
@@ -46,12 +47,13 @@ SearchBook _makeSearchBook({
   required String bookUrl,
   required String name,
   required String author,
+  String origin = 'source://main',
 }) {
   return SearchBook(
     bookUrl: bookUrl,
     name: name,
     author: author,
-    origin: 'source://main',
+    origin: origin,
     originName: '主書源',
   );
 }
@@ -87,7 +89,7 @@ void main() {
   }
 
   group('ExploreShowProvider - 書架狀態', () {
-    test('初始載入會同步 bookUrl 與書名作者鍵值', () async {
+    test('初始載入只同步相同書源與 bookUrl', () async {
       fakeBookDao.shelf = [
         _makeBook(
           bookUrl: 'https://example.com/books/1',
@@ -113,12 +115,24 @@ void main() {
       expect(
         provider.isInBookshelf(
           _makeSearchBook(
+            bookUrl: 'https://example.com/books/1',
+            name: '測試書',
+            author: '作者甲',
+            origin: 'source://other',
+          ),
+        ),
+        isFalse,
+      );
+
+      expect(
+        provider.isInBookshelf(
+          _makeSearchBook(
             bookUrl: 'https://example.com/books/redirected',
             name: '測試書',
             author: '作者甲',
           ),
         ),
-        isTrue,
+        isFalse,
       );
 
       expect(

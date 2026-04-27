@@ -85,6 +85,22 @@ class _BookshelfPageState extends State<BookshelfPage> {
                       },
                     ),
                     IconButton(
+                      icon: const Icon(Icons.download_outlined),
+                      tooltip: '批次下載',
+                      onPressed:
+                          _selectedUrls.isEmpty
+                              ? null
+                              : () => _batchDownload(context, provider),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.update),
+                      tooltip: '批次檢查更新',
+                      onPressed:
+                          _selectedUrls.isEmpty
+                              ? null
+                              : () => _batchCheckUpdate(context, provider),
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.delete_outline),
                       tooltip: '刪除',
                       onPressed: () => _showDeleteConfirm(context, provider),
@@ -149,7 +165,17 @@ class _BookshelfPageState extends State<BookshelfPage> {
                                 children: [
                                   Icon(Icons.link, size: 20),
                                   SizedBox(width: 12),
-                                  Text('添加網址'),
+                                  Text('添加網址書籍'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'sort',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.sort, size: 20),
+                                  SizedBox(width: 12),
+                                  Text('排序'),
                                 ],
                               ),
                             ),
@@ -175,12 +201,22 @@ class _BookshelfPageState extends State<BookshelfPage> {
                             ),
                             const PopupMenuDivider(),
                             const PopupMenuItem(
+                              value: 'import_url',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.file_download_outlined, size: 20),
+                                  SizedBox(width: 12),
+                                  Text('從網址匯入書架'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
                               value: 'import',
                               child: Row(
                                 children: [
                                   Icon(Icons.file_download_outlined, size: 20),
                                   SizedBox(width: 12),
-                                  Text('匯入書架'),
+                                  Text('從檔案匯入書架'),
                                 ],
                               ),
                             ),
@@ -218,7 +254,10 @@ class _BookshelfPageState extends State<BookshelfPage> {
                             }
                             break;
                           case 'add_url':
-                            await _showAddUrlDialog(context, provider);
+                            await _showAddBookUrlDialog(context, provider);
+                            break;
+                          case 'sort':
+                            await _showSortSheet(context, provider);
                             break;
                           case 'manage':
                             setState(() {
@@ -236,6 +275,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
                           case 'import':
                             await _handleBookshelfImport(context);
                             break;
+                          case 'import_url':
+                            await _showImportBookshelfUrlDialog(
+                              context,
+                              provider,
+                            );
+                            break;
                           case 'export':
                             await _handleBookshelfExport(context, provider);
                             break;
@@ -246,6 +291,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         ),
         body: Column(
           children: [
+            if (!_isMultiSelect) _buildGroupBar(provider),
             Expanded(
               child:
                   provider.isLoading && provider.books.isEmpty
@@ -285,7 +331,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
   }
 
-  Future<void> _showAddUrlDialog(
+  Future<void> _showAddBookUrlDialog(
     BuildContext context,
     BookshelfProvider provider,
   ) async {
@@ -294,11 +340,53 @@ class _BookshelfPageState extends State<BookshelfPage> {
       context: context,
       builder:
           (ctx) => AlertDialog(
-            title: const Text('從網址匯入'),
+            title: const Text('添加網址書籍'),
             content: TextField(
               controller: controller,
               autofocus: true,
-              decoration: const InputDecoration(hintText: '輸入匯入網址'),
+              decoration: const InputDecoration(hintText: '輸入小說詳情頁網址'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                child: const Text('匯入'),
+              ),
+            ],
+          ),
+    );
+    if (url == null || url.isEmpty || !context.mounted) return;
+    try {
+      final book = await provider.importBookFromUrl(url);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已加入「${book.name}」')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('添加網址書籍失敗: $e')));
+    }
+  }
+
+  Future<void> _showImportBookshelfUrlDialog(
+    BuildContext context,
+    BookshelfProvider provider,
+  ) async {
+    final controller = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('從網址匯入書架'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: '輸入書架 JSON 網址'),
             ),
             actions: [
               TextButton(
@@ -318,12 +406,12 @@ class _BookshelfPageState extends State<BookshelfPage> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('網址匯入完成')));
+      ).showSnackBar(const SnackBar(content: Text('書架網址匯入完成')));
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('網址匯入失敗: $e')));
+      ).showSnackBar(SnackBar(content: Text('書架網址匯入失敗: $e')));
     }
   }
 
@@ -354,7 +442,8 @@ class _BookshelfPageState extends State<BookshelfPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源',
+              '已匯入 ${imported.books} 本書、${imported.chapters} 個章節、${imported.sources} 個書源'
+              '${imported.contents > 0 ? '，${imported.contents} 份正文快取' : ''}',
             ),
           ),
         );
@@ -385,7 +474,144 @@ class _BookshelfPageState extends State<BookshelfPage> {
     }
   }
 
+  Widget _buildGroupBar(BookshelfProvider provider) {
+    final visibleGroups = provider.groups.where((group) => group.show).toList();
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: const Text('全部'),
+              selected: provider.currentGroupId == -1,
+              onSelected: (_) => provider.setGroup(-1),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: const Text('未分組'),
+              selected: provider.currentGroupId == 0,
+              onSelected: (_) => provider.setGroup(0),
+            ),
+          ),
+          for (final group in visibleGroups)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(group.groupName),
+                selected: provider.currentGroupId == group.groupId,
+                onSelected: (_) => provider.setGroup(group.groupId),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSortSheet(
+    BuildContext context,
+    BookshelfProvider provider,
+  ) async {
+    final selected = await showModalBottomSheet<BookshelfSortMode>(
+      context: context,
+      builder:
+          (ctx) => SafeArea(
+            child: RadioGroup<BookshelfSortMode>(
+              groupValue: provider.sortMode,
+              onChanged: (value) => Navigator.pop(ctx, value),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final mode in BookshelfSortMode.values)
+                    ListTile(
+                      leading: Radio<BookshelfSortMode>(value: mode),
+                      title: Text(mode.label),
+                      onTap: () => Navigator.pop(ctx, mode),
+                    ),
+                ],
+              ),
+            ),
+          ),
+    );
+    if (selected != null) {
+      await provider.setSortMode(selected);
+    }
+  }
+
+  Future<void> _batchDownload(
+    BuildContext context,
+    BookshelfProvider provider,
+  ) async {
+    try {
+      final result = await provider.batchDownload(_selectedUrls);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '已加入 ${result.queuedBooks} 本、${result.queuedChapters} 章；略過 ${result.skippedBooks} 本',
+          ),
+        ),
+      );
+      setState(() {
+        _isMultiSelect = false;
+        _selectedUrls.clear();
+      });
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('批次下載失敗: $e')));
+    }
+  }
+
+  Future<void> _batchCheckUpdate(
+    BuildContext context,
+    BookshelfProvider provider,
+  ) async {
+    try {
+      final results = await provider.batchCheckUpdate(_selectedUrls);
+      final updated = results.where((result) => result.hasUpdate).length;
+      final chapters = results.fold<int>(
+        0,
+        (sum, result) => sum + result.newChapterCount,
+      );
+      final failed = results.where((result) => result.failed).length;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('檢查完成：$updated 本有更新、$chapters 個新章節、$failed 本失敗'),
+        ),
+      );
+      setState(() {
+        _isMultiSelect = false;
+        _selectedUrls.clear();
+      });
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('批次檢查更新失敗: $e')));
+    }
+  }
+
   Widget _buildListView(BookshelfProvider provider) {
+    if (!_isMultiSelect && provider.sortMode == BookshelfSortMode.custom) {
+      return ReorderableListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: provider.books.length,
+        onReorder: provider.reorderBooks,
+        itemBuilder:
+            (context, index) => Padding(
+              key: ValueKey(provider.books[index].bookUrl),
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildBookItem(context, provider.books[index]),
+            ),
+      );
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: provider.books.length,
