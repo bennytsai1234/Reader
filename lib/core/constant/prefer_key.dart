@@ -161,8 +161,6 @@ class PreferKey {
   static const String importKeepEnable = 'importKeepEnable';
   static const String previewImageByClick = 'previewImageByClick';
   static const String keyPageOnLongPress = 'keyPageOnLongPress';
-  static const String volumeKeyPage = 'volumeKeyPage';
-  static const String volumeKeyPageOnPlay = 'volumeKeyPageOnPlay';
   static const String mouseWheelPage = 'mouseWheelPage';
   static const String recordHeapDump = 'recordHeapDump';
   static const String optimizeRender = 'optimizeRender';

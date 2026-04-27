@@ -192,6 +192,10 @@ void main() {
         expect(runtime.state.phase, ReaderPhase.ready);
         expect(runtime.state.pageWindow, isNotNull);
         expect(runtime.state.pageWindow!.current.chapterIndex, 0);
+        expect(
+          runtime.state.pageWindow!.current.chapterSize,
+          runtime.chapterCount,
+        );
         expect(runtime.state.pageWindow!.lookAhead, isEmpty);
         expect(runtime.debugResolver.cachedLayout(0), isNotNull);
         expect(runtime.debugResolver.cachedLayout(1), isNotNull);

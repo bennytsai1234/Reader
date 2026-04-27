@@ -23,6 +23,8 @@
   - C 系列搜尋與發現功能驗證手冊；包含功能表、驗證步驟、相關檔案與常見故障定位。
 - [d_book_detail_validation.md](d_book_detail_validation.md)
   - D 系列書籍詳情功能驗證手冊；包含功能表、驗證步驟、相關檔案與常見故障定位。
+- [e_reader_validation.md](e_reader_validation.md)
+  - E 系列閱讀器功能驗證手冊；包含功能表、驗證步驟、相關檔案與常見故障定位。
 - [g_settings_tools_validation.md](g_settings_tools_validation.md)
   - G 系列設定與工具功能驗證手冊；包含功能表、驗證步驟、相關檔案與常見故障定位。
 - [h_background_download_validation.md](h_background_download_validation.md)

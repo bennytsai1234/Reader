@@ -60,7 +60,11 @@ class PageResolver {
     task = () async {
       try {
         final content = await repository.loadContent(safeIndex);
-        final layout = layoutEngine.layout(content, spec);
+        final layout = layoutEngine.layout(
+          content,
+          spec,
+          chapterSize: repository.chapterCount,
+        );
         if (layoutSpec.layoutSignature == spec.layoutSignature) {
           _layouts[safeIndex] = layout;
           _layoutErrors.remove(safeIndex);
@@ -202,6 +206,7 @@ class PageResolver {
     return TextPage(
       pageIndex: 0,
       chapterIndex: chapterIndex,
+      chapterSize: repository.chapterCount,
       title: repository.titleFor(chapterIndex),
       height: height,
       startCharOffset: 0,

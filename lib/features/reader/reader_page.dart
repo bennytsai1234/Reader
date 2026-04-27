@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:inkpage_reader/core/constant/page_anim.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
+import 'package:inkpage_reader/core/services/book_storage_service.dart';
 import 'package:inkpage_reader/features/reader/controllers/reader_auto_page_controller.dart';
 import 'package:inkpage_reader/features/reader/controllers/reader_bookmark_controller.dart';
 import 'package:inkpage_reader/features/reader/controllers/reader_dependencies.dart';
@@ -19,15 +20,17 @@ import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/models/reader_tap_action.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_page_exit_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_controller.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_session_facade.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
 import 'package:inkpage_reader/features/reader/viewport/reader_screen.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader/reader_bottom_menu.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader_chapters_drawer.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader_controller_sheets.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader_page_shell.dart';
-import 'package:inkpage_reader/features/replace_rule/replace_rule_page.dart';
 import 'package:inkpage_reader/features/search/search_page.dart';
 import 'package:inkpage_reader/features/settings/settings_page.dart';
 import 'package:inkpage_reader/shared/widgets/app_bottom_sheet.dart';
@@ -48,12 +51,17 @@ class ReaderPage extends StatefulWidget {
   State<ReaderPage> createState() => _ReaderPageState();
 }
 
-class _ReaderPageState extends State<ReaderPage> {
+class _ReaderPageState extends State<ReaderPage>
+    implements ReaderExitFlowDelegate {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ReaderPageExitCoordinator _exitCoordinator =
+      ReaderPageExitCoordinator();
+  final ReaderSessionFacade _sessionFacade = const ReaderSessionFacade();
   late final ReaderSettingsController _settings;
   late final ReaderMenuController _menu;
   late final ReaderDependencies _dependencies;
   late final ChapterRepository _repository;
+  late final BookStorageService _bookStorageService;
 
   ReaderRuntime? _runtime;
   ReaderTtsController? _tts;
@@ -74,6 +82,12 @@ class _ReaderPageState extends State<ReaderPage> {
       book: widget.book,
       initialChapters: widget.initialChapters,
       currentChineseConvert: () => _settings.chineseConvert,
+    );
+    _bookStorageService = BookStorageService(
+      bookDao: _dependencies.bookDao,
+      chapterDao: _dependencies.chapterDao,
+      contentDao: _dependencies.readerChapterContentDao,
+      bookmarkDao: _dependencies.bookmarkDao,
     );
     _repository = _dependencies.createChapterRepository();
     _lastContentSettingsGeneration = _settings.contentSettingsGeneration;
@@ -368,12 +382,14 @@ class _ReaderPageState extends State<ReaderPage> {
   }
 
   void _handleExitIntent() {
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-      Navigator.of(context).pop();
-      return;
-    }
-    unawaited(_runtime?.flushProgress());
-    Navigator.of(context).pop();
+    unawaited(
+      _exitCoordinator.handleExitIntent(
+        context: context,
+        provider: this,
+        isDrawerOpen: () => _scaffoldKey.currentState?.isDrawerOpen ?? false,
+        popNavigator: () => Navigator.of(context).pop(),
+      ),
+    );
   }
 
   void _showMore() {
@@ -417,14 +433,102 @@ class _ReaderPageState extends State<ReaderPage> {
 
   void _openReplaceRule() {
     _menu.dismissControls();
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ReplaceRulePage()),
+    final replaceDao = _dependencies.replaceDao;
+    if (replaceDao == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('替換規則資料庫不可用')));
+      return;
+    }
+    AppBottomSheet.show(
+      context: context,
+      title: '替換規則',
+      icon: Icons.rule_rounded,
+      children: [
+        FutureBuilder<int>(
+          future: replaceDao.getEnabled().then((rules) => rules.length),
+          builder: (context, snapshot) {
+            final countText =
+                snapshot.hasData ? '目前啟用 ${snapshot.data} 條規則' : '正在讀取啟用規則';
+            return ListTile(
+              leading: const Icon(Icons.fact_check_rounded),
+              title: const Text('規則狀態'),
+              subtitle: Text(countText),
+            );
+          },
+        ),
+        StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SwitchListTile(
+              secondary: const Icon(Icons.auto_fix_high_rounded),
+              title: const Text('本書套用替換規則'),
+              subtitle: const Text('切換後會重新載入目前章節'),
+              value: widget.book.getUseReplaceRule(),
+              onChanged: (value) {
+                setSheetState(() {
+                  (widget.book.readConfig ??= ReadConfig()).useReplaceRule =
+                      value;
+                });
+                unawaited(_dependencies.bookDao.upsert(widget.book));
+                unawaited(_runtime?.reloadContentPreservingLocation());
+              },
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.refresh_rounded),
+          title: const Text('重新套用並刷新目前章節'),
+          onTap: () {
+            Navigator.pop(context);
+            unawaited(_runtime?.reloadContentPreservingLocation());
+          },
+        ),
+      ],
     );
   }
 
   Future<void> _toggleBookmark() async {
     await _bookmark?.addVisibleLocationBookmark();
+  }
+
+  @override
+  Book get book => widget.book;
+
+  @override
+  bool shouldPromptAddToBookshelfOnExit() {
+    return !widget.book.isInBookshelf && _settings.showAddToShelfAlert;
+  }
+
+  @override
+  Future<void> persistExitProgress() async {
+    await _runtime?.flushProgress();
+  }
+
+  @override
+  Future<void> addCurrentBookToBookshelf() async {
+    final runtime = _runtime;
+    final location =
+        runtime?.state.visibleLocation ??
+        ReaderLocation(
+          chapterIndex: widget.book.chapterIndex,
+          charOffset: widget.book.charOffset,
+        );
+    final chapters = runtime?.chapters ?? widget.initialChapters;
+    await _sessionFacade.addCurrentBookToBookshelf(
+      book: widget.book,
+      chapters: chapters,
+      location: location,
+      chapterTitle: _chapterTitleAt(location.chapterIndex),
+      progressStore: ReaderProgressStore(),
+      bookDao: _dependencies.bookDao,
+      chapterDao: _dependencies.chapterDao,
+    );
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Future<void> discardUnkeptBookStorage() {
+    return _bookStorageService.discardBook(widget.book);
   }
 
   int _currentChapterIndex(ReaderRuntime? runtime) {

@@ -49,8 +49,6 @@ class SettingsProvider extends SettingsProviderBase {
   bool useZhLayout = false;
   bool textBottomJustify = true;
   bool mouseWheelPage = true;
-  bool volumeKeyPage = true;
-  bool volumeKeyPageOnPlay = false;
   bool keyPageOnLongPress = false;
   bool autoChangeSource = true;
   bool showBrightnessView = true;
@@ -279,12 +277,6 @@ class SettingsProvider extends SettingsProviderBase {
     update();
   }
 
-  void setVolumeKeyPageOnPlay(bool v) {
-    volumeKeyPageOnPlay = v;
-    save(PreferKey.volumeKeyPageOnPlay, v);
-    update();
-  }
-
   void setKeyPageOnLongPress(bool v) {
     keyPageOnLongPress = v;
     save(PreferKey.keyPageOnLongPress, v);
@@ -481,8 +473,6 @@ class SettingsProvider extends SettingsProviderBase {
     useZhLayout = prefs.getBool(PreferKey.useZhLayout) ?? false;
     textBottomJustify = prefs.getBool(PreferKey.textBottomJustify) ?? true;
     mouseWheelPage = prefs.getBool(PreferKey.mouseWheelPage) ?? true;
-    volumeKeyPage = prefs.getBool(PreferKey.volumeKeyPage) ?? true;
-    volumeKeyPageOnPlay = prefs.getBool(PreferKey.volumeKeyPageOnPlay) ?? false;
     keyPageOnLongPress = prefs.getBool(PreferKey.keyPageOnLongPress) ?? false;
     autoChangeSource = prefs.getBool(PreferKey.autoChangeSource) ?? true;
     showBrightnessView = prefs.getBool(PreferKey.showBrightnessView) ?? true;
@@ -669,12 +659,6 @@ class SettingsProvider extends SettingsProviderBase {
   void setHideNavigationBar(bool v) {
     hideNavigationBar = v;
     save(PreferKey.hideNavigationBar, v);
-    update();
-  }
-
-  void setVolumeKeyPage(bool v) {
-    volumeKeyPage = v;
-    save(PreferKey.volumeKeyPage, v);
     update();
   }
 

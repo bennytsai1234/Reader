@@ -8,9 +8,13 @@ import 'text_page.dart';
 class LayoutEngine {
   final Map<String, ChapterLayout> _cache = <String, ChapterLayout>{};
 
-  ChapterLayout layout(BookContent content, LayoutSpec spec) {
+  ChapterLayout layout(
+    BookContent content,
+    LayoutSpec spec, {
+    int chapterSize = 0,
+  }) {
     final cacheKey =
-        '${content.chapterIndex}:${content.contentHash}:${spec.layoutSignature}';
+        '${content.chapterIndex}:$chapterSize:${content.contentHash}:${spec.layoutSignature}';
     final cached = _cache[cacheKey];
     if (cached != null) return cached;
 
@@ -55,7 +59,12 @@ class LayoutEngine {
       paragraphNum += 1;
     }
 
-    final pages = _paginate(lines: lines, spec: spec, content: content);
+    final pages = _paginate(
+      lines: lines,
+      spec: spec,
+      content: content,
+      chapterSize: chapterSize,
+    );
     final layout = ChapterLayout(
       chapterIndex: content.chapterIndex,
       contentHash: content.contentHash,
@@ -168,6 +177,7 @@ class LayoutEngine {
     required List<TextLine> lines,
     required LayoutSpec spec,
     required BookContent content,
+    required int chapterSize,
   }) {
     final pageHeight = spec.contentHeight <= 0 ? 1.0 : spec.contentHeight;
     if (lines.isEmpty) {
@@ -175,7 +185,7 @@ class LayoutEngine {
         TextPage(
           pageIndex: 0,
           chapterIndex: content.chapterIndex,
-          chapterSize: 0,
+          chapterSize: chapterSize,
           pageSize: 1,
           title: content.title,
           lines: const <TextLine>[],
@@ -206,7 +216,7 @@ class LayoutEngine {
         TextPage(
           pageIndex: pageIndex,
           chapterIndex: content.chapterIndex,
-          chapterSize: 0,
+          chapterSize: chapterSize,
           pageSize: maxPageIndex + 1,
           title: content.title,
           lines: pageLines,

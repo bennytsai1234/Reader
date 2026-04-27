@@ -87,6 +87,9 @@ class ReaderSessionFacade {
     if (book.syncTime == 0) {
       book.syncTime = DateTime.now().millisecondsSinceEpoch;
     }
+    if (chapters.isNotEmpty) {
+      book.totalChapterNum = chapters.length;
+    }
     book.isInBookshelf = true;
     await bookDao.upsert(book);
     if (chapters.isNotEmpty) {
