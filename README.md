@@ -1,151 +1,123 @@
-# Inkpage Reader
+<p align="center">
+  <img src="assets/readme/inkpage-hero.svg" alt="Inkpage Reader hero" width="100%" />
+</p>
 
-墨頁 Inkpage 是一個以 Flutter 實作的中文小說閱讀器。這個 repo 目前聚焦在：
+<p align="center">
+  <a href="https://github.com/bennytsai1234/reader/actions/workflows/dart.yml"><img src="https://github.com/bennytsai1234/reader/actions/workflows/dart.yml/badge.svg" alt="Flutter CI"></a>
+  <a href="https://github.com/bennytsai1234/reader/releases"><img src="https://img.shields.io/github/v/release/bennytsai1234/reader" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bennytsai1234/reader" alt="License"></a>
+</p>
 
-- 書架、搜尋、發現、書籍詳情、書源管理、閱讀器、設定
-- TXT / EPUB / UMD 本地書匯入
-- 備份還原、下載任務、TTS、替換規則、字典規則
-- Legado 風格書源解析，但以 Flutter / Dart 架構維護
+<p align="center">
+  <strong>墨頁 Inkpage</strong><br>
+  一個以中文閱讀體驗為核心的開源小說閱讀器
+</p>
 
-本專案只提供閱讀器程式本體，不提供書籍內容或站點資料。
+<p align="center">
+  自己管理書源與本地書，把書架、進度、設定和閱讀節奏留在自己手上。
+</p>
 
-## 當前狀態
+<p align="center">
+  <a href="https://github.com/bennytsai1234/reader/releases">下載最新版本</a>
+  ·
+  <a href="https://github.com/bennytsai1234/reader/issues">回報問題</a>
+  ·
+  <a href="docs/README.md">查看文件</a>
+</p>
 
-- package：`inkpage_reader`
-- app 顯示名：`墨頁`
-- 版本來源：`pubspec.yaml`；正式 release 由 tag `vX.Y.Z` 回寫成 `X.Y.Z+<github.run_number>`
-- Dart SDK：`^3.7.0`
-- Flutter channel：stable
-- 資料庫：Drift / SQLite
-- Drift schema version：`1`
-- 狀態管理：`provider` + `ChangeNotifier`
-- DI：`get_it`
-- 路由：`Navigator` + `MaterialPageRoute`
-- 書源 JS：`flutter_js`
+## 這是什麼
 
-目前不是 Riverpod / GoRouter 架構。
+墨頁 Inkpage 是一個面向中文小說閱讀場景的閱讀器本體。它支援書架管理、搜尋、發現、閱讀器、書源管理、備份還原與朗讀，也能匯入本地 TXT / EPUB / UMD 書籍。
 
-## 現有功能
+這個專案只提供閱讀器，不提供小說內容、站點資料或第三方帳號服務。
 
-- 書架、書籍分組、閱讀紀錄
-- 全域搜尋、單一書源搜尋、發現頁
-- 書籍詳情、章節列表、換源
-- 閱讀器：`slide` / `scroll`
-- `chapterIndex + charOffset` 閱讀進度保存與還原
-- TTS、自動翻頁、書籤、閱讀設定
-- 替換規則、字典規則、TXT 目錄規則
-- TXT / EPUB / UMD 本地書
-- 書源匯入、編輯、檢查、除錯、登入 WebView
-- 備份還原與下載任務
+## 為什麼用墨頁
 
-## 程式結構
+| 特點 | 說明 |
+| --- | --- |
+| 閱讀器優先 | 重點不是做一個書源展示工具，而是把閱讀本身做好，包含進度保存、翻頁模式、閱讀外觀與朗讀。 |
+| 本地資料優先 | 書架、閱讀進度、設定、書籤與大部分資料都保存在本機，不依賴中心化帳號。 |
+| 本地書與書源都能用 | 你可以匯入自己的 TXT / EPUB / UMD，也可以自行加入可用書源。 |
+| 為中文閱讀調整 | 針對中文小說閱讀流程設計，包括章節閱讀、替換規則、字典規則與 TXT 目錄規則。 |
+| 開源且可持續維護 | 專案以 Flutter / Dart 維護，並有 CI、版本釋出與公開 issue 流程。 |
 
-```text
-lib/
-  main.dart          app composition root
-  app_providers.dart global Provider registration
-  core/
-    database/        Drift tables, DAOs, AppDatabase
-    di/              get_it registration
-    engine/          書源規則、JS bridge、WebBook parser
-    local_book/      TXT / EPUB / UMD parser
-    models/          domain models
-    services/        書源、備份、還原、TTS、下載等服務
-    storage/         app-owned filesystem paths
-  features/
-    bookshelf/
-    book_detail/
-    explore/
-    reader/
-    search/
-    settings/
-    source_manager/
-    ...
-  shared/
-    theme/
-    widgets/
-docs/
-test/
-release-notes/
-```
+## 你可以用它做什麼
 
-## 閱讀器主線
+- 管理自己的書架、閱讀紀錄與分組
+- 用多個書源搜尋作品，或只查單一書源
+- 透過發現頁找書，查看詳情、目錄與換源
+- 在 `slide` / `scroll` 兩種閱讀模式間切換
+- 保存並還原閱讀進度
+- 使用 TTS 朗讀、自動翻頁、書籤與閱讀設定
+- 匯入本地 TXT / EPUB / UMD 書籍
+- 管理書源、檢查書源狀態，必要時透過 WebView 登入
+- 備份與還原書架、進度、設定與其他使用資料
 
-目前閱讀器主線不是舊的 `ReadBookController` 架構。實際接線是：
+## 下載與安裝
 
-- 頁面組裝：`lib/features/reader/reader_page.dart`
-- 核心 runtime：`lib/features/reader/runtime/reader_runtime.dart`
-- 依賴組裝：`lib/features/reader/controllers/reader_dependencies.dart`
-- 章節 repository：`lib/features/reader/engine/chapter_repository.dart`
-- 分頁 resolver：`lib/features/reader/engine/page_resolver.dart`
-- viewport：`lib/features/reader/viewport/reader_screen.dart`
+| 平台 | 取得方式 | 備註 |
+| --- | --- | --- |
+| Android | [GitHub Releases](https://github.com/bennytsai1234/reader/releases) | 提供依裝置架構分開的 APK 安裝檔 |
+| iOS | [GitHub Releases](https://github.com/bennytsai1234/reader/releases) | 提供未簽名 IPA，需自行透過 AltStore 或其他 sideload 方式安裝 |
 
-長期閱讀位置以 `ReaderLocation(chapterIndex, charOffset)` 表示。頁碼、PageView index、scroll offset 都只是執行期投影。
+目前沒有 Play Store 或 App Store 上架版本。
 
-細節見 [docs/reader_runtime.md](docs/reader_runtime.md)。
+## 快速開始
 
-## 開發環境
+1. 到 [Releases](https://github.com/bennytsai1234/reader/releases) 下載並安裝最新版。
+2. 第一次使用時，先匯入本地書，或自行加入可用書源。
+3. 用搜尋或發現功能找書，加入書架後開始閱讀。
+4. 在閱讀器裡調整字型、主題、翻頁模式、朗讀與其他偏好設定。
+5. 需要換機或保留資料時，用備份與還原保存你的書架與進度。
 
-```bash
-flutter pub get
-flutter pub run build_runner build --delete-conflicting-outputs
-flutter analyze
-flutter test
-```
+如果某些書源需要登入，app 內提供 WebView 登入流程。
 
-如果 Linux 測試需要 QuickJS shared library，可用：
+## 適合誰
 
-```bash
-tool/flutter_test_with_quickjs.sh
-```
+- 想自己管理書源、本地書與閱讀資料的人
+- 需要細緻閱讀設定、書籤與進度保存的人
+- 習慣中文小說閱讀流程，且希望使用開源工具的人
+- 不想把閱讀資料綁在特定平台帳號上的人
 
-只改閱讀器時，通常先跑：
+## 產品邊界
 
-```bash
-flutter analyze
-flutter test test/features/reader
-```
+- 不內建小說內容
+- 不保證第三方書源長期可用
+- 不代管使用者帳號、Cookie 或站點權限
+- 不承諾所有來源站點都能穩定抓取
 
-修改 Drift table、DAO 或 `AppDatabase` 後必須重新生成：
+書源是否可用，會受到來源站點、規則品質、登入狀態與站方限制影響。
 
-```bash
-flutter pub run build_runner build --delete-conflicting-outputs
-```
+## 資料與隱私
 
-## CI 與釋出
+- 書架、閱讀進度、設定、書籤與大部分使用資料會保存在本機
+- 部分功能可能使用網路請求、Cookie 與 WebView
+- 備份檔目前是 ZIP，不是加密備份，請自行妥善保管
 
-CI：
+## 問題回報
 
-- `.github/workflows/dart.yml`
-  - `flutter pub get`
-  - `flutter analyze`
-  - `flutter test --reporter compact`
+問題或建議請到 [Issues](https://github.com/bennytsai1234/reader/issues)。
 
-Release：
+回報時建議附上：
 
-- `.github/workflows/build-release.yml`
-  - tag `vX.Y.Z` 觸發
-  - 回寫 `pubspec.yaml` 為 `X.Y.Z+<github.run_number>`
-  - 建 Android split APK
-  - 建 iOS unsigned IPA
-  - 發佈 GitHub Release
+- 裝置型號與系統版本
+- app 版本
+- 重現步驟
+- 錯誤訊息或畫面截圖
+- 若是書源問題，附上書源名稱與書名
 
-完整流程見 [docs/release.md](docs/release.md)。
+## 開發與文件
 
-## 文檔
+如果你是來看架構、開發流程或 release 說明，請從 [docs/README.md](docs/README.md) 開始。
 
-- [docs/README.md](docs/README.md) - 文檔索引
-- [docs/architecture.md](docs/architecture.md) - 專案架構與資料流
-- [docs/app_flow_architecture.md](docs/app_flow_architecture.md) - 整個 app 的流程圖與架構圖
-- [docs/app_user_flows.md](docs/app_user_flows.md) - 使用者操作流程圖
-- [docs/a_startup_validation.md](docs/a_startup_validation.md) - A 系列啟動與主入口功能驗證手冊
-- [docs/DATABASE.md](docs/DATABASE.md) - Drift schema version 1 與資料表
-- [docs/reader_runtime.md](docs/reader_runtime.md) - 閱讀器 runtime 主線
-- [docs/reader_spec.md](docs/reader_spec.md) - 閱讀器可驗證規格
-- [docs/release.md](docs/release.md) - CI / tag / release 流程
+常用文件：
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/reader_runtime.md](docs/reader_runtime.md)
+- [docs/reader_spec.md](docs/reader_spec.md)
+- [docs/DATABASE.md](docs/DATABASE.md)
+- [docs/release.md](docs/release.md)
 
 ## 授權
 
-- License：Apache License 2.0
-- Releases：<https://github.com/bennytsai1234/reader/releases>
-- Issues：<https://github.com/bennytsai1234/reader/issues>
+Apache License 2.0。詳見 [LICENSE](LICENSE)。
