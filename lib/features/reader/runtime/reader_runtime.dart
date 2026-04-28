@@ -7,6 +7,7 @@ import 'package:inkpage_reader/features/reader/engine/book_content.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_repository.dart';
 import 'package:inkpage_reader/features/reader/engine/layout_engine.dart';
 import 'package:inkpage_reader/features/reader/engine/layout_spec.dart';
+import 'package:inkpage_reader/features/reader/engine/page_cache.dart';
 import 'package:inkpage_reader/features/reader/engine/page_resolver.dart';
 import 'package:inkpage_reader/features/reader/engine/read_style.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
@@ -152,6 +153,7 @@ class ReaderRuntime extends ChangeNotifier {
 
   Future<void> updateLayoutSpec(LayoutSpec spec) async {
     if (state.layoutSpec.layoutSignature == spec.layoutSignature) return;
+    final location = captureVisibleLocation() ?? state.visibleLocation;
     final generation = _preloadScheduler.bumpGeneration();
     _resolver.updateLayoutSpec(spec);
     _layoutEngine.invalidateWhere((layout) {
@@ -164,7 +166,7 @@ class ReaderRuntime extends ChangeNotifier {
         layoutGeneration: generation,
       ),
     );
-    await jumpToLocation(state.visibleLocation, immediateSave: false);
+    await jumpToLocation(location, immediateSave: false);
   }
 
   Future<void> applyPresentation({
@@ -185,7 +187,7 @@ class ReaderRuntime extends ChangeNotifier {
       });
     }
 
-    final location = state.visibleLocation;
+    final location = captureVisibleLocation() ?? state.visibleLocation;
     _setState(
       state.copyWith(
         phase: ReaderPhase.switchingMode,
@@ -448,8 +450,24 @@ class ReaderRuntime extends ChangeNotifier {
     return (viewportHeight * 0.2).clamp(24.0, 120.0).toDouble();
   }
 
+  PageCache pageCacheFor(TextPage page) {
+    if (page.isPlaceholder) return page.toPageCache();
+    final layout = _resolver.cachedLayout(page.chapterIndex);
+    if (layout != null &&
+        page.pageIndex >= 0 &&
+        page.pageIndex < layout.pages.length) {
+      final cachedPage = layout.pages[page.pageIndex];
+      if (cachedPage.startCharOffset == page.startCharOffset &&
+          cachedPage.endCharOffset == page.endCharOffset) {
+        return cachedPage.toPageCache();
+      }
+    }
+    return page.toPageCache();
+  }
+
   Future<void> switchMode(ReaderMode mode) async {
     if (state.mode == mode) return;
+    final location = captureVisibleLocation() ?? state.visibleLocation;
     _setState(
       state.copyWith(
         phase: ReaderPhase.switchingMode,
@@ -458,7 +476,7 @@ class ReaderRuntime extends ChangeNotifier {
         clearCurrentSlidePage: true,
       ),
     );
-    await jumpToLocation(state.visibleLocation, immediateSave: false);
+    await jumpToLocation(location, immediateSave: false);
     _setState(state.copyWith(mode: mode, phase: ReaderPhase.ready));
   }
 

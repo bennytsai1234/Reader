@@ -149,6 +149,73 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
     });
 
+    testWidgets(
+      'slide viewport renders page cache tiles with slide placement',
+      (tester) async {
+        final env = _RuntimeEnv(mode: ReaderMode.slide);
+        await env.runtime.openBook();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SizedBox(
+              width: 320,
+              height: 360,
+              child: SlideReaderViewport(
+                runtime: env.runtime,
+                backgroundColor: Colors.white,
+                textColor: Colors.black,
+                style: _style(ReaderPageMode.slide),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final viewport = find.byType(SlideReaderViewport);
+        final layers = tester
+            .widgetList<ReaderTileLayer>(
+              find.descendant(
+                of: viewport,
+                matching: find.byType(ReaderTileLayer),
+              ),
+            )
+            .toList(growable: false);
+        final window = env.runtime.state.pageWindow!;
+        final layout = env.runtime.debugResolver.cachedLayout(
+          window.current.chapterIndex,
+        );
+        expect(layout, isNotNull);
+        expect(layers, isNotEmpty);
+        expect(layers.first.tile, layout!.pageCaches[window.current.pageIndex]);
+
+        final transforms = tester
+            .widgetList<Transform>(
+              find.descendant(of: viewport, matching: find.byType(Transform)),
+            )
+            .toList(growable: false);
+        final viewportWidth = tester.getSize(viewport).width;
+        expect(transforms, hasLength(3));
+        expect(transforms[0].transform.getTranslation().x, -viewportWidth);
+        expect(transforms[1].transform.getTranslation().x, 0);
+        expect(transforms[2].transform.getTranslation().x, viewportWidth);
+
+        final captured = env.runtime.captureVisibleLocation();
+        expect(captured, isNotNull);
+        expect(
+          captured!.visualOffsetPx,
+          inInclusiveRange(
+            ReaderLocation.minVisualOffsetPx,
+            ReaderLocation.maxVisualOffsetPx,
+          ),
+        );
+        expect(env.bookDao.writes, 0);
+
+        env.runtime.dispose();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 500));
+      },
+    );
+
     testWidgets('scroll viewport uses fixed canvas with page cache tiles', (
       tester,
     ) async {

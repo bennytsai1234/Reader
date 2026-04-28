@@ -1018,22 +1018,54 @@ void main() {
       final runtime = env.runtime;
       await runtime.openBook();
       runtime.moveToNextPage();
-      final location = runtime.state.visibleLocation;
+      final owner = Object();
+      final scrollLocation = runtime.state.visibleLocation.copyWith(
+        visualOffsetPx: 37,
+      );
+      runtime.registerVisibleLocationCapture(owner, () => scrollLocation);
 
       await runtime.switchMode(ReaderMode.slide);
       expect(runtime.state.mode, ReaderMode.slide);
-      expect(runtime.state.visibleLocation.chapterIndex, location.chapterIndex);
-      expect(runtime.state.visibleLocation.charOffset, location.charOffset);
+      expect(
+        runtime.state.visibleLocation.chapterIndex,
+        scrollLocation.chapterIndex,
+      );
+      expect(
+        runtime.state.visibleLocation.charOffset,
+        scrollLocation.charOffset,
+      );
+      expect(
+        runtime.state.visibleLocation.visualOffsetPx,
+        scrollLocation.visualOffsetPx,
+      );
       expect(runtime.state.currentSlidePage, isNotNull);
       expect(
-        runtime.state.currentSlidePage!.containsCharOffset(location.charOffset),
+        runtime.state.currentSlidePage!.containsCharOffset(
+          scrollLocation.charOffset,
+        ),
         isTrue,
       );
 
+      final slideLocation = runtime.state.visibleLocation.copyWith(
+        visualOffsetPx: -18,
+      );
+      runtime.registerVisibleLocationCapture(owner, () => slideLocation);
       await runtime.switchMode(ReaderMode.scroll);
       expect(runtime.state.mode, ReaderMode.scroll);
-      expect(runtime.state.visibleLocation.chapterIndex, location.chapterIndex);
-      expect(runtime.state.visibleLocation.charOffset, location.charOffset);
+      expect(
+        runtime.state.visibleLocation.chapterIndex,
+        slideLocation.chapterIndex,
+      );
+      expect(
+        runtime.state.visibleLocation.charOffset,
+        slideLocation.charOffset,
+      );
+      expect(
+        runtime.state.visibleLocation.visualOffsetPx,
+        slideLocation.visualOffsetPx,
+      );
+      expect(env.bookDao.writes, 0);
+      runtime.unregisterVisibleLocationCapture(owner);
     });
 
     test(

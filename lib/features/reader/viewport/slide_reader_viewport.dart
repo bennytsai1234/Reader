@@ -196,8 +196,20 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
     );
   }
 
-  Widget _buildTile(TextPage tile) {
-    final pageCache = tile.toPageCache();
+  SlidePagePlacement _placementForPage({
+    required TextPage page,
+    required int pageSlot,
+    required double width,
+  }) {
+    return SlidePagePlacement(
+      page: widget.runtime.pageCacheFor(page),
+      virtualLeft: width * pageSlot,
+      pageSlot: pageSlot,
+    );
+  }
+
+  Widget _buildTile(SlidePagePlacement placement) {
+    final pageCache = placement.page;
     return GestureDetector(
       key: ValueKey<TileKey>(_tileKey(pageCache)),
       behavior: HitTestBehavior.opaque,
@@ -219,28 +231,16 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
         widget.runtime.state.phase != ReaderPhase.ready) {
       return null;
     }
-    final page = widget.runtime.state.pageWindow?.current;
-    if (page == null || page.isPlaceholder || page.lines.isEmpty) return null;
+    final current = widget.runtime.state.pageWindow?.current;
+    if (current == null || current.isPlaceholder) return null;
+    final page = widget.runtime.pageCacheFor(current);
+    if (page.lines.isEmpty) return null;
     final anchorY = _anchorOffsetInViewport();
     final contentY =
         (anchorY - widget.style.paddingTop)
             .clamp(0.0, page.contentHeight)
             .toDouble();
-    TextLine? nearest;
-    var nearestDistance = double.infinity;
-    for (final line in page.lines) {
-      if (line.text.isEmpty) continue;
-      if (contentY >= line.top && contentY <= line.bottom) {
-        nearest = line;
-        break;
-      }
-      final distance =
-          contentY < line.top ? line.top - contentY : contentY - line.bottom;
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = line;
-      }
-    }
+    final nearest = page.lineAtOrNearLocalY(page.localStartY + contentY);
     if (nearest == null) return null;
     return ReaderLocation(
       chapterIndex: page.chapterIndex,
@@ -256,6 +256,15 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
     _resetViewport();
     await Future<void>.delayed(Duration.zero);
     return mounted && _captureVisibleLocation() != null;
+  }
+
+  double _screenXFor({
+    required int pageSlot,
+    required double width,
+    SlidePagePlacement? placement,
+  }) {
+    final pageOffsetX = -_dragDx;
+    return placement?.screenX(pageOffsetX) ?? width * pageSlot - pageOffsetX;
   }
 
   double _anchorOffsetInViewport() {
@@ -305,15 +314,36 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        final prevPlacement =
+            window.prev == null
+                ? null
+                : _placementForPage(
+                  page: window.prev!,
+                  pageSlot: -1,
+                  width: width,
+                );
+        final currentPlacement = _placementForPage(
+          page: window.current,
+          pageSlot: 0,
+          width: width,
+        );
+        final nextPlacement =
+            window.next == null
+                ? null
+                : _placementForPage(
+                  page: window.next!,
+                  pageSlot: 1,
+                  width: width,
+                );
         final prev =
             window.prev == null
                 ? _buildEdgePlaceholder(message: '已經是第一頁')
-                : _buildTile(window.prev!);
-        final current = _buildTile(window.current);
+                : _buildTile(prevPlacement!);
+        final current = _buildTile(currentPlacement);
         final next =
             window.next == null
                 ? _buildEdgePlaceholder(message: '已經是最後一頁')
-                : _buildTile(window.next!);
+                : _buildTile(nextPlacement!);
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -326,15 +356,36 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
             child: Stack(
               children: [
                 Transform.translate(
-                  offset: Offset(_dragDx - width, 0),
+                  offset: Offset(
+                    _screenXFor(
+                      pageSlot: -1,
+                      width: width,
+                      placement: prevPlacement,
+                    ),
+                    0,
+                  ),
                   child: SizedBox(width: width, child: prev),
                 ),
                 Transform.translate(
-                  offset: Offset(_dragDx, 0),
+                  offset: Offset(
+                    _screenXFor(
+                      pageSlot: 0,
+                      width: width,
+                      placement: currentPlacement,
+                    ),
+                    0,
+                  ),
                   child: SizedBox(width: width, child: current),
                 ),
                 Transform.translate(
-                  offset: Offset(_dragDx + width, 0),
+                  offset: Offset(
+                    _screenXFor(
+                      pageSlot: 1,
+                      width: width,
+                      placement: nextPlacement,
+                    ),
+                    0,
+                  ),
                   child: SizedBox(width: width, child: next),
                 ),
               ],
