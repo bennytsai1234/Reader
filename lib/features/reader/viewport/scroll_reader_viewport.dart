@@ -87,12 +87,14 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
   final Map<int, _LoadedChapter> _loadedChapters = <int, _LoadedChapter>{};
   final Map<int, double> _chapterExtents = <int, double>{};
   final Map<int, double> _chapterVirtualTops = <int, double>{};
-  final Map<int, Future<void>> _inFlightLoads = <int, Future<void>>{};
+  final Map<int, Future<_LoadedChapter>> _inFlightLoads =
+      <int, Future<_LoadedChapter>>{};
 
   ReaderLocation? _lastReportedLocation;
   ReaderLocation? _lastSyncedLocation;
   int? _currentChapterIndex;
   int _lastLayoutGeneration = 0;
+  int _windowRequestId = 0;
   double _virtualScrollY = 0.0;
   double _lastAnimationValue = 0.0;
   bool _initialJumpCompleted = false;
@@ -184,6 +186,7 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     _chapterExtents.clear();
     _chapterVirtualTops.clear();
     _inFlightLoads.clear();
+    _windowRequestId += 1;
     _lastSyncedLocation = null;
     _currentChapterIndex = null;
     _virtualScrollY = 0.0;
@@ -254,12 +257,7 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     ];
   }
 
-  Future<void> _ensureChapterLoaded(int chapterIndex) {
-    if (widget.runtime.chapterCount <= 0) return Future<void>.value();
-    final safeChapterIndex = _safeChapterIndex(chapterIndex);
-    if (_loadedChapters.containsKey(safeChapterIndex)) {
-      return Future<void>.value();
-    }
+  Future<_LoadedChapter> _loadChapter(int safeChapterIndex) {
     final existing = _inFlightLoads[safeChapterIndex];
     if (existing != null) return existing;
 
@@ -268,11 +266,8 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
         final layout = await widget.runtime.debugResolver.ensureLayout(
           safeChapterIndex,
         );
-        if (!mounted) return;
         final pages = layout.pageCaches;
-        final loaded = _LoadedChapter(layout: layout, pages: pages);
-        _loadedChapters[safeChapterIndex] = loaded;
-        _chapterExtents[safeChapterIndex] = loaded.extent;
+        return _LoadedChapter(layout: layout, pages: pages);
       } finally {
         _inFlightLoads.remove(safeChapterIndex);
       }
@@ -281,20 +276,42 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     return task;
   }
 
-  Future<bool> _tryEnsureChapterLoaded(int chapterIndex) async {
+  Future<bool> _tryEnsureChapterLoaded(
+    int chapterIndex, {
+    bool Function()? isCurrent,
+  }) async {
+    if (widget.runtime.chapterCount <= 0) return false;
+    final safeChapterIndex = _safeChapterIndex(chapterIndex);
+    if (_loadedChapters.containsKey(safeChapterIndex)) return true;
     try {
-      await _ensureChapterLoaded(chapterIndex);
-      return _loadedChapters.containsKey(_safeChapterIndex(chapterIndex));
+      final loaded = await _loadChapter(safeChapterIndex);
+      if (!mounted || !(isCurrent?.call() ?? true)) return false;
+      _loadedChapters[safeChapterIndex] = loaded;
+      _chapterExtents[safeChapterIndex] = loaded.extent;
+      return true;
     } catch (_) {
       return false;
     }
   }
 
-  Future<void> _ensureWindowAround(int chapterIndex) async {
+  Future<void> _ensureWindowAround(
+    int chapterIndex, {
+    bool Function()? isCurrent,
+  }) async {
     if (widget.runtime.chapterCount <= 0) return;
+    final requestId = ++_windowRequestId;
+    bool stillCurrent() {
+      return mounted &&
+          requestId == _windowRequestId &&
+          (isCurrent?.call() ?? true);
+    }
+
     final center = _safeChapterIndex(chapterIndex);
-    final centerReady = await _tryEnsureChapterLoaded(center);
-    if (!mounted) return;
+    final centerReady = await _tryEnsureChapterLoaded(
+      center,
+      isCurrent: stillCurrent,
+    );
+    if (!stillCurrent()) return;
     if (!centerReady) return;
 
     _currentChapterIndex = center;
@@ -305,8 +322,11 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
 
     final previous = center - 1;
     if (previous >= 0) {
-      final previousReady = await _tryEnsureChapterLoaded(previous);
-      if (!mounted) return;
+      final previousReady = await _tryEnsureChapterLoaded(
+        previous,
+        isCurrent: stillCurrent,
+      );
+      if (!stillCurrent()) return;
       if (previousReady) {
         final previousExtent =
             _chapterExtents[previous] ??
@@ -321,14 +341,17 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
 
     final next = center + 1;
     if (next < widget.runtime.chapterCount) {
-      final nextReady = await _tryEnsureChapterLoaded(next);
-      if (!mounted) return;
+      final nextReady = await _tryEnsureChapterLoaded(
+        next,
+        isCurrent: stillCurrent,
+      );
+      if (!stillCurrent()) return;
       if (nextReady) {
         _chapterVirtualTops.putIfAbsent(next, () => centerTop + centerExtent);
       }
     }
 
-    if (mounted) setState(() {});
+    if (stillCurrent()) setState(() {});
   }
 
   Future<void> _primeAndSyncToRuntimeLocation({bool force = false}) async {
@@ -336,15 +359,20 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
       chapterCount: widget.runtime.chapterCount,
     );
     final layoutGeneration = widget.runtime.state.layoutGeneration;
-    await _ensureWindowAround(location.chapterIndex);
-    if (!mounted) return;
-    final currentLocation = widget.runtime.state.visibleLocation.normalized(
-      chapterCount: widget.runtime.chapterCount,
-    );
-    if (widget.runtime.state.layoutGeneration != layoutGeneration ||
-        currentLocation != location) {
-      return;
+    bool stillAtLocation() {
+      if (!mounted) return false;
+      final currentLocation = widget.runtime.state.visibleLocation.normalized(
+        chapterCount: widget.runtime.chapterCount,
+      );
+      return widget.runtime.state.layoutGeneration == layoutGeneration &&
+          currentLocation == location;
     }
+
+    await _ensureWindowAround(
+      location.chapterIndex,
+      isCurrent: stillAtLocation,
+    );
+    if (!stillAtLocation()) return;
     if (!force && _initialJumpCompleted && _lastSyncedLocation == location) {
       return;
     }
@@ -536,8 +564,14 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     if (!mounted || widget.runtime.chapterCount <= 0) return false;
     _scrollAnimation.stop();
     _isDragging = false;
-    await _ensureWindowAround(location.chapterIndex);
-    if (!mounted) return false;
+    final layoutGeneration = widget.runtime.state.layoutGeneration;
+    bool stillCurrent() {
+      return mounted &&
+          widget.runtime.state.layoutGeneration == layoutGeneration;
+    }
+
+    await _ensureWindowAround(location.chapterIndex, isCurrent: stillCurrent);
+    if (!stillCurrent()) return false;
     final target = _virtualScrollYForLocation(location);
     if (target == null) return false;
     _virtualScrollY = _clampVirtualScrollY(target);
@@ -603,7 +637,14 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     final targetChapter = placement.page.chapterIndex;
     if (targetChapter == current) return;
     if (!_shouldShiftWindow(current, targetChapter, anchorVirtualY)) return;
-    await _ensureWindowAround(targetChapter);
+    final layoutGeneration = widget.runtime.state.layoutGeneration;
+    await _ensureWindowAround(
+      targetChapter,
+      isCurrent:
+          () =>
+              mounted &&
+              widget.runtime.state.layoutGeneration == layoutGeneration,
+    );
   }
 
   bool _shouldShiftWindow(
@@ -733,10 +774,19 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
   }) async {
     if (!mounted || widget.runtime.chapterCount <= 0) return false;
     final safeChapterIndex = _safeChapterIndex(chapterIndex);
-    final ready = await _tryEnsureChapterLoaded(safeChapterIndex);
-    if (!mounted || !ready) return false;
-    await _ensureWindowAround(safeChapterIndex);
-    if (!mounted) return false;
+    final layoutGeneration = widget.runtime.state.layoutGeneration;
+    bool stillCurrent() {
+      return mounted &&
+          widget.runtime.state.layoutGeneration == layoutGeneration;
+    }
+
+    final ready = await _tryEnsureChapterLoaded(
+      safeChapterIndex,
+      isCurrent: stillCurrent,
+    );
+    if (!stillCurrent() || !ready) return false;
+    await _ensureWindowAround(safeChapterIndex, isCurrent: stillCurrent);
+    if (!stillCurrent()) return false;
 
     final loaded = _loadedChapters[safeChapterIndex];
     final chapterTop = _chapterVirtualTops[safeChapterIndex];
@@ -884,7 +934,20 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
       return _buildLoadingState(state);
     }
     if (!currentLoaded) {
-      unawaited(_ensureWindowAround(currentChapter));
+      final layoutGeneration = state.layoutGeneration;
+      unawaited(
+        _ensureWindowAround(
+          currentChapter,
+          isCurrent:
+              () =>
+                  mounted &&
+                  widget.runtime.state.layoutGeneration == layoutGeneration &&
+                  _safeChapterIndex(
+                        widget.runtime.state.visibleLocation.chapterIndex,
+                      ) ==
+                      currentChapter,
+        ),
+      );
       return _buildLoadingState(state);
     }
     return _buildCanvas();

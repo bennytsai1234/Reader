@@ -115,13 +115,11 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
   }
 
   bool _canMoveBackward(PageWindow window) {
-    final prev = window.prev;
-    return prev != null && !prev.isPlaceholder;
+    return window.prev != null;
   }
 
   bool _canMoveForward(PageWindow window) {
-    final next = window.next;
-    return next != null && !next.isPlaceholder;
+    return window.next != null;
   }
 
   double _boundaryAdjustedDx(double nextDx, PageWindow window) {

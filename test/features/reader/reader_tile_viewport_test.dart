@@ -160,15 +160,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
     });
 
-    testWidgets('slide drag treats placeholder neighbor as blocked edge', (
+    testWidgets('slide drag into placeholder schedules neighbor refresh', (
       tester,
     ) async {
       final env = _RuntimeEnv(mode: ReaderMode.slide);
       await env.runtime.openBook();
-      final current = env.runtime.state.pageWindow!.current;
+      final chapterZero = await env.runtime.debugResolver.ensureLayout(0);
+      final current = chapterZero.pages.last;
       env.runtime.state = env.runtime.state.copyWith(
         pageWindow: PageWindow(
-          prev: null,
+          prev: env.runtime.debugResolver.prevPageSync(current),
           current: current,
           next: env.runtime.debugResolver.placeholderPageFor(1),
         ),
@@ -196,22 +197,18 @@ void main() {
       await gesture.moveBy(Offset(-viewportWidth, 0));
       await tester.pump();
 
-      var translations = _slideTranslations(tester, viewport);
-      expect(translations[2], greaterThan(viewportWidth * 0.6));
+      expect(env.runtime.state.pageWindow!.next!.isLoading, isTrue);
 
       await gesture.up();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 260));
+      for (var i = 0; i < 20; i++) {
+        if (env.runtime.state.pageWindow!.current.chapterIndex == 1) break;
+        await tester.pump(const Duration(milliseconds: 20));
+      }
 
-      translations = _slideTranslations(tester, viewport);
-      expect(translations[2], greaterThan(viewportWidth * 0.75));
-      expect(env.runtime.state.pageWindow!.current, current);
-
-      await tester.pumpAndSettle();
-      translations = _slideTranslations(tester, viewport);
-      expect(translations[1], closeTo(0, 0.001));
-      expect(translations[2], closeTo(viewportWidth, 0.001));
-      expect(env.runtime.state.pageWindow!.current, current);
+      expect(env.runtime.state.pageWindow!.current.chapterIndex, 1);
+      expect(env.runtime.state.visibleLocation.chapterIndex, 1);
 
       env.runtime.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
@@ -925,13 +922,4 @@ ReaderTileLayer _centerSlideTileLayer(WidgetTester tester) {
     }
   }
   fail('No ReaderTileLayer is centered in the slide viewport.');
-}
-
-List<double> _slideTranslations(WidgetTester tester, Finder viewport) {
-  return tester
-      .widgetList<Transform>(
-        find.descendant(of: viewport, matching: find.byType(Transform)),
-      )
-      .map((transform) => transform.transform.getTranslation().x)
-      .toList(growable: false);
 }
