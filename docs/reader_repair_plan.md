@@ -29,7 +29,7 @@ ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 `visualOffsetPx` 不應是章節內的大型總位移，也不應是新的 page index。它只表示：
 
 ```text
-恢復時，讓 charOffset 對應的那一行，和畫面 anchor line 相差多少 px。
+恢復時，從 charOffset 對應那一行的 top 往下多少 px，可以對到畫面 anchor line。
 ```
 
 anchor line 是閱讀畫面裡一條穩定的隱形基準線，建議放在閱讀內容區頂部往下 16 到 32 px。保存時用它選目前讀到的行，恢復時也用它把同一行放回原來的相對位置。
@@ -71,6 +71,8 @@ scroll / slide 模式退出、背景、或需要保存進度時：
    - `startCharOffset`
    - `visualOffsetPx`
 
+`charOffset` 保存該行的 `startCharOffset`。`visualOffsetPx` 也以這個 `startCharOffset` 對應的文字行 top 為基準。
+
 選行規則：
 
 ```text
@@ -85,7 +87,7 @@ scroll / slide 模式退出、背景、或需要保存進度時：
 
 ```text
 anchorLineY = readableContentTop + anchorLineOffsetPx
-visualOffsetPx = lineTopOnScreen - anchorLineY
+visualOffsetPx = anchorLineY - lineTopOnScreen
 ```
 
 例子：
@@ -95,7 +97,7 @@ readableContentTop = 72
 anchorLineOffsetPx = 24
 anchorLineY = 96
 lineTopOnScreen = 90
-visualOffsetPx = -6
+visualOffsetPx = 6
 ```
 
 保存：
@@ -104,7 +106,7 @@ visualOffsetPx = -6
 ReaderLocation(
   chapterIndex: 12,
   charOffset: 3456,
-  visualOffsetPx: -6,
+  visualOffsetPx: 6,
 )
 ```
 
@@ -114,7 +116,7 @@ ReaderLocation(
 -80 <= visualOffsetPx <= 120
 ```
 
-`visualOffsetPx` 可以是負數。負數代表這一行的頂部已經在 anchor line 上方，但 anchor line 還落在這一行附近，這是正常狀態。
+`visualOffsetPx` 可以是負數。正數代表 anchor line 在該行 top 下方，這是最常見狀態。負數代表 fallback 選到的行 top 在 anchor line 下方，也就是 anchor line 落在該行上方附近。
 
 如果計算出 NaN、無限大、或遠超過合理範圍的值，就回退到 `0`。這個值只做小範圍視覺微調，不應承擔完整 scroll 定位。
 
@@ -128,13 +130,13 @@ scroll 模式開書恢復：
 3. 找到 charOffset 對應文字行的章內 localY。
 4. 計算目標 scroll：
 
-lineTopOnScreen = anchorLineY + visualOffsetPx
+lineTopOnScreen = anchorLineY - visualOffsetPx
 
 targetScrollY =
   chapterBaseY
   + charLocalY
+  + visualOffsetPx
   - anchorLineY
-  - visualOffsetPx
 ```
 
 白話講：
@@ -160,7 +162,7 @@ ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 ```text
 1. 用 chapterIndex 載入章節。
 2. layout 出 pages。
-3. 計算 desiredLineTopOnScreen = anchorLineY + visualOffsetPx。
+3. 計算 desiredLineTopOnScreen = anchorLineY - visualOffsetPx。
 4. 找出在 desiredLineTopOnScreen 附近最接近 charOffset 的 page。
 5. 顯示該 page。
 ```
@@ -269,7 +271,7 @@ ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 需要做：
 
 - 從目前可見行找 anchor line。
-- 算 `visualOffsetPx = lineTopOnScreen - anchorLineY`。
+- 算 `visualOffsetPx = anchorLineY - lineTopOnScreen`。
 - 保存前 clamp。
 - layout 改變或章節高度從估算變成實際值時，保持 anchor 不跳。
 
@@ -343,7 +345,7 @@ content 改變時，舊的 visual offset 仍可保留為小範圍視覺修正，
  -> content 載入正文
  -> layout 排版
  -> charOffset 找到 line localY
- -> viewport 用 anchor line + visualOffsetPx scroll 到 targetScrollY
+ -> viewport 用 anchor line 與 visualOffsetPx scroll 到 targetScrollY
 ```
 
 ### slide 退出保存
@@ -364,7 +366,7 @@ content 改變時，舊的 visual offset 仍可保留為小範圍視覺修正，
 開書
  -> 讀取 chapterIndex / charOffset / visualOffsetPx
  -> layout
- -> desiredLineTopOnScreen = anchorLineY + visualOffsetPx
+ -> desiredLineTopOnScreen = anchorLineY - visualOffsetPx
  -> 找 desiredLineTopOnScreen 附近最接近 charOffset 的 page
  -> 顯示 page
 ```

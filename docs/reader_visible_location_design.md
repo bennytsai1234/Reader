@@ -14,7 +14,7 @@ ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 
 - `chapterIndex`：第幾章。
 - `charOffset`：章內字元位置，標題也算進同一套 offset。
-- `visualOffsetPx`：目前 anchor line 和 `charOffset` 對應文字行之間的垂直差值，可正可負。
+- `visualOffsetPx`：從 `charOffset` 對應文字行 top 往下到 anchor line 的垂直位移，可正可負。
 
 scroll / slide 都使用同一個 `ReaderLocation`。差別只在恢復方式：
 
@@ -111,7 +111,7 @@ capture 規則：
 
 ```text
 anchorLineY = readableContentTop + anchorLineOffsetPx
-visualOffsetPx = lineTopOnScreen - anchorLineY
+visualOffsetPx = anchorLineY - lineTopOnScreen
 ```
 
 選行規則：

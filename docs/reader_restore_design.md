@@ -20,6 +20,18 @@ restore 不負責產生新的 DB 進度。
 ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 ```
 
+`visualOffsetPx` 的語意是：
+
+```text
+從 charOffset 對應那一行的 top 往下多少 px，可以對到畫面 anchor line。
+```
+
+也就是：
+
+```text
+visualOffsetPx = anchorLineY - lineTopOnScreen
+```
+
 ## 定案原則
 
 ```text
@@ -209,14 +221,14 @@ ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 公式：
 
 ```text
-lineTopOnScreen = anchorLineY + visualOffsetPx
+lineTopOnScreen = anchorLineY - visualOffsetPx
 
 targetScrollY =
   chapterBaseY
   + paddingTop
   + line.top
+  + visualOffsetPx
   - anchorLineY
-  - visualOffsetPx
 ```
 
 如果找不到 line：
@@ -256,7 +268,7 @@ slide restore 也使用 `visualOffsetPx`，但不是拿來 scroll，而是拿來
 公式：
 
 ```text
-desiredLineTopOnScreen = anchorLineY + visualOffsetPx
+desiredLineTopOnScreen = anchorLineY - visualOffsetPx
 ```
 
 fallback：
@@ -366,4 +378,3 @@ app paused / exit / dispose -> saveProgress()
 6. 實作 `restoreFromLocation(location)`。
 7. 接上 final `captureVisibleLocation()`，只更新 `visibleLocation`。
 8. 驗證 restore 不會呼叫 `saveProgress()`，也不會寫 DB。
-
