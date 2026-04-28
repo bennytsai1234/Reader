@@ -21,6 +21,7 @@ import 'package:inkpage_reader/features/reader/viewport/slide_reader_viewport.da
 
 class _FakeBookDao extends Fake implements BookDao {
   ReaderLocation? lastLocation;
+  int writes = 0;
 
   @override
   Future<void> updateProgress(
@@ -31,6 +32,7 @@ class _FakeBookDao extends Fake implements BookDao {
     double visualOffsetPx = 0.0,
     String? readerAnchorJson,
   }) async {
+    writes += 1;
     lastLocation = ReaderLocation(
       chapterIndex: chapterIndex,
       charOffset: pos,
@@ -147,10 +149,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
     });
 
-    testWidgets('scroll viewport builds chapter-sized tiles', (tester) async {
+    testWidgets('scroll viewport uses fixed canvas with page cache tiles', (
+      tester,
+    ) async {
       final env = _RuntimeEnv();
       await env.runtime.openBook();
-      final style = _style(ReaderPageMode.scroll);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -161,26 +164,21 @@ void main() {
               runtime: env.runtime,
               backgroundColor: Colors.white,
               textColor: Colors.black,
-              style: style,
+              style: _style(ReaderPageMode.scroll),
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
+      expect(find.byType(Scrollable), findsNothing);
       expect(find.byType(ReaderTileLayer), findsWidgets);
       final renderedHeight =
           tester.getSize(find.byType(ReaderTileLayer).first).height;
       final layout = env.runtime.debugResolver.cachedLayout(0);
       expect(layout, isNotNull);
-      final contentHeight =
-          layout!.lines.isEmpty ? 0.0 : layout.lines.last.bottom;
-      expect(
-        renderedHeight,
-        greaterThanOrEqualTo(
-          contentHeight + style.paddingTop + style.paddingBottom,
-        ),
-      );
+      expect(layout!.pageCaches, isNotEmpty);
+      expect(renderedHeight, 360);
 
       env.runtime.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
@@ -255,10 +253,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final firstScrollable = tester.widget<Scrollable>(
-        find.byType(Scrollable),
-      );
-      final offsetBeforeExit = firstScrollable.controller!.offset;
       await firstEnv.runtime.flushProgress();
       final savedLocation = firstEnv.bookDao.lastLocation;
       expect(savedLocation, isNotNull);
@@ -270,6 +264,7 @@ void main() {
       final restoredEnv = _RuntimeEnv(
         initialChapterIndex: savedLocation!.chapterIndex,
         initialCharOffset: savedLocation.charOffset,
+        initialVisualOffsetPx: savedLocation.visualOffsetPx,
       );
       await restoredEnv.runtime.openBook();
 
@@ -289,10 +284,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final restoredScrollable = tester.widget<Scrollable>(
-        find.byType(Scrollable),
-      );
-      final restoredOffset = restoredScrollable.controller!.offset;
+      expect(find.byType(Scrollable), findsNothing);
       expect(
         restoredEnv.runtime.state.visibleLocation.chapterIndex,
         savedLocation.chapterIndex,
@@ -303,7 +295,12 @@ void main() {
             .abs(),
         lessThanOrEqualTo(80),
       );
-      expect((restoredOffset - offsetBeforeExit).abs(), lessThanOrEqualTo(120));
+      expect(
+        (restoredEnv.runtime.state.visibleLocation.visualOffsetPx -
+                savedLocation.visualOffsetPx)
+            .abs(),
+        lessThanOrEqualTo(40),
+      );
 
       restoredEnv.runtime.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
@@ -355,6 +352,54 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 500));
     });
+
+    testWidgets('scroll canvas saves progress only after scroll idle', (
+      tester,
+    ) async {
+      final env = _RuntimeEnv();
+      await env.runtime.openBook();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 320,
+            height: 360,
+            child: ScrollReaderViewport(
+              runtime: env.runtime,
+              backgroundColor: Colors.white,
+              textColor: Colors.black,
+              style: _style(ReaderPageMode.scroll),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final before = env.runtime.state.visibleLocation;
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(ScrollReaderViewport)),
+      );
+      await gesture.moveBy(const Offset(0, -220));
+      await tester.pump();
+
+      final duringDrag = env.runtime.state.visibleLocation;
+      expect(
+        duringDrag.chapterIndex > before.chapterIndex ||
+            duringDrag.charOffset > before.charOffset,
+        isTrue,
+      );
+      expect(env.bookDao.writes, 0);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(env.bookDao.writes, 1);
+      expect(env.bookDao.lastLocation, env.runtime.state.committedLocation);
+
+      env.runtime.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 500));
+    });
   });
 }
 
@@ -364,12 +409,14 @@ class _RuntimeEnv {
     List<BookChapter>? chapters,
     int initialChapterIndex = 0,
     int initialCharOffset = 0,
+    double initialVisualOffsetPx = 0.0,
   }) : book = Book(
          bookUrl: 'book',
          origin: 'local',
          name: '測試書',
          chapterIndex: initialChapterIndex,
          charOffset: initialCharOffset,
+         visualOffsetPx: initialVisualOffsetPx,
        ),
        bookDao = _FakeBookDao() {
     final resolvedChapters = chapters ?? _chaptersFor(book.bookUrl, 4);

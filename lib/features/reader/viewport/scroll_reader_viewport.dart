@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/reader/engine/chapter_layout.dart';
@@ -6,10 +7,6 @@ import 'package:inkpage_reader/features/reader/engine/line_layout.dart';
 import 'package:inkpage_reader/features/reader/engine/page_cache.dart';
 import 'package:inkpage_reader/features/reader/engine/read_style.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
-import 'package:inkpage_reader/features/reader/engine/text_page.dart';
-import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter.dart';
-import 'package:inkpage_reader/features/reader/runtime/models/reader_chapter_metrics.dart';
-import 'package:inkpage_reader/features/reader/runtime/reader_coordinate_mapper.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/tile_key.dart';
@@ -40,47 +37,69 @@ class ScrollReaderViewport extends StatefulWidget {
 }
 
 class _LoadedChapter {
-  const _LoadedChapter({
+  _LoadedChapter({required this.layout, required List<PageCache> pages})
+    : pages = List<PageCache>.unmodifiable(pages),
+      extent = _visualExtent(pages);
+
+  final ChapterLayout layout;
+  final List<PageCache> pages;
+  final double extent;
+
+  PageCache? pageAt(int pageIndex) {
+    if (pageIndex < 0 || pageIndex >= pages.length) return null;
+    return pages[pageIndex];
+  }
+
+  static double _visualExtent(List<PageCache> pages) {
+    final extent = pages.fold<double>(
+      0.0,
+      (total, page) => total + _safePageHeight(page),
+    );
+    return extent <= 0 ? 1.0 : extent;
+  }
+
+  static double _safePageHeight(PageCache page) {
+    return page.height.isFinite && page.height > 0 ? page.height : 1.0;
+  }
+}
+
+class _CanvasPagePlacement {
+  const _CanvasPagePlacement({
     required this.layout,
-    required this.chapter,
-    required this.tile,
-    required this.extent,
+    required this.page,
+    required this.virtualTop,
   });
 
   final ChapterLayout layout;
-  final ReaderChapter chapter;
-  final PageCache tile;
-  final double extent;
+  final PageCache page;
+  final double virtualTop;
+
+  double get virtualBottom => virtualTop + _LoadedChapter._safePageHeight(page);
 }
 
-class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
-  late final ScrollController _controller;
+class _ScrollReaderViewportState extends State<ScrollReaderViewport>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _scrollAnimation;
   final Map<int, _LoadedChapter> _loadedChapters = <int, _LoadedChapter>{};
   final Map<int, double> _chapterExtents = <int, double>{};
+  final Map<int, double> _chapterVirtualTops = <int, double>{};
   final Map<int, Future<void>> _inFlightLoads = <int, Future<void>>{};
+
   ReaderLocation? _lastReportedLocation;
   ReaderLocation? _lastSyncedLocation;
+  int? _currentChapterIndex;
   int _lastLayoutGeneration = 0;
-  bool _applyingProgrammaticScroll = false;
+  double _virtualScrollY = 0.0;
+  double _lastAnimationValue = 0.0;
   bool _initialJumpCompleted = false;
-
-  ReaderCoordinateMapper get _coordinateMapper {
-    return ReaderCoordinateMapper(
-      chapterAt: (chapterIndex) => _loadedChapters[chapterIndex]?.chapter,
-      pagesForChapter: (chapterIndex) {
-        final loaded = _loadedChapters[chapterIndex];
-        if (loaded != null) return loaded.chapter.pages;
-        return widget.runtime.debugResolver.cachedLayout(chapterIndex)?.pages ??
-            const <TextPage>[];
-      },
-      slidePages: () => const <TextPage>[],
-    );
-  }
+  bool _isDragging = false;
+  bool _capturingVisibleLocation = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = ScrollController()..addListener(_handleScroll);
+    _scrollAnimation = AnimationController.unbounded(vsync: this)
+      ..addListener(_handleScrollAnimationTick);
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
     _lastReportedLocation = widget.runtime.state.visibleLocation;
     widget.runtime.addListener(_onRuntimeChanged);
@@ -131,8 +150,8 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
     widget.runtime.removeListener(_onRuntimeChanged);
     widget.runtime.unregisterVisibleLocationCapture(this);
     _detachController(widget.controller);
-    _controller
-      ..removeListener(_handleScroll)
+    _scrollAnimation
+      ..removeListener(_handleScrollAnimationTick)
       ..dispose();
     super.dispose();
   }
@@ -146,10 +165,15 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
   }
 
   void _resetLoadedState() {
+    _scrollAnimation.stop();
     _loadedChapters.clear();
     _chapterExtents.clear();
+    _chapterVirtualTops.clear();
     _inFlightLoads.clear();
     _lastSyncedLocation = null;
+    _currentChapterIndex = null;
+    _virtualScrollY = 0.0;
+    _lastAnimationValue = 0.0;
     _initialJumpCompleted = false;
   }
 
@@ -161,13 +185,20 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
       _lastLayoutGeneration = state.layoutGeneration;
       _resetLoadedState();
     }
+
     if (state.phase == ReaderPhase.layingOut ||
         state.phase == ReaderPhase.switchingMode) {
       setState(() {});
       return;
     }
+
+    if (_capturingVisibleLocation) {
+      setState(() {});
+      return;
+    }
+
     final locationChanged = state.visibleLocation != _lastReportedLocation;
-    if ((layoutChanged || locationChanged) && !_applyingProgrammaticScroll) {
+    if (layoutChanged || locationChanged) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         unawaited(_primeAndSyncToRuntimeLocation(force: layoutChanged));
@@ -176,27 +207,9 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
     setState(() {});
   }
 
-  double _estimatedChapterExtent() {
-    final viewportHeight = widget.runtime.state.layoutSpec.viewportSize.height;
-    return viewportHeight <= 0 ? 1.0 : viewportHeight;
-  }
-
-  double _chapterExtent(int chapterIndex) {
-    return _loadedChapters[chapterIndex]?.extent ??
-        _chapterExtents[chapterIndex] ??
-        _estimatedChapterExtent();
-  }
-
-  double _chapterBaseOffset(int chapterIndex) {
-    var offset = 0.0;
-    for (var i = 0; i < chapterIndex; i++) {
-      offset += _chapterExtent(i);
-    }
-    return offset;
-  }
-
   double _viewportHeight() {
-    return widget.runtime.state.layoutSpec.viewportSize.height;
+    final height = widget.runtime.state.layoutSpec.viewportSize.height;
+    return height.isFinite && height > 0 ? height : 1.0;
   }
 
   double _anchorOffsetInViewport() {
@@ -204,135 +217,48 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
     return (viewportHeight * 0.2).clamp(24.0, 120.0).toDouble();
   }
 
-  double _globalOffsetForLocation(ReaderLocation location) {
-    final baseOffset = _chapterBaseOffset(location.chapterIndex);
-    final localOffset = _coordinateMapper.localOffsetForLocation(location);
-    return baseOffset +
-        widget.style.paddingTop +
-        localOffset +
-        location.visualOffsetPx;
+  double _shiftThreshold() {
+    return math.min(120.0, _viewportHeight() * 0.2);
   }
 
-  double _scrollOffsetForLocation(ReaderLocation location) {
-    return (_globalOffsetForLocation(location) - _anchorOffsetInViewport())
-        .clamp(0.0, double.infinity)
-        .toDouble();
+  int _safeChapterIndex(int chapterIndex) {
+    final chapterCount = widget.runtime.chapterCount;
+    if (chapterCount <= 0) return 0;
+    return chapterIndex.clamp(0, chapterCount - 1).toInt();
   }
 
-  TileKey _chapterTileKey(PageCache tile) {
-    return TileKey.fromPageCache(
-      tile,
-      tileIndex: -1,
-      layoutRevision: widget.runtime.state.layoutGeneration,
+  List<int> _windowChapterIndexes() {
+    final chapterCount = widget.runtime.chapterCount;
+    if (chapterCount <= 0) return const <int>[];
+    final center = _safeChapterIndex(
+      _currentChapterIndex ?? widget.runtime.state.visibleLocation.chapterIndex,
     );
-  }
-
-  PageCache _chapterTile(ChapterLayout layout) {
-    final lines = layout.lines;
-    final contentHeight =
-        lines.isEmpty
-            ? widget.runtime.state.layoutSpec.contentHeight
-            : lines.last.bottom;
-    final viewportHeight =
-        (widget.style.paddingTop + contentHeight + widget.style.paddingBottom)
-            .clamp(1.0, double.infinity)
-            .toDouble();
-    return TextPage(
-      pageIndex: 0,
-      chapterIndex: layout.chapterIndex,
-      chapterSize: widget.runtime.chapterCount,
-      pageSize: 1,
-      title: layout.pages.isEmpty ? '' : layout.pages.first.title,
-      lines: lines,
-      startCharOffset:
-          layout.pages.isEmpty ? 0 : layout.pages.first.startCharOffset,
-      endCharOffset: layout.pages.isEmpty ? 0 : layout.pages.last.endCharOffset,
-      width: widget.runtime.state.layoutSpec.contentWidth,
-      localStartY: 0.0,
-      localEndY: contentHeight,
-      contentHeight: contentHeight,
-      viewportHeight: viewportHeight,
-      hasExplicitLocalRange: true,
-      isChapterStart: true,
-      isChapterEnd: true,
-    ).toPageCache();
-  }
-
-  ReaderChapter _runtimeChapterForLayout(ChapterLayout layout) {
-    final chapter = widget.runtime.chapterAt(layout.chapterIndex);
-    final baseMetrics = ReaderChapterMetrics.fromPages(
-      layout.pages,
-      isEstimated: false,
-    );
-    final verticalPadding =
-        widget.style.paddingTop + widget.style.paddingBottom;
-    return ReaderChapter(
-      chapter:
-          chapter ??
-          widget.runtime.chapters[layout.chapterIndex.clamp(
-            0,
-            widget.runtime.chapters.length - 1,
-          )],
-      index: layout.chapterIndex,
-      title: layout.pages.isEmpty ? '' : layout.pages.first.title,
-      pages: layout.pages,
-      metrics: baseMetrics.copyWith(separatorExtent: verticalPadding),
-    );
+    return <int>[
+      if (center > 0) center - 1,
+      center,
+      if (center + 1 < chapterCount) center + 1,
+    ];
   }
 
   Future<void> _ensureChapterLoaded(int chapterIndex) {
-    final safeChapterIndex = chapterIndex.clamp(
-      0,
-      widget.runtime.chapterCount - 1,
-    );
+    if (widget.runtime.chapterCount <= 0) return Future<void>.value();
+    final safeChapterIndex = _safeChapterIndex(chapterIndex);
     if (_loadedChapters.containsKey(safeChapterIndex)) {
       return Future<void>.value();
     }
     final existing = _inFlightLoads[safeChapterIndex];
     if (existing != null) return existing;
 
-    final previousExtent = _chapterExtent(safeChapterIndex);
     final task = () async {
       try {
-        final anchorLocation =
-            _lastReportedLocation ?? widget.runtime.state.visibleLocation;
-        final anchorOffsetBefore =
-            _controller.hasClients
-                ? _scrollOffsetForLocation(anchorLocation)
-                : null;
         final layout = await widget.runtime.debugResolver.ensureLayout(
           safeChapterIndex,
         );
         if (!mounted) return;
-        final chapter = _runtimeChapterForLayout(layout);
-        final tile = _chapterTile(layout);
-        final loaded = _LoadedChapter(
-          layout: layout,
-          chapter: chapter,
-          tile: tile,
-          extent: chapter.metrics.itemExtent,
-        );
+        final pages = layout.pageCaches;
+        final loaded = _LoadedChapter(layout: layout, pages: pages);
         _loadedChapters[safeChapterIndex] = loaded;
         _chapterExtents[safeChapterIndex] = loaded.extent;
-        final anchorOffsetAfter =
-            _controller.hasClients
-                ? _scrollOffsetForLocation(anchorLocation)
-                : null;
-        final delta =
-            anchorOffsetAfter == null || anchorOffsetBefore == null
-                ? loaded.extent - previousExtent
-                : anchorOffsetAfter - anchorOffsetBefore;
-        if (_controller.hasClients && delta.abs() > 0.5) {
-          _applyingProgrammaticScroll = true;
-          _controller.jumpTo(
-            (_controller.offset + delta).clamp(
-              0.0,
-              _controller.position.maxScrollExtent,
-            ),
-          );
-          _applyingProgrammaticScroll = false;
-        }
-        if (mounted) setState(() {});
       } finally {
         _inFlightLoads.remove(safeChapterIndex);
       }
@@ -341,125 +267,374 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
     return task;
   }
 
-  Future<void> _primeAroundChapter(int chapterIndex) async {
+  Future<bool> _tryEnsureChapterLoaded(int chapterIndex) async {
+    try {
+      await _ensureChapterLoaded(chapterIndex);
+      return _loadedChapters.containsKey(_safeChapterIndex(chapterIndex));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _ensureWindowAround(int chapterIndex) async {
     if (widget.runtime.chapterCount <= 0) return;
-    final futures = <Future<void>>[];
-    for (var i = chapterIndex - 2; i <= chapterIndex + 2; i++) {
-      if (i < 0 || i >= widget.runtime.chapterCount) continue;
-      futures.add(_ensureChapterLoaded(i));
-    }
-    await Future.wait(futures);
-  }
+    final center = _safeChapterIndex(chapterIndex);
+    final centerReady = await _tryEnsureChapterLoaded(center);
+    if (!mounted) return;
+    if (!centerReady) return;
 
-  double _targetOffsetForLocation(ReaderLocation location) {
-    return _scrollOffsetForLocation(location);
-  }
+    _currentChapterIndex = center;
+    _chapterVirtualTops.putIfAbsent(center, () => 0.0);
+    final centerTop = _chapterVirtualTops[center]!;
+    final centerExtent =
+        _chapterExtents[center] ?? _loadedChapters[center]?.extent ?? 1.0;
 
-  Future<void> _primeAndSyncToRuntimeLocation({bool force = false}) async {
-    final location = widget.runtime.state.visibleLocation;
-    await _primeAroundChapter(location.chapterIndex);
-    if (!mounted || !_controller.hasClients) return;
-    if (!force && _initialJumpCompleted && _lastSyncedLocation == location) {
-      return;
+    final previous = center - 1;
+    if (previous >= 0) {
+      final previousReady = await _tryEnsureChapterLoaded(previous);
+      if (!mounted) return;
+      if (previousReady) {
+        final previousExtent =
+            _chapterExtents[previous] ??
+            _loadedChapters[previous]?.extent ??
+            1.0;
+        _chapterVirtualTops.putIfAbsent(
+          previous,
+          () => centerTop - previousExtent,
+        );
+      }
     }
-    final target = _targetOffsetForLocation(location);
-    _applyingProgrammaticScroll = true;
-    _controller.jumpTo(target.clamp(0.0, _controller.position.maxScrollExtent));
-    _applyingProgrammaticScroll = false;
-    _initialJumpCompleted = true;
-    _lastSyncedLocation = location;
-    _lastReportedLocation = location;
+
+    final next = center + 1;
+    if (next < widget.runtime.chapterCount) {
+      final nextReady = await _tryEnsureChapterLoaded(next);
+      if (!mounted) return;
+      if (nextReady) {
+        _chapterVirtualTops.putIfAbsent(next, () => centerTop + centerExtent);
+      }
+    }
+
     if (mounted) setState(() {});
   }
 
-  void _handleScroll() {
-    if (!_controller.hasClients || widget.runtime.chapterCount <= 0) return;
-    final anchor = _controller.offset + _anchorOffsetInViewport();
-    var chapterTop = 0.0;
-    for (var i = 0; i < widget.runtime.chapterCount; i++) {
-      final extent = _chapterExtent(i);
-      final chapterBottom = chapterTop + extent;
-      if (anchor < chapterBottom || i == widget.runtime.chapterCount - 1) {
-        unawaited(_primeAroundChapter(i));
-        final location = widget.runtime.captureVisibleLocation();
-        if (location != null) _lastReportedLocation = location;
-        break;
-      }
-      chapterTop = chapterBottom;
+  Future<void> _primeAndSyncToRuntimeLocation({bool force = false}) async {
+    final location = widget.runtime.state.visibleLocation.normalized(
+      chapterCount: widget.runtime.chapterCount,
+    );
+    await _ensureWindowAround(location.chapterIndex);
+    if (!mounted) return;
+    if (!force && _initialJumpCompleted && _lastSyncedLocation == location) {
+      return;
     }
+
+    final target = _virtualScrollYForLocation(location);
+    if (target != null) {
+      _virtualScrollY = _clampVirtualScrollY(target);
+    }
+    _initialJumpCompleted = true;
+    _lastSyncedLocation = location;
+    final captured = widget.runtime.captureVisibleLocation();
+    _lastReportedLocation = captured ?? location;
+    if (mounted) setState(() {});
+  }
+
+  double? _virtualScrollYForLocation(ReaderLocation location) {
+    final chapterIndex = _safeChapterIndex(location.chapterIndex);
+    final loaded = _loadedChapters[chapterIndex];
+    final chapterTop = _chapterVirtualTops[chapterIndex];
+    if (loaded == null || chapterTop == null) return null;
+
+    final layout = LineLayout.fromPages(
+      loaded.layout.pages,
+      chapterIndex: chapterIndex,
+    );
+    final item = layout.itemAtCharOffset(location.charOffset);
+    if (item == null) return chapterTop - _anchorOffsetInViewport();
+    final lineVirtualTop = _lineVirtualTop(
+      loaded: loaded,
+      chapterTop: chapterTop,
+      item: item,
+    );
+    if (lineVirtualTop == null) return null;
+    return lineVirtualTop + location.visualOffsetPx - _anchorOffsetInViewport();
+  }
+
+  double? _lineVirtualTop({
+    required _LoadedChapter loaded,
+    required double chapterTop,
+    required LineItem item,
+  }) {
+    final page = loaded.pageAt(item.pageIndex);
+    if (page == null) return null;
+    final pageVirtualTop = _pageVirtualTop(
+      chapterTop: chapterTop,
+      pages: loaded.pages,
+      pageIndex: item.pageIndex,
+    );
+    if (pageVirtualTop == null) return null;
+    return pageVirtualTop +
+        widget.style.paddingTop +
+        item.localTop -
+        page.localStartY;
+  }
+
+  double? _pageVirtualTop({
+    required double chapterTop,
+    required List<PageCache> pages,
+    required int pageIndex,
+  }) {
+    if (pageIndex < 0 || pageIndex >= pages.length) return null;
+    var top = chapterTop;
+    for (var index = 0; index < pageIndex; index++) {
+      top += _LoadedChapter._safePageHeight(pages[index]);
+    }
+    return top;
+  }
+
+  List<_CanvasPagePlacement> _pagePlacements() {
+    final placements = <_CanvasPagePlacement>[];
+    for (final chapterIndex in _windowChapterIndexes()) {
+      final loaded = _loadedChapters[chapterIndex];
+      final chapterTop = _chapterVirtualTops[chapterIndex];
+      if (loaded == null || chapterTop == null) continue;
+      var pageTop = chapterTop;
+      for (final page in loaded.pages) {
+        placements.add(
+          _CanvasPagePlacement(
+            layout: loaded.layout,
+            page: page,
+            virtualTop: pageTop,
+          ),
+        );
+        pageTop += _LoadedChapter._safePageHeight(page);
+      }
+    }
+    placements.sort((a, b) => a.virtualTop.compareTo(b.virtualTop));
+    return placements;
+  }
+
+  double _clampVirtualScrollY(double target) {
+    final placements = _pagePlacements();
+    if (placements.isEmpty) return target;
+    final minTop = placements
+        .map((placement) => placement.virtualTop)
+        .reduce(math.min);
+    final maxBottom = placements
+        .map((placement) => placement.virtualBottom)
+        .reduce(math.max);
+    final minScrollY = minTop;
+    final maxScrollY = math.max(minScrollY, maxBottom - _viewportHeight());
+    return target.clamp(minScrollY, maxScrollY).toDouble();
+  }
+
+  _CanvasPagePlacement? _placementAtVirtualY(double virtualY) {
+    _CanvasPagePlacement? nearest;
+    var nearestDistance = double.infinity;
+    for (final placement in _pagePlacements()) {
+      if (virtualY >= placement.virtualTop &&
+          virtualY < placement.virtualBottom) {
+        return placement;
+      }
+      final distance =
+          virtualY < placement.virtualTop
+              ? placement.virtualTop - virtualY
+              : virtualY - placement.virtualBottom;
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = placement;
+      }
+    }
+    return nearest;
   }
 
   ReaderLocation? _captureVisibleLocation() {
-    if (!_controller.hasClients || widget.runtime.chapterCount <= 0) {
+    if (!_initialJumpCompleted || widget.runtime.chapterCount <= 0) {
       return null;
     }
-    final anchor = _controller.offset + _anchorOffsetInViewport();
-    var chapterTop = 0.0;
-    for (var i = 0; i < widget.runtime.chapterCount; i++) {
-      final extent = _chapterExtent(i);
-      final chapterBottom = chapterTop + extent;
-      if (anchor < chapterBottom || i == widget.runtime.chapterCount - 1) {
-        final loaded = _loadedChapters[i];
-        if (loaded == null) return null;
-        final localOffset =
-            (anchor - chapterTop - widget.style.paddingTop)
-                .clamp(0.0, loaded.chapter.metrics.contentHeight)
-                .toDouble();
-        return _locationFromLineLayout(
-          chapterIndex: i,
-          layout: loaded.chapter.lineLayout,
-          localOffset: localOffset,
-        );
-      }
-      chapterTop = chapterBottom;
-    }
-    return null;
+    final anchorLineY = _anchorOffsetInViewport();
+    final anchorVirtualY = _virtualScrollY + anchorLineY;
+    final placement = _placementAtVirtualY(anchorVirtualY);
+    if (placement == null) return null;
+
+    final pageContentY =
+        (anchorVirtualY - placement.virtualTop - widget.style.paddingTop)
+            .clamp(0.0, placement.page.contentHeight)
+            .toDouble();
+    final chapterLocalY = placement.page.localStartY + pageContentY;
+    final layout = LineLayout.fromPages(
+      placement.layout.pages,
+      chapterIndex: placement.page.chapterIndex,
+    );
+    final item = _lineItemAtOrNearLocalY(layout, chapterLocalY);
+    if (item == null) return null;
+
+    final loaded = _loadedChapters[item.chapterIndex];
+    final chapterTop = _chapterVirtualTops[item.chapterIndex];
+    if (loaded == null || chapterTop == null) return null;
+    final lineVirtualTop = _lineVirtualTop(
+      loaded: loaded,
+      chapterTop: chapterTop,
+      item: item,
+    );
+    if (lineVirtualTop == null) return null;
+    final lineTopOnScreen = lineVirtualTop - _virtualScrollY;
+    return ReaderLocation(
+      chapterIndex: item.chapterIndex,
+      charOffset: item.chapterPosition,
+      visualOffsetPx: anchorLineY - lineTopOnScreen,
+    );
   }
 
-  ReaderLocation? _locationFromLineLayout({
-    required int chapterIndex,
-    required LineLayout layout,
-    required double localOffset,
-  }) {
+  LineItem? _lineItemAtOrNearLocalY(LineLayout layout, double localY) {
     LineItem? nearest;
     var nearestDistance = double.infinity;
     for (final item in layout.textItems) {
-      if (localOffset >= item.localTop && localOffset <= item.localBottom) {
+      if (localY >= item.localTop && localY <= item.localBottom) {
         nearest = item;
         break;
       }
       final distance =
-          localOffset < item.localTop
-              ? item.localTop - localOffset
-              : localOffset - item.localBottom;
+          localY < item.localTop
+              ? item.localTop - localY
+              : localY - item.localBottom;
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearest = item;
       }
     }
-    if (nearest == null) return null;
-    return ReaderLocation(
-      chapterIndex: chapterIndex,
-      charOffset: nearest.chapterPosition,
-      visualOffsetPx: localOffset - nearest.localTop,
+    return nearest;
+  }
+
+  void _captureAndReportVisibleLocation() {
+    _capturingVisibleLocation = true;
+    final ReaderLocation? location;
+    try {
+      location = widget.runtime.captureVisibleLocation();
+    } finally {
+      _capturingVisibleLocation = false;
+    }
+    if (location != null) _lastReportedLocation = location;
+  }
+
+  bool _applyVirtualScrollDelta(double delta) {
+    if (delta == 0 || _pagePlacements().isEmpty) return false;
+    final nextScrollY = _clampVirtualScrollY(_virtualScrollY + delta);
+    if ((nextScrollY - _virtualScrollY).abs() < 0.01) return false;
+    _virtualScrollY = nextScrollY;
+    _captureAndReportVisibleLocation();
+    unawaited(_shiftWindowForAnchor());
+    if (mounted) setState(() {});
+    return true;
+  }
+
+  Future<void> _shiftWindowForAnchor() async {
+    final current = _currentChapterIndex;
+    if (current == null) return;
+    final anchorVirtualY = _virtualScrollY + _anchorOffsetInViewport();
+    final placement = _placementAtVirtualY(anchorVirtualY);
+    if (placement == null) return;
+    final targetChapter = placement.page.chapterIndex;
+    if (targetChapter == current) return;
+    if (!_shouldShiftWindow(current, targetChapter, anchorVirtualY)) return;
+    await _ensureWindowAround(targetChapter);
+  }
+
+  bool _shouldShiftWindow(
+    int currentChapter,
+    int targetChapter,
+    double anchorVirtualY,
+  ) {
+    final targetTop = _chapterVirtualTops[targetChapter];
+    final currentTop = _chapterVirtualTops[currentChapter];
+    if (targetTop == null || currentTop == null) return false;
+    final threshold = _shiftThreshold();
+    if (targetChapter > currentChapter) {
+      return anchorVirtualY - targetTop >= threshold;
+    }
+    return currentTop - anchorVirtualY >= threshold;
+  }
+
+  void _handleScrollAnimationTick() {
+    final current = _scrollAnimation.value;
+    final delta = current - _lastAnimationValue;
+    _lastAnimationValue = current;
+    if (delta == 0) return;
+    final moved = _applyVirtualScrollDelta(delta);
+    if (!moved) {
+      _scrollAnimation.stop();
+    }
+  }
+
+  void _handleDragStart(DragStartDetails details) {
+    _isDragging = true;
+    _scrollAnimation.stop();
+  }
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    _applyVirtualScrollDelta(-details.delta.dy);
+  }
+
+  void _handleDragEnd(DragEndDetails details) {
+    _isDragging = false;
+    final velocity = -(details.primaryVelocity ?? 0.0);
+    if (velocity.abs() < 50) {
+      unawaited(_handleScrollSettled());
+      return;
+    }
+    _startFling(velocity);
+  }
+
+  void _handleDragCancel() {
+    _isDragging = false;
+    unawaited(_handleScrollSettled());
+  }
+
+  void _startFling(double velocity) {
+    _scrollAnimation.stop();
+    _scrollAnimation.value = _virtualScrollY;
+    _lastAnimationValue = _virtualScrollY;
+    final simulation = ClampingScrollSimulation(
+      position: _virtualScrollY,
+      velocity: velocity,
+    );
+    unawaited(
+      _scrollAnimation.animateWith(simulation).whenComplete(() {
+        if (mounted) unawaited(_handleScrollSettled());
+      }),
     );
   }
 
   void _animateScrollBy(double delta) {
-    if (!_controller.hasClients || delta == 0) return;
-    final target = (_controller.offset + delta).clamp(
-      0.0,
-      _controller.position.maxScrollExtent,
-    );
-    _applyingProgrammaticScroll = true;
+    if (delta == 0 || _pagePlacements().isEmpty) return;
+    final target = _clampVirtualScrollY(_virtualScrollY + delta);
+    if ((target - _virtualScrollY).abs() < 0.01) return;
+    _scrollAnimation.stop();
+    _scrollAnimation.value = _virtualScrollY;
+    _lastAnimationValue = _virtualScrollY;
     unawaited(
-      _controller
+      _scrollAnimation
           .animateTo(
             target,
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
           )
-          .whenComplete(() => _applyingProgrammaticScroll = false),
+          .whenComplete(() {
+            if (mounted) unawaited(_handleScrollSettled());
+          }),
+    );
+  }
+
+  Future<void> _handleScrollSettled() async {
+    if (!mounted || _isDragging) return;
+    _captureAndReportVisibleLocation();
+    final saved = await widget.runtime.saveProgress();
+    if (saved != null) _lastReportedLocation = saved;
+  }
+
+  TileKey _tileKey(PageCache tile) {
+    return TileKey.fromPageCache(
+      tile,
+      layoutRevision: widget.runtime.state.layoutGeneration,
     );
   }
 
@@ -485,57 +660,59 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
     );
   }
 
-  Widget _buildChapterPlaceholder(int chapterIndex) {
-    return SizedBox(
-      height: _chapterExtent(chapterIndex),
-      child: Center(
-        child: Text(
-          '載入中...',
-          style: TextStyle(
-            color: widget.textColor.withValues(alpha: 0.6),
-            fontSize: widget.style.fontSize,
+  Widget _buildCanvas() {
+    final viewportHeight = _viewportHeight();
+    final children = <Widget>[];
+    for (final placement in _pagePlacements()) {
+      final screenY = placement.virtualTop - _virtualScrollY;
+      final pageHeight = _LoadedChapter._safePageHeight(placement.page);
+      if (screenY >= viewportHeight || screenY + pageHeight <= 0) continue;
+      children.add(
+        Positioned(
+          left: 0,
+          right: 0,
+          top: screenY,
+          height: pageHeight,
+          child: ReaderTileLayer(
+            tile: placement.page,
+            tileKey: _tileKey(placement.page),
+            style: widget.style,
+            backgroundColor: widget.backgroundColor,
+            textColor: widget.textColor,
+            expand: true,
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildChapterItem(int chapterIndex) {
-    final loaded = _loadedChapters[chapterIndex];
-    if (loaded == null) {
-      unawaited(_ensureChapterLoaded(chapterIndex));
-      return _buildChapterPlaceholder(chapterIndex);
+      );
     }
-    return ReaderTileLayer(
-      tile: loaded.tile,
-      tileKey: _chapterTileKey(loaded.tile),
-      style: widget.style,
-      backgroundColor: widget.backgroundColor,
-      textColor: widget.textColor,
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: widget.onTapUp,
+      onVerticalDragStart: _handleDragStart,
+      onVerticalDragUpdate: _handleDragUpdate,
+      onVerticalDragEnd: _handleDragEnd,
+      onVerticalDragCancel: _handleDragCancel,
+      child: ColoredBox(
+        color: widget.backgroundColor,
+        child: ClipRect(child: Stack(fit: StackFit.expand, children: children)),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final state = widget.runtime.state;
+    final currentChapter = _safeChapterIndex(
+      _currentChapterIndex ?? state.visibleLocation.chapterIndex,
+    );
+    final currentLoaded = _loadedChapters.containsKey(currentChapter);
     if (state.phase != ReaderPhase.ready && !_initialJumpCompleted) {
       return _buildLoadingState(state);
     }
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapUp: widget.onTapUp,
-      child: ColoredBox(
-        color: widget.backgroundColor,
-        child: ListView.builder(
-          controller: _controller,
-          physics: const ClampingScrollPhysics(),
-          itemCount: widget.runtime.chapterCount,
-          itemBuilder: (context, index) {
-            return _buildChapterItem(index);
-          },
-        ),
-      ),
-    );
+    if (!currentLoaded) {
+      unawaited(_ensureWindowAround(currentChapter));
+      return _buildLoadingState(state);
+    }
+    return _buildCanvas();
   }
 }
