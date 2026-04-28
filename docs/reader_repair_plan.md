@@ -18,6 +18,8 @@ PageCache 渲染模型見 `docs/reader_page_cache_render_design.md`。
 
 scroll canvas window、signed virtualScrollY 與滑動保存時機見 `docs/reader_scroll_canvas_window_design.md`。
 
+Layout 與座標換算見 `docs/reader_layout_coordinate_design.md`。
+
 ## 核心決策
 
 閱讀位置改成三個值：
