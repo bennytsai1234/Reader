@@ -8,6 +8,8 @@
 
 舊版 `reader-0.2.28` 只作為行為參考，不作為回退目標。
 
+可視位置與保存接口的細節見 `docs/reader_visible_location_design.md`。
+
 ## 核心決策
 
 閱讀位置改成三個值：
@@ -230,27 +232,27 @@ visualOffsetPx
 
 修復重點：
 
-- debounce 只保存最後一次位置。
-- active flush 期間又收到新位置時，flush 結束後要繼續寫最後位置。
-- exit / dispose / app paused 時必須走同一套 capture and flush。
+- 短時間或同時多次 `saveProgress()` 時，只保存最後有效位置。
+- active write 期間又收到新位置時，寫入結束後要繼續寫最後位置。
+- exit / dispose / app paused 時必須走同一套 saveProgress()。
 - loading / error placeholder 不可保存成進度。
 
-正常退出和意外退出不要維護兩套保存流程。只保留一個統一入口，例如：
+正常退出和意外退出不要維護兩套保存流程。只保留同一個保存入口：
 
 ```text
-captureCurrentLocationAndFlush(reason)
+saveProgress()
 ```
 
 這個入口負責：
 
 ```text
-1. 由 viewport 依目前模式 capture ReaderLocation。
-2. 更新 runtime.visibleLocation / committedLocation。
-3. 取消或接管 debounce 中的 pending progress。
-4. 立刻 flush 到 DB。
+1. 內部呼叫 captureVisibleLocation()。
+2. capture 成功後更新 runtime.visibleLocation。
+3. 將同一個 ReaderLocation 推進為 committedLocation。
+4. 寫入 DB / 本地儲存。
 ```
 
-正常退出只是比較有機會完整跑完這個入口；意外退出才是主要風險，所以 app paused、inactive、detached、dispose 都應盡量呼叫同一個入口做 best effort flush。
+`saveProgress()` 不需要 `reason` 參數。呼叫方要在動作完成、畫面穩定後呼叫它；正常退出和意外退出也都呼叫同一個入口。
 
 ### 4. Scroll Viewport
 
@@ -326,8 +328,8 @@ content 改變時，舊的 visual offset 仍可保留為小範圍視覺修正，
  -> 算 charOffset
  -> 算 visualOffsetPx，允許小幅正負值
  -> runtime 更新 visibleLocation
- -> progress debounce 保存
- -> 正常退出 / 意外退出都呼叫同一個 capture and flush
+ -> scroll idle / inertia stopped 時呼叫 saveProgress()
+ -> 正常退出 / 意外退出也呼叫 saveProgress()
 ```
 
 ### scroll 開書恢復
@@ -350,7 +352,7 @@ content 改變時，舊的 visual offset 仍可保留為小範圍視覺修正，
  -> 算 chapterIndex
  -> 算 charOffset
  -> 算 visualOffsetPx，允許小幅正負值
- -> 呼叫同一個 capture and flush
+ -> 呼叫 saveProgress()
  -> 保存 ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 ```
 
@@ -389,9 +391,9 @@ content 改變時，舊的 visual offset 仍可保留為小範圍視覺修正，
 
 ### progress
 
-- debounce 期間多次更新，只保存最後一次。
+- 短時間或同時多次 `saveProgress()`，只保存最後有效位置。
 - DB 寫入中收到新位置，最後位置仍會被寫出。
-- dispose / exit / lifecycle flush 都走同一個 capture and flush，並能 drain pending progress。
+- dispose / exit / lifecycle flush 都走同一個 saveProgress()，並能保存最後位置。
 
 ## 不做的事
 
