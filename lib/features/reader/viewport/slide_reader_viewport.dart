@@ -329,6 +329,10 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        final height =
+            constraints.maxHeight.isFinite && constraints.maxHeight > 0
+                ? constraints.maxHeight
+                : widget.runtime.state.layoutSpec.viewportSize.height;
         final prevPlacement =
             window.prev == null
                 ? null
@@ -379,7 +383,7 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
                     ),
                     0,
                   ),
-                  child: SizedBox(width: width, child: prev),
+                  child: SizedBox(width: width, height: height, child: prev),
                 ),
                 Transform.translate(
                   offset: Offset(
@@ -390,7 +394,7 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
                     ),
                     0,
                   ),
-                  child: SizedBox(width: width, child: current),
+                  child: SizedBox(width: width, height: height, child: current),
                 ),
                 Transform.translate(
                   offset: Offset(
@@ -401,7 +405,7 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
                     ),
                     0,
                   ),
-                  child: SizedBox(width: width, child: next),
+                  child: SizedBox(width: width, height: height, child: next),
                 ),
               ],
             ),

@@ -15,6 +15,10 @@ enum ReaderPageMode {
 }
 
 class ReadStyle {
+  static const double minReadableLineHeight = 1.2;
+  static const double maxReadableLineHeight = 3.0;
+  static const double defaultLineHeight = 1.5;
+
   const ReadStyle({
     required this.fontSize,
     required this.lineHeight,
@@ -46,6 +50,13 @@ class ReadStyle {
   final bool textFullJustify;
   final bool selectText;
   final ReaderPageMode pageMode;
+
+  double get effectiveLineHeight => normalizeLineHeight(lineHeight);
+
+  static double normalizeLineHeight(double value) {
+    if (!value.isFinite || value.isNaN) return defaultLineHeight;
+    return value.clamp(minReadableLineHeight, maxReadableLineHeight).toDouble();
+  }
 
   ReadStyle copyWith({
     double? fontSize,

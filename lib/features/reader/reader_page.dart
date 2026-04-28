@@ -284,7 +284,10 @@ class _ReaderPageState extends State<ReaderPage>
         final mediaPadding = MediaQuery.paddingOf(context);
         _lastViewportSize = size;
 
-        final style = _settings.readStyleFor(mediaPadding);
+        final style = _settings.readStyleFor(
+          mediaPadding,
+          bottomInfoReservedExternally: _settings.showReadTitleAddition,
+        );
         final runtime = _ensureRuntime(size, style);
         _syncRuntimeConfiguration(runtime, size, style);
 
@@ -664,9 +667,7 @@ class _ReaderPageState extends State<ReaderPage>
     if (runtime == null) return '0.0%';
     if (runtime.state.mode == ReaderMode.scroll) {
       final location = runtime.state.visibleLocation;
-      return _displayCoordinator.formatReadProgress(
-        chapterIndex: location.chapterIndex,
-        totalChapters: runtime.chapterCount,
+      return _displayCoordinator.formatChapterProgress(
         charOffset: location.charOffset,
         chapterEndCharOffset: _chapterEndCharOffset(runtime, location),
       );

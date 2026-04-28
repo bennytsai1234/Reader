@@ -164,7 +164,7 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
             SettingComponents.buildSliderRow(
               label: '行高',
               value: _lineHeight,
-              min: 1.0,
+              min: ReaderSettingsController.minReadableLineHeight,
               max: 3.0,
               onChanged: (value) {
                 setState(() => _lineHeight = value);

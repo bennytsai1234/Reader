@@ -126,6 +126,16 @@ class ReaderDisplayCoordinator {
     return formatted;
   }
 
+  String formatChapterProgress({
+    required int charOffset,
+    required int chapterEndCharOffset,
+  }) {
+    if (chapterEndCharOffset <= 0) return '0.0%';
+    final progress =
+        (charOffset / chapterEndCharOffset).clamp(0.0, 1.0).toDouble();
+    return '${(progress * 100).toStringAsFixed(1)}%';
+  }
+
   String formatPageLabel(int pageIndex, int totalPages) {
     if (totalPages <= 0) return '0/0';
     final page = (pageIndex + 1).clamp(1, totalPages);

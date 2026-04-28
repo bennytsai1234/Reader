@@ -98,7 +98,7 @@ class LayoutEngine {
   TextStyle _contentTextStyle(LayoutSpec spec) {
     return TextStyle(
       fontSize: spec.style.fontSize,
-      height: spec.style.lineHeight,
+      height: spec.style.effectiveLineHeight,
       letterSpacing: spec.style.letterSpacing,
       fontFamily: spec.style.fontFamily,
       fontWeight: spec.style.bold ? FontWeight.bold : FontWeight.normal,
@@ -108,7 +108,7 @@ class LayoutEngine {
   TextStyle _titleTextStyle(LayoutSpec spec) {
     return TextStyle(
       fontSize: spec.style.fontSize + 4,
-      height: spec.style.lineHeight,
+      height: spec.style.effectiveLineHeight,
       letterSpacing: spec.style.letterSpacing,
       fontFamily: spec.style.fontFamily,
       fontWeight: FontWeight.bold,
@@ -116,7 +116,7 @@ class LayoutEngine {
   }
 
   double _paragraphSpacingPixels(LayoutSpec spec) {
-    return (spec.style.fontSize * spec.style.lineHeight) *
+    return (spec.style.fontSize * spec.style.effectiveLineHeight) *
         spec.style.paragraphSpacing;
   }
 
@@ -159,13 +159,12 @@ class LayoutEngine {
         painter: painter,
         remaining: remaining,
       );
-      if (metric.width > maxWidth + 0.5) {
-        charsConsumed = _maxFittingPrefix(
-          text: remaining,
-          style: style,
-          maxWidth: maxWidth,
-        );
-      }
+      charsConsumed = _fitLineChars(
+        text: remaining,
+        style: style,
+        maxWidth: maxWidth,
+        preferredChars: charsConsumed,
+      );
       if (charsConsumed <= 0) break;
       final localEnd =
           (localStart + charsConsumed)
@@ -239,6 +238,21 @@ class LayoutEngine {
       end = remaining.isEmpty ? 0 : 1;
     }
     return end.clamp(0, remaining.length).toInt();
+  }
+
+  int _fitLineChars({
+    required String text,
+    required TextStyle style,
+    required double maxWidth,
+    required int preferredChars,
+  }) {
+    if (text.isEmpty) return 0;
+    final preferred = preferredChars.clamp(1, text.length).toInt();
+    final candidate = text.substring(0, preferred);
+    if (_measureLineWidth(candidate, style) <= maxWidth + 0.5) {
+      return preferred;
+    }
+    return _maxFittingPrefix(text: text, style: style, maxWidth: maxWidth);
   }
 
   int _maxFittingPrefix({
@@ -323,6 +337,10 @@ class LayoutEngine {
     final currentLines = <TextLine>[];
     var currentHeight = 0.0;
     TextLine? previousGlobalLine;
+    final pageBottomLimit =
+        (contentHeight - _pageBottomSafetyPx(spec))
+            .clamp(1.0, contentHeight)
+            .toDouble();
 
     void flushPage() {
       final pageIndex = rawPages.length;
@@ -368,7 +386,7 @@ class LayoutEngine {
       final proposedTop = currentLines.isEmpty ? 0.0 : currentHeight + gap;
       final proposedBottom = proposedTop + line.height;
       final needsNewPage =
-          currentLines.isNotEmpty && proposedBottom > contentHeight + 0.01;
+          currentLines.isNotEmpty && proposedBottom > pageBottomLimit + 0.01;
 
       if (needsNewPage) {
         flushPage();
@@ -401,6 +419,12 @@ class LayoutEngine {
       );
     }
     return pages;
+  }
+
+  double _pageBottomSafetyPx(LayoutSpec spec) {
+    final lineHeight = spec.style.fontSize * spec.style.effectiveLineHeight;
+    if (!lineHeight.isFinite || lineHeight <= 0) return 2.0;
+    return (lineHeight * 0.12).clamp(2.0, 6.0).toDouble();
   }
 
   List<TextLine> _chapterLocalLinesFromPages(List<TextPage> pages) {

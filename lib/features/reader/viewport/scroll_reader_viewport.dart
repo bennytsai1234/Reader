@@ -447,8 +447,14 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
   }
 
   double _clampVirtualScrollY(double target) {
+    final bounds = _scrollBounds();
+    if (bounds == null) return target;
+    return target.clamp(bounds.min, bounds.max).toDouble();
+  }
+
+  ({double min, double max})? _scrollBounds() {
     final placements = _pagePlacements();
-    if (placements.isEmpty) return target;
+    if (placements.isEmpty) return null;
     final minTop = placements
         .map((placement) => placement.virtualTop)
         .reduce(math.min);
@@ -457,7 +463,7 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
         .reduce(math.max);
     final minScrollY = minTop;
     final maxScrollY = math.max(minScrollY, maxBottom - _viewportHeight());
-    return target.clamp(minScrollY, maxScrollY).toDouble();
+    return (min: minScrollY, max: maxScrollY);
   }
 
   _CanvasPagePlacement? _placementAtVirtualY(double virtualY) {
@@ -569,7 +575,10 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
   bool _applyVirtualScrollDelta(double delta, {bool scheduleShift = true}) {
     if (delta == 0 || _pagePlacements().isEmpty) return false;
     final nextScrollY = _clampVirtualScrollY(_virtualScrollY + delta);
-    if ((nextScrollY - _virtualScrollY).abs() < 0.01) return false;
+    if ((nextScrollY - _virtualScrollY).abs() < 0.01) {
+      if (scheduleShift) unawaited(_shiftWindowForAnchor());
+      return false;
+    }
     _virtualScrollY = nextScrollY;
     _captureAndReportVisibleLocation();
     if (scheduleShift) unawaited(_shiftWindowForAnchor());
@@ -599,9 +608,20 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     if (targetTop == null || currentTop == null) return false;
     final threshold = _shiftThreshold();
     if (targetChapter > currentChapter) {
+      if (_isNearWindowEdge(forward: true, threshold: threshold)) return true;
       return anchorVirtualY - targetTop >= threshold;
     }
+    if (_isNearWindowEdge(forward: false, threshold: threshold)) return true;
     return currentTop - anchorVirtualY >= threshold;
+  }
+
+  bool _isNearWindowEdge({required bool forward, required double threshold}) {
+    final bounds = _scrollBounds();
+    if (bounds == null) return false;
+    const tolerance = 0.5;
+    return forward
+        ? bounds.max - _virtualScrollY <= threshold + tolerance
+        : _virtualScrollY - bounds.min <= threshold + tolerance;
   }
 
   void _handleScrollAnimationTick() {

@@ -13,6 +13,8 @@ class ReaderSettingsController extends ChangeNotifier {
     ReaderPrefsRepository prefsRepository = const ReaderPrefsRepository(),
   }) : _prefsRepository = prefsRepository;
 
+  static const double minReadableLineHeight = ReadStyle.minReadableLineHeight;
+
   final ReaderPrefsRepository _prefsRepository;
 
   double fontSize = 18.0;
@@ -40,7 +42,7 @@ class ReaderSettingsController extends ChangeNotifier {
   Future<void> loadSettings() async {
     final snapshot = await _prefsRepository.load();
     fontSize = snapshot.fontSize;
-    lineHeight = snapshot.lineHeight;
+    lineHeight = ReadStyle.normalizeLineHeight(snapshot.lineHeight);
     paragraphSpacing = snapshot.paragraphSpacing;
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
@@ -62,14 +64,17 @@ class ReaderSettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  ReadStyle readStyleFor(EdgeInsets mediaPadding) {
+  ReadStyle readStyleFor(
+    EdgeInsets mediaPadding, {
+    bool bottomInfoReservedExternally = false,
+  }) {
     final top =
         (mediaPadding.top * kReaderContentTopSafeAreaFactor) +
         kReaderContentTopSpacing;
-    final bottom = mediaPadding.bottom + kReaderPermanentInfoReservedHeight;
+    final bottom = bottomInfoReservedExternally ? 0.0 : mediaPadding.bottom;
     return ReadStyle(
       fontSize: fontSize,
-      lineHeight: lineHeight,
+      lineHeight: ReadStyle.normalizeLineHeight(lineHeight),
       letterSpacing: letterSpacing,
       paragraphSpacing: paragraphSpacing,
       paddingTop: top,
@@ -104,8 +109,8 @@ class ReaderSettingsController extends ChangeNotifier {
   }
 
   void setLineHeight(double value) {
-    lineHeight = value;
-    unawaited(_prefsRepository.saveLineHeight(value));
+    lineHeight = ReadStyle.normalizeLineHeight(value);
+    unawaited(_prefsRepository.saveLineHeight(lineHeight));
     notifyListeners();
   }
 

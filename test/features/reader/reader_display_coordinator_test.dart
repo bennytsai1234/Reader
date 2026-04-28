@@ -193,6 +193,30 @@ void main() {
       );
     });
 
+    test('章內百分比只使用目前章節 charOffset 比例', () {
+      expect(
+        coordinator.formatChapterProgress(
+          charOffset: 50,
+          chapterEndCharOffset: 100,
+        ),
+        '50.0%',
+      );
+      expect(
+        coordinator.formatChapterProgress(
+          charOffset: 150,
+          chapterEndCharOffset: 100,
+        ),
+        '100.0%',
+      );
+      expect(
+        coordinator.formatChapterProgress(
+          charOffset: -10,
+          chapterEndCharOffset: 100,
+        ),
+        '0.0%',
+      );
+    });
+
     test('scroll 章節標籤使用 chapterIndex 與總章節數', () {
       expect(
         coordinator.formatChapterLabel(chapterIndex: 0, totalChapters: 12),

@@ -135,10 +135,18 @@ void main() {
         '${env.runtime.state.pageWindow!.current.chapterIndex}:${env.runtime.state.pageWindow!.current.pageIndex}',
         isNot('${before.chapterIndex}:${before.pageIndex}'),
       );
+      var centerLayer = _centerSlideTileLayer(tester);
+      expect(centerLayer.tile.lines, isNotEmpty);
+      expect(
+        '${centerLayer.tile.chapterIndex}:${centerLayer.tile.pageIndex}',
+        '${env.runtime.state.pageWindow!.current.chapterIndex}:${env.runtime.state.pageWindow!.current.pageIndex}',
+      );
       final after =
           '${env.runtime.state.pageWindow!.current.chapterIndex}:${env.runtime.state.pageWindow!.current.pageIndex}';
 
       await tester.pump();
+      centerLayer = _centerSlideTileLayer(tester);
+      expect(centerLayer.tile.lines, isNotEmpty);
 
       expect(
         '${env.runtime.state.pageWindow!.current.chapterIndex}:${env.runtime.state.pageWindow!.current.pageIndex}',
@@ -512,6 +520,45 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
     });
 
+    testWidgets('scroll window shifts before short chapters clamp movement', (
+      tester,
+    ) async {
+      final env = _RuntimeEnv(chapters: _shortChaptersFor('book', 4));
+      final controller = ReaderViewportController();
+      await env.runtime.openBook();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 320,
+            height: 360,
+            child: ScrollReaderViewport(
+              runtime: env.runtime,
+              backgroundColor: Colors.white,
+              textColor: Colors.black,
+              style: _style(ReaderPageMode.scroll),
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final firstMoved = await controller.scrollBy!(324);
+      await tester.pumpAndSettle();
+      expect(firstMoved, isTrue);
+      expect(env.runtime.state.visibleLocation.chapterIndex, 1);
+
+      final secondMoved = await controller.scrollBy!(324);
+      await tester.pumpAndSettle();
+      expect(secondMoved, isTrue);
+      expect(env.runtime.state.visibleLocation.chapterIndex, 2);
+
+      env.runtime.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 500));
+    });
+
     testWidgets('scroll viewport controller ensures char range visible', (
       tester,
     ) async {
@@ -769,6 +816,17 @@ List<BookChapter> _chaptersFor(String bookUrl, int count) {
   });
 }
 
+List<BookChapter> _shortChaptersFor(String bookUrl, int count) {
+  return List<BookChapter>.generate(count, (chapterIndex) {
+    return BookChapter(
+      title: '短第$chapterIndex章',
+      index: chapterIndex,
+      bookUrl: bookUrl,
+      content: '短段落，用來確認單頁章節不會卡在 scroll window 邊界。',
+    );
+  });
+}
+
 LayoutSpec _spec() {
   return LayoutSpec.fromViewport(
     viewportSize: const Size(320, 360),
@@ -790,4 +848,22 @@ ReadStyle _style(ReaderPageMode mode) {
     textFullJustify: false,
     pageMode: mode,
   );
+}
+
+ReaderTileLayer _centerSlideTileLayer(WidgetTester tester) {
+  final viewportBox = tester.renderObject<RenderBox>(
+    find.byType(SlideReaderViewport),
+  );
+  final viewportLeft = viewportBox.localToGlobal(Offset.zero).dx;
+  for (final element in find.byType(ReaderTileLayer).evaluate()) {
+    final box = element.renderObject! as RenderBox;
+    final left = box.localToGlobal(Offset.zero).dx;
+    final size = box.size;
+    if ((left - viewportLeft).abs() <= 0.5) {
+      expect(size.width, greaterThan(0));
+      expect(size.height, greaterThan(0));
+      return element.widget as ReaderTileLayer;
+    }
+  }
+  fail('No ReaderTileLayer is centered in the slide viewport.');
 }

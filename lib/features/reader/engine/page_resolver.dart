@@ -210,6 +210,8 @@ class PageResolver {
       0.0,
       contentHeight,
     );
+    final lineHeight =
+        layoutSpec.style.fontSize * layoutSpec.style.effectiveLineHeight;
     return TextPage(
       pageIndex: 0,
       chapterIndex: chapterIndex,
@@ -227,14 +229,13 @@ class PageResolver {
         TextLine(
           text: message,
           width: layoutSpec.contentWidth,
-          height: layoutSpec.style.fontSize * layoutSpec.style.lineHeight,
+          height: lineHeight,
           isTitle: true,
           chapterPosition: 0,
           startCharOffset: 0,
           endCharOffset: 0,
           lineTop: top,
-          lineBottom:
-              top + layoutSpec.style.fontSize * layoutSpec.style.lineHeight,
+          lineBottom: top + lineHeight,
         ),
       ],
     );

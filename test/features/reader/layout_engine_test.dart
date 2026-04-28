@@ -162,6 +162,7 @@ void main() {
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         'https://example.com/very/long/path/without/breakpoints/aaaaaaaaaaaaaaaaaaaa',
         '123456789012345678901234567890123456789012345678901234567890',
+        '這是一句沒有空格但是非常非常長的中文句子，用來確認橫向放不下時不會把整段塞回同一行造成重疊重繪。',
       ];
 
       for (final rawText in cases) {
@@ -212,15 +213,66 @@ void main() {
         }
       },
     );
+
+    test('keeps tail lines out of the page bottom clipping zone', () {
+      final content = BookContent.fromRaw(
+        chapterIndex: 0,
+        title: '',
+        rawText: '這是一段足夠長的正文，用來產生多個可換行的文字行，確認頁尾放不完整時會移到下一頁。',
+      );
+      final warmup = LayoutEngine().layout(
+        content,
+        _spec(width: 150, height: 320),
+      );
+      final lineHeight = warmup.lines.first.height;
+      final tightLayout = LayoutEngine().layout(
+        content,
+        _spec(width: 150, height: 24 + (lineHeight * 2) + 1),
+      );
+
+      expect(warmup.lines.length, greaterThanOrEqualTo(2));
+      expect(tightLayout.pages.length, greaterThanOrEqualTo(2));
+      expect(tightLayout.pages.first.lines, hasLength(1));
+    });
+
+    test('tight line height is normalized before layout', () {
+      final content = BookContent.fromRaw(
+        chapterIndex: 0,
+        title: '標題',
+        rawText: '第一段文字用來確認過低行高不會產生互相壓住的 line box。\n\n第二段文字。',
+      );
+      final tightLayout = LayoutEngine().layout(
+        content,
+        _spec(width: 180, height: 220, lineHeight: 1.0),
+      );
+      final safeLayout = LayoutEngine().layout(
+        content,
+        _spec(
+          width: 180,
+          height: 220,
+          lineHeight: ReadStyle.minReadableLineHeight,
+        ),
+      );
+
+      expect(tightLayout.lines, hasLength(safeLayout.lines.length));
+      for (var index = 0; index < tightLayout.lines.length; index++) {
+        expect(tightLayout.lines[index].top, safeLayout.lines[index].top);
+        expect(tightLayout.lines[index].bottom, safeLayout.lines[index].bottom);
+      }
+    });
   });
 }
 
-LayoutSpec _spec({required double width, required double height}) {
+LayoutSpec _spec({
+  required double width,
+  required double height,
+  double lineHeight = 1.5,
+}) {
   return LayoutSpec.fromViewport(
     viewportSize: Size(width, height),
-    style: const ReadStyle(
+    style: ReadStyle(
       fontSize: 18,
-      lineHeight: 1.5,
+      lineHeight: lineHeight,
       letterSpacing: 0,
       paragraphSpacing: 0.6,
       paddingTop: 12,

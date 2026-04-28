@@ -130,7 +130,27 @@ void main() {
       expect(style.selectText, isTrue);
       expect(style.paddingLeft, 20);
       expect(style.paddingRight, 20);
+      expect(style.paddingBottom, 8);
       expect(style.pageMode, ReaderPageMode.scroll);
+    });
+
+    test('external bottom info bar removes reader content bottom padding', () {
+      final controller = ReaderSettingsController();
+
+      final style = controller.readStyleFor(
+        const EdgeInsets.only(bottom: 24),
+        bottomInfoReservedExternally: true,
+      );
+
+      expect(style.paddingBottom, 0);
+    });
+
+    test('clamps unsafe line height for readable rendering', () {
+      final controller = ReaderSettingsController()..lineHeight = 1.0;
+
+      final style = controller.readStyleFor(EdgeInsets.zero);
+
+      expect(style.lineHeight, ReadStyle.minReadableLineHeight);
     });
 
     test(

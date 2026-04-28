@@ -85,6 +85,8 @@ class ReaderPageShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final permanentInfoExtent =
+        _shouldShowPermanentInfo() ? _permanentInfoExtent(context) : 0.0;
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -97,8 +99,15 @@ class ReaderPageShell extends StatelessWidget {
           color: backgroundColor,
           child: Stack(
             children: [
-              Positioned.fill(child: content),
-              if (_shouldShowPermanentInfo()) _PermanentInfoBar(shell: this),
+              Positioned.fill(bottom: permanentInfoExtent, child: content),
+              if (_shouldShowPermanentInfo())
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: permanentInfoExtent,
+                  child: IgnorePointer(child: _PermanentInfoBar(shell: this)),
+                ),
               if (controlsVisible)
                 Positioned.fill(
                   child: GestureDetector(
@@ -153,6 +162,11 @@ class ReaderPageShell extends StatelessWidget {
   bool _shouldShowPermanentInfo() {
     return hasVisibleContent && !isLoading && showReadTitleAddition;
   }
+
+  double _permanentInfoExtent(BuildContext context) {
+    return MediaQuery.paddingOf(context).bottom +
+        kReaderPermanentInfoReservedHeight;
+  }
 }
 
 class _PermanentInfoBar extends StatelessWidget {
@@ -162,63 +176,58 @@ class _PermanentInfoBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              shell.backgroundColor.withValues(alpha: 0.0),
-              shell.backgroundColor.withValues(alpha: 0.88),
-            ],
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            shell.backgroundColor.withValues(alpha: 0.0),
+            shell.backgroundColor.withValues(alpha: 0.88),
+          ],
         ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            kReaderPermanentInfoTopPadding,
-            16,
-            MediaQuery.of(context).padding.bottom +
-                kReaderPermanentInfoBottomSpacing,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  shell.book.name,
-                  style: TextStyle(
-                    color: shell.textColor.withValues(alpha: 0.5),
-                    fontSize: 10,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          kReaderPermanentInfoTopPadding,
+          16,
+          MediaQuery.of(context).padding.bottom +
+              kReaderPermanentInfoBottomSpacing,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                shell.book.name,
+                style: TextStyle(
+                  color: shell.textColor.withValues(alpha: 0.5),
+                  fontSize: 10,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
-              Text(
-                shell.displayPageLabel,
+            ),
+            Text(
+              shell.displayPageLabel,
+              style: TextStyle(
+                color: shell.textColor.withValues(alpha: 0.5),
+                fontSize: 10,
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 60,
+              child: Text(
+                shell.displayChapterPercentLabel,
+                textAlign: TextAlign.right,
                 style: TextStyle(
                   color: shell.textColor.withValues(alpha: 0.5),
                   fontSize: 10,
                 ),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 60,
-                child: Text(
-                  shell.displayChapterPercentLabel,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: shell.textColor.withValues(alpha: 0.5),
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

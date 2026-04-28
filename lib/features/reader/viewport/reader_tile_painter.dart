@@ -114,11 +114,12 @@ class ReaderTilePainter extends CustomPainter {
   }
 
   TextPainter _painterForText(String text, TextLine line) {
+    final effectiveLineHeight = style.effectiveLineHeight;
     final key = <Object?>[
       text,
       line.isTitle,
       style.fontSize,
-      style.lineHeight,
+      effectiveLineHeight,
       style.letterSpacing,
       style.fontFamily,
       style.bold,
@@ -130,7 +131,7 @@ class ReaderTilePainter extends CustomPainter {
     final textStyle = TextStyle(
       color: textColor,
       fontSize: line.isTitle ? style.fontSize + 4 : style.fontSize,
-      height: style.lineHeight,
+      height: effectiveLineHeight,
       letterSpacing: style.letterSpacing,
       fontFamily: style.fontFamily,
       fontWeight:
