@@ -192,5 +192,20 @@ void main() {
         '100.0%',
       );
     });
+
+    test('scroll 章節標籤使用 chapterIndex 與總章節數', () {
+      expect(
+        coordinator.formatChapterLabel(chapterIndex: 0, totalChapters: 12),
+        '1/12',
+      );
+      expect(
+        coordinator.formatChapterLabel(chapterIndex: 4, totalChapters: 12),
+        '5/12',
+      );
+      expect(
+        coordinator.formatChapterLabel(chapterIndex: 99, totalChapters: 12),
+        '12/12',
+      );
+    });
   });
 }

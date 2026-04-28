@@ -209,7 +209,14 @@ class ReaderRuntime extends ChangeNotifier {
   }) async {
     _clearPendingNeighborAdvance();
     final generation = state.layoutGeneration;
-    _setState(state.copyWith(phase: ReaderPhase.layingOut, clearError: true));
+    _setState(
+      state.copyWith(
+        phase: ReaderPhase.layingOut,
+        clearError: true,
+        clearPageWindow: true,
+        clearCurrentSlidePage: true,
+      ),
+    );
     try {
       final normalized = location.normalized(
         chapterCount: _repository.chapterCount,
@@ -248,7 +255,14 @@ class ReaderRuntime extends ChangeNotifier {
 
   Future<void> switchMode(ReaderMode mode) async {
     if (state.mode == mode) return;
-    _setState(state.copyWith(phase: ReaderPhase.switchingMode, mode: mode));
+    _setState(
+      state.copyWith(
+        phase: ReaderPhase.switchingMode,
+        mode: mode,
+        clearPageWindow: true,
+        clearCurrentSlidePage: true,
+      ),
+    );
     await jumpToLocation(state.visibleLocation, immediateSave: false);
     _setState(state.copyWith(mode: mode, phase: ReaderPhase.ready));
   }

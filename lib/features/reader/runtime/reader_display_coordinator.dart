@@ -132,6 +132,15 @@ class ReaderDisplayCoordinator {
     return '$page/$totalPages';
   }
 
+  String formatChapterLabel({
+    required int chapterIndex,
+    required int totalChapters,
+  }) {
+    if (totalChapters <= 0) return '0/0';
+    final chapter = (chapterIndex + 1).clamp(1, totalChapters);
+    return '$chapter/$totalChapters';
+  }
+
   int resolveScrubChapterIndex({
     required dynamic value,
     required int totalChapters,

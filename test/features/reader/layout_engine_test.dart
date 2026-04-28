@@ -139,6 +139,32 @@ void main() {
         expect(rebuilt, rawText);
       }
     });
+
+    test(
+      'page-local line boxes stay within content height without overlap',
+      () {
+        final content = BookContent.fromRaw(
+          chapterIndex: 0,
+          title: '很長很長的標題也要正確換頁',
+          rawText: List<String>.generate(
+            60,
+            (i) => '第$i段，這是一段會讓頁尾容易卡行的長文字，必須整行移到下一頁，不能上下重疊。',
+          ).join('\n\n'),
+        );
+        final spec = _spec(width: 180, height: 180);
+        final layout = LayoutEngine().layout(content, spec);
+
+        for (final page in layout.pages) {
+          var previousBottom = -double.infinity;
+          for (final line in page.lines) {
+            expect(line.top, greaterThanOrEqualTo(0));
+            expect(line.bottom, lessThanOrEqualTo(page.contentHeight + 0.01));
+            expect(line.top, greaterThanOrEqualTo(previousBottom - 0.01));
+            previousBottom = line.bottom;
+          }
+        }
+      },
+    );
   });
 }
 

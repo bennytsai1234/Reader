@@ -15,6 +15,7 @@ import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
+import 'package:inkpage_reader/features/reader/viewport/reader_tile_layer.dart';
 import 'package:inkpage_reader/features/reader/viewport/scroll_reader_viewport.dart';
 import 'package:inkpage_reader/features/reader/viewport/slide_reader_viewport.dart';
 
@@ -144,6 +145,7 @@ void main() {
     testWidgets('scroll viewport builds chapter-sized tiles', (tester) async {
       final env = _RuntimeEnv();
       await env.runtime.openBook();
+      final style = _style(ReaderPageMode.scroll);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -154,16 +156,26 @@ void main() {
               runtime: env.runtime,
               backgroundColor: Colors.white,
               textColor: Colors.black,
-              style: _style(ReaderPageMode.scroll),
+              style: style,
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(RepaintBoundary), findsWidgets);
-      final firstBoundary = find.byType(RepaintBoundary).first;
-      expect(tester.getSize(firstBoundary).height, greaterThan(360));
+      expect(find.byType(ReaderTileLayer), findsWidgets);
+      final renderedHeight =
+          tester.getSize(find.byType(ReaderTileLayer).first).height;
+      final layout = env.runtime.debugResolver.cachedLayout(0);
+      expect(layout, isNotNull);
+      final contentHeight =
+          layout!.lines.isEmpty ? 0.0 : layout.lines.last.bottom;
+      expect(
+        renderedHeight,
+        greaterThanOrEqualTo(
+          contentHeight + style.paddingTop + style.paddingBottom,
+        ),
+      );
 
       env.runtime.dispose();
       await tester.pumpWidget(const SizedBox.shrink());

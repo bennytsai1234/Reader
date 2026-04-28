@@ -21,6 +21,7 @@ import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/models/reader_tap_action.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_chapter_navigation_resolver.dart';
+import 'package:inkpage_reader/features/reader/runtime/reader_display_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_page_exit_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_controller.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
@@ -55,6 +56,8 @@ class ReaderPage extends StatefulWidget {
 
 class _ReaderPageState extends State<ReaderPage>
     implements ReaderExitFlowDelegate {
+  static const ReaderDisplayCoordinator _displayCoordinator =
+      ReaderDisplayCoordinator();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ReaderPageExitCoordinator _exitCoordinator =
       ReaderPageExitCoordinator();
@@ -228,8 +231,8 @@ class _ReaderPageState extends State<ReaderPage>
         chapterTitle: _chapterTitleAt(chapterIndex),
         chapterUrl: _chapterUrlAt(chapterIndex),
         originName: widget.book.originName,
-        displayPageLabel: _displayPageLabel(page),
-        displayChapterPercentLabel: _displayChapterPercentLabel(page),
+        displayPageLabel: _displayPageLabel(runtime, page),
+        displayChapterPercentLabel: _displayChapterPercentLabel(runtime, page),
         navigation: navigation,
         isAutoPaging: _autoPage?.isRunning ?? false,
         dayNightIcon: _settings.dayNightToggleIcon,
@@ -592,12 +595,45 @@ class _ReaderPageState extends State<ReaderPage>
     return widget.initialChapters[index].url;
   }
 
-  String _displayPageLabel(TextPage? page) {
-    if (page == null || page.pageSize <= 0) return '0/0';
-    return '${page.pageIndex + 1}/${page.pageSize}';
+  int _chapterEndCharOffset(ReaderRuntime runtime, ReaderLocation location) {
+    final cachedLayout = runtime.debugResolver.cachedLayout(
+      location.chapterIndex,
+    );
+    if (cachedLayout != null && cachedLayout.pages.isNotEmpty) {
+      return cachedLayout.pages.last.endCharOffset;
+    }
+    final currentPage = runtime.state.currentSlidePage;
+    if (currentPage != null &&
+        currentPage.chapterIndex == location.chapterIndex &&
+        currentPage.isChapterEnd) {
+      return currentPage.endCharOffset;
+    }
+    return location.charOffset;
   }
 
-  String _displayChapterPercentLabel(TextPage? page) {
+  String _displayPageLabel(ReaderRuntime? runtime, TextPage? page) {
+    if (runtime == null) return '0/0';
+    if (runtime.state.mode == ReaderMode.scroll) {
+      return _displayCoordinator.formatChapterLabel(
+        chapterIndex: runtime.state.visibleLocation.chapterIndex,
+        totalChapters: runtime.chapterCount,
+      );
+    }
+    if (page == null || page.pageSize <= 0) return '0/0';
+    return _displayCoordinator.formatPageLabel(page.pageIndex, page.pageSize);
+  }
+
+  String _displayChapterPercentLabel(ReaderRuntime? runtime, TextPage? page) {
+    if (runtime == null) return '0.0%';
+    if (runtime.state.mode == ReaderMode.scroll) {
+      final location = runtime.state.visibleLocation;
+      return _displayCoordinator.formatReadProgress(
+        chapterIndex: location.chapterIndex,
+        totalChapters: runtime.chapterCount,
+        charOffset: location.charOffset,
+        chapterEndCharOffset: _chapterEndCharOffset(runtime, location),
+      );
+    }
     if (page == null) return '0.0%';
     return page.readProgress;
   }

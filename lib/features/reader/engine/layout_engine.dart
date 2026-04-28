@@ -299,40 +299,79 @@ class LayoutEngine {
       ];
     }
 
-    final buckets = <int, List<TextLine>>{};
-    for (final line in lines) {
-      final pageIndex = (line.top / contentHeight).floor().clamp(0, 1 << 30);
-      buckets.putIfAbsent(pageIndex, () => <TextLine>[]).add(line);
-    }
-    final maxPageIndex = buckets.keys.fold<int>(0, (max, value) {
-      return value > max ? value : max;
-    });
-    final pages = <TextPage>[];
-    for (var pageIndex = 0; pageIndex <= maxPageIndex; pageIndex++) {
-      final pageTop = pageIndex * contentHeight;
-      final pageLines = (buckets[pageIndex] ?? const <TextLine>[])
-          .map((line) => line.toPageLocal(pageTop))
-          .toList(growable: false);
-      pages.add(
+    final rawPages = <TextPage>[];
+    final currentLines = <TextLine>[];
+    var currentHeight = 0.0;
+    TextLine? previousGlobalLine;
+
+    void flushPage() {
+      final pageIndex = rawPages.length;
+      final pageLines = List<TextLine>.unmodifiable(currentLines);
+      rawPages.add(
         TextPage(
           pageIndex: pageIndex,
           chapterIndex: content.chapterIndex,
           chapterSize: chapterSize,
-          pageSize: maxPageIndex + 1,
+          pageSize: 0,
           title: content.title,
           lines: pageLines,
           startCharOffset:
               pageLines.isEmpty
-                  ? (pages.isEmpty ? 0 : pages.last.endCharOffset)
+                  ? (rawPages.isEmpty ? 0 : rawPages.last.endCharOffset)
                   : pageLines.first.startCharOffset,
           endCharOffset:
               pageLines.isEmpty
-                  ? (pages.isEmpty ? 0 : pages.last.endCharOffset)
+                  ? (rawPages.isEmpty ? 0 : rawPages.last.endCharOffset)
                   : pageLines.last.endCharOffset,
           contentHeight: contentHeight,
           viewportHeight: viewportHeight,
           isChapterStart: pageIndex == 0,
-          isChapterEnd: pageIndex == maxPageIndex,
+          isChapterEnd: false,
+        ),
+      );
+      currentLines.clear();
+      currentHeight = 0.0;
+    }
+
+    for (final line in lines) {
+      final gap =
+          previousGlobalLine == null
+              ? 0.0
+              : (line.top - previousGlobalLine.bottom)
+                  .clamp(0.0, double.infinity)
+                  .toDouble();
+      final proposedTop = currentLines.isEmpty ? 0.0 : currentHeight + gap;
+      final proposedBottom = proposedTop + line.height;
+      final needsNewPage =
+          currentLines.isNotEmpty && proposedBottom > contentHeight + 0.01;
+
+      if (needsNewPage) {
+        flushPage();
+      }
+
+      final pageTop = currentLines.isEmpty ? 0.0 : currentHeight + gap;
+      final localLine = line.copyWith(
+        lineTop: pageTop,
+        lineBottom: pageTop + line.height,
+        baseline: pageTop + (line.baseline - line.top),
+      );
+      currentLines.add(localLine);
+      currentHeight = localLine.bottom;
+      previousGlobalLine = line;
+    }
+
+    if (currentLines.isNotEmpty || rawPages.isEmpty) {
+      flushPage();
+    }
+
+    final pageCount = rawPages.length;
+    final pages = <TextPage>[];
+    for (var index = 0; index < pageCount; index++) {
+      pages.add(
+        rawPages[index].copyWith(
+          pageSize: pageCount,
+          isChapterStart: index == 0,
+          isChapterEnd: index == pageCount - 1,
         ),
       );
     }

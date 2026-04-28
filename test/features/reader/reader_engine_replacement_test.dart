@@ -769,10 +769,16 @@ void main() {
       expect(runtime.state.mode, ReaderMode.slide);
       expect(runtime.state.visibleLocation.chapterIndex, location.chapterIndex);
       expect(runtime.state.visibleLocation.charOffset, location.charOffset);
+      expect(runtime.state.currentSlidePage, isNotNull);
+      expect(
+        runtime.state.currentSlidePage!.containsCharOffset(location.charOffset),
+        isTrue,
+      );
 
       await runtime.switchMode(ReaderMode.scroll);
       expect(runtime.state.mode, ReaderMode.scroll);
       expect(runtime.state.visibleLocation.chapterIndex, location.chapterIndex);
+      expect(runtime.state.visibleLocation.charOffset, location.charOffset);
     });
 
     test(

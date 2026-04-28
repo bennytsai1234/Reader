@@ -220,7 +220,10 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
         lines.isEmpty
             ? widget.runtime.state.layoutSpec.contentHeight
             : lines.last.bottom;
-    final viewportHeight = contentHeight.clamp(1.0, double.infinity).toDouble();
+    final viewportHeight =
+        (widget.style.paddingTop + contentHeight + widget.style.paddingBottom)
+            .clamp(1.0, double.infinity)
+            .toDouble();
     return TextPage(
       pageIndex: 0,
       chapterIndex: layout.chapterIndex,
@@ -231,7 +234,7 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
       startCharOffset:
           layout.pages.isEmpty ? 0 : layout.pages.first.startCharOffset,
       endCharOffset: layout.pages.isEmpty ? 0 : layout.pages.last.endCharOffset,
-      contentHeight: viewportHeight,
+      contentHeight: contentHeight,
       viewportHeight: viewportHeight,
       isChapterStart: true,
       isChapterEnd: true,
@@ -240,6 +243,12 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
 
   ReaderChapter _runtimeChapterForLayout(ChapterLayout layout) {
     final chapter = widget.runtime.chapterAt(layout.chapterIndex);
+    final baseMetrics = ReaderChapterMetrics.fromPages(
+      layout.pages,
+      isEstimated: false,
+    );
+    final verticalPadding =
+        widget.style.paddingTop + widget.style.paddingBottom;
     return ReaderChapter(
       chapter:
           chapter ??
@@ -250,7 +259,7 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport> {
       index: layout.chapterIndex,
       title: layout.pages.isEmpty ? '' : layout.pages.first.title,
       pages: layout.pages,
-      metrics: ReaderChapterMetrics.fromPages(layout.pages, isEstimated: false),
+      metrics: baseMetrics.copyWith(separatorExtent: verticalPadding),
     );
   }
 
