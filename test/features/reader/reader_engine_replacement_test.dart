@@ -466,6 +466,67 @@ void main() {
       expect(firstPage.containsCharOffset(location.charOffset), isTrue);
     });
 
+    test(
+      'scroll visible location uses viewport height instead of content height',
+      () async {
+        final env = _RuntimeEnv();
+        final runtime = env.runtime;
+        await runtime.openBook();
+
+        final current = TextPage(
+          pageIndex: 0,
+          chapterIndex: 0,
+          startCharOffset: 10,
+          endCharOffset: 20,
+          contentHeight: 100,
+          viewportHeight: 360,
+          lines: <TextLine>[
+            TextLine(
+              text: 'current',
+              width: 80,
+              height: 20,
+              chapterPosition: 10,
+              startCharOffset: 10,
+              endCharOffset: 20,
+              lineTop: 48,
+              lineBottom: 68,
+            ),
+          ],
+        );
+        final next = TextPage(
+          pageIndex: 1,
+          chapterIndex: 0,
+          startCharOffset: 30,
+          endCharOffset: 40,
+          contentHeight: 100,
+          viewportHeight: 360,
+          lines: <TextLine>[
+            TextLine(
+              text: 'next',
+              width: 80,
+              height: 20,
+              chapterPosition: 30,
+              startCharOffset: 30,
+              endCharOffset: 40,
+              lineTop: 10,
+              lineBottom: 30,
+            ),
+          ],
+        );
+        runtime.state = runtime.state.copyWith(
+          pageWindow: PageWindow(prev: null, current: current, next: next),
+        );
+
+        final location = runtime.resolveVisibleLocation(
+          pageOffset: -200,
+          viewportHeight: 360,
+        );
+
+        expect(location.chapterIndex, current.chapterIndex);
+        expect(location.charOffset, current.startCharOffset);
+      },
+    );
+
     test('rolling window crosses chapter tail into next chapter', () async {
       final env = _RuntimeEnv();
       final runtime = env.runtime;

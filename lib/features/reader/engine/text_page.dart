@@ -142,6 +142,8 @@ class TextPage {
     int? startCharOffset,
     int? endCharOffset,
     double? height,
+    double? contentHeight,
+    double? viewportHeight,
     bool? isChapterStart,
     bool? isChapterEnd,
     this.isLoading = false,
@@ -150,7 +152,9 @@ class TextPage {
        lines = List<TextLine>.unmodifiable(lines),
        startCharOffset = startCharOffset ?? _firstOffset(lines),
        endCharOffset = endCharOffset ?? _lastOffset(lines),
-       height = height ?? _pageHeight(lines),
+       contentHeight = contentHeight ?? height ?? _pageHeight(lines),
+       viewportHeight =
+           viewportHeight ?? contentHeight ?? height ?? _pageHeight(lines),
        isChapterStart = isChapterStart ?? ((pageIndex ?? index ?? 0) == 0),
        isChapterEnd =
            isChapterEnd ??
@@ -166,11 +170,13 @@ class TextPage {
   final int pageSize;
   final int startCharOffset;
   final int endCharOffset;
-  final double height;
+  final double contentHeight;
+  final double viewportHeight;
   final bool isChapterStart;
   final bool isChapterEnd;
   final bool isLoading;
   final String? errorMessage;
+  double get height => contentHeight;
   bool get isPlaceholder => isLoading || errorMessage != null;
   bool get hasBodyContent =>
       lines.any((line) => !line.isTitle && line.text.isNotEmpty);
@@ -213,6 +219,8 @@ class TextPage {
     int? startCharOffset,
     int? endCharOffset,
     double? height,
+    double? contentHeight,
+    double? viewportHeight,
     bool? isChapterStart,
     bool? isChapterEnd,
     bool? isLoading,
@@ -230,7 +238,8 @@ class TextPage {
       pageSize: pageSize ?? this.pageSize,
       startCharOffset: startCharOffset ?? this.startCharOffset,
       endCharOffset: endCharOffset ?? this.endCharOffset,
-      height: height ?? this.height,
+      contentHeight: contentHeight ?? height ?? this.contentHeight,
+      viewportHeight: viewportHeight ?? this.viewportHeight,
       isChapterStart: isChapterStart ?? this.isChapterStart,
       isChapterEnd: isChapterEnd ?? this.isChapterEnd,
       isLoading: isLoading ?? this.isLoading,
@@ -250,6 +259,8 @@ class TextPage {
       'startCharOffset': startCharOffset,
       'endCharOffset': endCharOffset,
       'height': height,
+      'contentHeight': contentHeight,
+      'viewportHeight': viewportHeight,
       'isChapterStart': isChapterStart,
       'isChapterEnd': isChapterEnd,
       'isLoading': isLoading,
@@ -269,6 +280,8 @@ class TextPage {
       startCharOffset: json['startCharOffset'],
       endCharOffset: json['endCharOffset'],
       height: (json['height'] as num?)?.toDouble(),
+      contentHeight: (json['contentHeight'] as num?)?.toDouble(),
+      viewportHeight: (json['viewportHeight'] as num?)?.toDouble(),
       isChapterStart: json['isChapterStart'],
       isChapterEnd: json['isChapterEnd'],
       isLoading: json['isLoading'] ?? false,

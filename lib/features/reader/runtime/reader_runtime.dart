@@ -404,7 +404,7 @@ class ReaderRuntime extends ChangeNotifier {
     final anchorY = viewportHeight * anchorFraction;
     if (pageOffset > 0 && window.prev != null) {
       final prev = window.prev!;
-      final prevTop = pageOffset - prev.height;
+      final prevTop = pageOffset - prev.viewportHeight;
       final prevBottom = pageOffset;
       if (anchorY >= prevTop && anchorY < prevBottom) {
         return _locationInPage(prev, anchorY - prevTop);
@@ -413,10 +413,10 @@ class ReaderRuntime extends ChangeNotifier {
 
     var visualY = anchorY - pageOffset;
     for (final page in window.paintForwardPages) {
-      if (visualY <= page.height) {
+      if (visualY <= page.viewportHeight) {
         return _locationInPage(page, visualY);
       }
-      visualY -= page.height;
+      visualY -= page.viewportHeight;
     }
     return _locationInPage(window.paintForwardPages.last, visualY);
   }
@@ -480,6 +480,10 @@ class ReaderRuntime extends ChangeNotifier {
   Future<void> flushProgress() => _progressController.flush();
 
   ReaderLocation _locationInPage(TextPage page, double pageY) {
+    final contentY =
+        (pageY - state.layoutSpec.style.paddingTop)
+            .clamp(0.0, page.contentHeight)
+            .toDouble();
     if (page.lines.isEmpty) {
       return ReaderLocation(
         chapterIndex: page.chapterIndex,
@@ -489,14 +493,14 @@ class ReaderRuntime extends ChangeNotifier {
     TextLine nearest = page.lines.first;
     var nearestDistance = double.infinity;
     for (final line in page.lines) {
-      if (pageY >= line.top && pageY <= line.bottom) {
+      if (contentY >= line.top && contentY <= line.bottom) {
         return ReaderLocation(
           chapterIndex: page.chapterIndex,
           charOffset: line.startCharOffset,
         );
       }
       final distance =
-          pageY < line.top ? line.top - pageY : pageY - line.bottom;
+          contentY < line.top ? line.top - contentY : contentY - line.bottom;
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearest = line;

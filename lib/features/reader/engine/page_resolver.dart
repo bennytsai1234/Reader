@@ -200,15 +200,23 @@ class PageResolver {
   TextPage placeholderPageFor(int chapterIndex) {
     final error = _layoutErrors[chapterIndex];
     final message = error == null ? '載入中...' : '章節載入失敗，翻頁重試';
-    final height =
+    final contentHeight =
         layoutSpec.contentHeight <= 0 ? 1.0 : layoutSpec.contentHeight;
-    final top = (height / 2 - layoutSpec.style.fontSize).clamp(0.0, height);
+    final viewportHeight =
+        layoutSpec.viewportSize.height <= 0
+            ? contentHeight
+            : layoutSpec.viewportSize.height;
+    final top = (contentHeight / 2 - layoutSpec.style.fontSize).clamp(
+      0.0,
+      contentHeight,
+    );
     return TextPage(
       pageIndex: 0,
       chapterIndex: chapterIndex,
       chapterSize: repository.chapterCount,
       title: repository.titleFor(chapterIndex),
-      height: height,
+      contentHeight: contentHeight,
+      viewportHeight: viewportHeight,
       startCharOffset: 0,
       endCharOffset: 0,
       isChapterStart: true,

@@ -47,7 +47,7 @@ class ReaderTileLayer extends StatelessWidget {
               ? SizedBox.expand(child: paint)
               : SizedBox(
                 width: double.infinity,
-                height: tile.height,
+                height: tile.viewportHeight,
                 child: paint,
               ),
     );

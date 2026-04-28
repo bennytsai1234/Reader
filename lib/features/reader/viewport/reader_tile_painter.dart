@@ -40,7 +40,12 @@ class ReaderTilePainter extends CustomPainter {
             .clamp(1.0, double.infinity)
             .toDouble();
 
-    final contentRect = Rect.fromLTWH(left, top, contentWidth, tile.height);
+    final contentRect = Rect.fromLTWH(
+      left,
+      top,
+      contentWidth,
+      tile.contentHeight,
+    );
     canvas.save();
     canvas.clipRect(contentRect);
     for (final line in tile.lines) {

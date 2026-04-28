@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/reader/engine/read_style.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
+import 'package:inkpage_reader/features/reader/runtime/page_window.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
 import 'package:inkpage_reader/features/reader/runtime/tile_key.dart';
@@ -27,15 +28,19 @@ class SlideReaderViewport extends StatefulWidget {
   State<SlideReaderViewport> createState() => _SlideReaderViewportState();
 }
 
-class _SlideReaderViewportState extends State<SlideReaderViewport> {
-  late PageController _controller;
-  bool _recentering = false;
+class _SlideReaderViewportState extends State<SlideReaderViewport>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _slideController;
   late int _lastLayoutGeneration;
+  double _dragDx = 0;
+  double _lastAnimationValue = 0;
+  int _pendingDirection = 0;
 
   @override
   void initState() {
     super.initState();
-    _controller = PageController(initialPage: 1);
+    _slideController = AnimationController.unbounded(vsync: this)
+      ..addListener(_onAnimationTick);
     _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
     widget.runtime.addListener(_onRuntimeChanged);
   }
@@ -47,16 +52,16 @@ class _SlideReaderViewportState extends State<SlideReaderViewport> {
       oldWidget.runtime.removeListener(_onRuntimeChanged);
       widget.runtime.addListener(_onRuntimeChanged);
       _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
-      _resetController();
+      _resetViewport();
     } else if (oldWidget.style.pageMode != widget.style.pageMode) {
-      _resetController();
+      _resetViewport();
     }
   }
 
   @override
   void dispose() {
     widget.runtime.removeListener(_onRuntimeChanged);
-    _controller.dispose();
+    _slideController.dispose();
     super.dispose();
   }
 
@@ -66,36 +71,106 @@ class _SlideReaderViewportState extends State<SlideReaderViewport> {
         _lastLayoutGeneration != widget.runtime.state.layoutGeneration;
     if (layoutChanged) {
       _lastLayoutGeneration = widget.runtime.state.layoutGeneration;
-      _resetController();
+      _resetViewport();
     }
     setState(() {});
   }
 
-  void _resetController() {
-    _controller.dispose();
-    _controller = PageController(initialPage: 1);
+  void _onAnimationTick() {
+    final current = _slideController.value;
+    final delta = current - _lastAnimationValue;
+    _lastAnimationValue = current;
+    if (delta == 0) return;
+    setState(() {
+      _dragDx += delta;
+    });
   }
 
-  void _handlePageChanged(int index) {
-    if (_recentering || index == 1) return;
-    final forward = index > 1;
-    _recentering = true;
+  void _resetViewport() {
+    _slideController.stop();
+    _slideController.value = 0;
+    _lastAnimationValue = 0;
+    _pendingDirection = 0;
+    _dragDx = 0;
+  }
 
-    if (_controller.hasClients) {
-      _controller.jumpToPage(1);
+  double _boundaryAdjustedDx(double nextDx, PageWindow window) {
+    if (nextDx > 0 && window.prev == null) {
+      return nextDx * 0.35;
     }
-    final moved =
-        forward
-            ? widget.runtime.moveToNextTile()
-            : widget.runtime.moveToPrevTile();
+    if (nextDx < 0 && window.next == null) {
+      return nextDx * 0.35;
+    }
+    return nextDx;
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _recentering = false;
-      if (!moved && _controller.hasClients) {
-        _controller.jumpToPage(1);
-      }
+  Future<void> _animateTo(
+    double target, {
+    Curve curve = Curves.easeOutCubic,
+  }) async {
+    _slideController.stop();
+    _lastAnimationValue = 0;
+    _slideController.value = 0;
+    await _slideController.animateTo(
+      target - _dragDx,
+      duration: const Duration(milliseconds: 220),
+      curve: curve,
+    );
+    _finalizeAnimation(target);
+  }
+
+  void _finalizeAnimation(double target) {
+    final direction = _pendingDirection;
+    final moved =
+        direction == 0
+            ? false
+            : (direction > 0
+                ? widget.runtime.moveToNextTile()
+                : widget.runtime.moveToPrevTile());
+    setState(() {
+      _slideController.value = 0;
+      _lastAnimationValue = 0;
+      _dragDx = 0;
+      _pendingDirection = 0;
     });
+    if (target != 0 && moved) {
+      widget.runtime.handleSlidePageSettled(
+        widget.runtime.state.pageWindow!.current,
+      );
+    }
+  }
+
+  void _handleDragStart(DragStartDetails details) {
+    _slideController.stop();
+    _slideController.value = 0;
+    _lastAnimationValue = 0;
+    _pendingDirection = 0;
+  }
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    final window = widget.runtime.state.pageWindow;
+    if (window == null) return;
+    setState(() {
+      _dragDx = _boundaryAdjustedDx(_dragDx + details.delta.dx, window);
+    });
+  }
+
+  void _handleDragEnd(DragEndDetails details, double width) {
+    if (width <= 0) {
+      _resetViewport();
+      return;
+    }
+    final velocity = details.primaryVelocity ?? 0;
+    final forward = _dragDx < 0;
+    final distancePassed = _dragDx.abs() > width * 0.25;
+    final velocityPassed = velocity.abs() > 700;
+    final shouldAdvance =
+        (distancePassed || velocityPassed) &&
+        ((forward && widget.runtime.state.pageWindow?.next != null) ||
+            (!forward && widget.runtime.state.pageWindow?.prev != null));
+    _pendingDirection = shouldAdvance ? (forward ? 1 : -1) : 0;
+    final target = shouldAdvance ? (forward ? -width : width) : 0.0;
+    _animateTo(target);
   }
 
   TileKey _tileKey(TextPage tile) {
@@ -110,6 +185,7 @@ class _SlideReaderViewportState extends State<SlideReaderViewport> {
 
   Widget _buildTile(TextPage tile) {
     return GestureDetector(
+      key: ValueKey<TileKey>(_tileKey(tile)),
       behavior: HitTestBehavior.opaque,
       onTapUp: widget.onTapUp,
       child: ReaderTileLayer(
@@ -162,21 +238,46 @@ class _SlideReaderViewportState extends State<SlideReaderViewport> {
       );
     }
 
-    final pages = <Widget>[
-      window.prev == null
-          ? _buildEdgePlaceholder(message: '已經是第一頁')
-          : _buildTile(window.prev!),
-      _buildTile(window.current),
-      window.next == null
-          ? _buildEdgePlaceholder(message: '已經是最後一頁')
-          : _buildTile(window.next!),
-    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final prev =
+            window.prev == null
+                ? _buildEdgePlaceholder(message: '已經是第一頁')
+                : _buildTile(window.prev!);
+        final current = _buildTile(window.current);
+        final next =
+            window.next == null
+                ? _buildEdgePlaceholder(message: '已經是最後一頁')
+                : _buildTile(window.next!);
 
-    return PageView(
-      controller: _controller,
-      physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
-      onPageChanged: _handlePageChanged,
-      children: pages,
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: widget.onTapUp,
+          onHorizontalDragStart: _handleDragStart,
+          onHorizontalDragUpdate: _handleDragUpdate,
+          onHorizontalDragEnd: (details) => _handleDragEnd(details, width),
+          onHorizontalDragCancel: _resetViewport,
+          child: ClipRect(
+            child: Stack(
+              children: [
+                Transform.translate(
+                  offset: Offset(_dragDx - width, 0),
+                  child: SizedBox(width: width, child: prev),
+                ),
+                Transform.translate(
+                  offset: Offset(_dragDx, 0),
+                  child: SizedBox(width: width, child: current),
+                ),
+                Transform.translate(
+                  offset: Offset(_dragDx + width, 0),
+                  child: SizedBox(width: width, child: next),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

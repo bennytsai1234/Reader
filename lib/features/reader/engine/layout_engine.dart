@@ -275,7 +275,11 @@ class LayoutEngine {
     required BookContent content,
     required int chapterSize,
   }) {
-    final pageHeight = spec.contentHeight <= 0 ? 1.0 : spec.contentHeight;
+    final contentHeight = spec.contentHeight <= 0 ? 1.0 : spec.contentHeight;
+    final viewportHeight =
+        spec.viewportSize.height <= 0
+            ? contentHeight
+            : spec.viewportSize.height;
     if (lines.isEmpty) {
       return <TextPage>[
         TextPage(
@@ -287,7 +291,8 @@ class LayoutEngine {
           lines: const <TextLine>[],
           startCharOffset: 0,
           endCharOffset: content.plainText.length,
-          height: pageHeight,
+          contentHeight: contentHeight,
+          viewportHeight: viewportHeight,
           isChapterStart: true,
           isChapterEnd: true,
         ),
@@ -296,7 +301,7 @@ class LayoutEngine {
 
     final buckets = <int, List<TextLine>>{};
     for (final line in lines) {
-      final pageIndex = (line.top / pageHeight).floor().clamp(0, 1 << 30);
+      final pageIndex = (line.top / contentHeight).floor().clamp(0, 1 << 30);
       buckets.putIfAbsent(pageIndex, () => <TextLine>[]).add(line);
     }
     final maxPageIndex = buckets.keys.fold<int>(0, (max, value) {
@@ -304,7 +309,7 @@ class LayoutEngine {
     });
     final pages = <TextPage>[];
     for (var pageIndex = 0; pageIndex <= maxPageIndex; pageIndex++) {
-      final pageTop = pageIndex * pageHeight;
+      final pageTop = pageIndex * contentHeight;
       final pageLines = (buckets[pageIndex] ?? const <TextLine>[])
           .map((line) => line.toPageLocal(pageTop))
           .toList(growable: false);
@@ -324,7 +329,8 @@ class LayoutEngine {
               pageLines.isEmpty
                   ? (pages.isEmpty ? 0 : pages.last.endCharOffset)
                   : pageLines.last.endCharOffset,
-          height: pageHeight,
+          contentHeight: contentHeight,
+          viewportHeight: viewportHeight,
           isChapterStart: pageIndex == 0,
           isChapterEnd: pageIndex == maxPageIndex,
         ),
