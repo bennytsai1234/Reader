@@ -62,6 +62,8 @@
 
 目前主線寫進度時會把 `readerAnchorJson` 清成 `null`。 durable truth 仍應是 `chapterIndex + charOffset`，但 anchor 對 scroll restore 很有價值，尤其是重開後 layout 還沒完整完成、章節高度還是估算時。
 
+因此 recovery 後必須把 `ReaderAnchor` 序列化保存到 `books.readerAnchorJson`。如果只存在記憶體，app 重啟後 `localOffsetSnapshot` / `pageIndexSnapshot` 就會消失，scroll 精準恢復也就失效。
+
 ### 4. scroll viewport 邊界不清
 
 目前 `ScrollReaderViewport` 自己維護：
@@ -133,7 +135,7 @@ viewport 不直接決定 durable progress，不自行保存 DB，不自行創造
 ## 立即處理順序
 
 1. 修 `ReaderProgressController`：active flush 期間的新 pending location 必須被 drain。
-2. 恢復 `ReaderAnchor` 作為 restore precision，不把它當 durable truth。
+2. 恢復 `ReaderAnchor` 作為 restore precision，保存到 `books.readerAnchorJson`，但不把它當 durable truth。
 3. 收斂 scroll viewport 與 runtime 的責任邊界。
 4. 穩定 chapter content 接入、layout、charOffset 與 visual offset 映射。
 5. 補上 0.2.28 中有價值的 restore/progress/viewport 測試。

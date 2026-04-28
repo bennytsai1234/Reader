@@ -102,11 +102,19 @@ flush()
 
 `chapterIndex + charOffset` 仍是唯一 durable progress。`ReaderAnchor` 只用於精準 restore。
 
+但 `ReaderAnchor` 不能只存在 runtime 記憶體。保存進度時必須把它序列化到 `books.readerAnchorJson`，否則 app 重啟、被系統殺掉、或重新打開閱讀頁後，scroll 的 `localOffsetSnapshot` 與 slide 的 `pageIndexSnapshot` 都會消失。
+
 保留 anchor 的條件：
 
 - `contentHash` 和 `layoutSignature` 匹配，才能使用 `localOffsetSnapshot` 或 `pageIndexSnapshot`。
 - 不匹配時退回 `chapterIndex + charOffset` 重算。
 - scroll restore 初期 layout 未完整時，可以暫用舊 snapshot，但完成 layout 後要用實際 line layout 校正。
+
+寫入要求：
+
+- `ReaderProgressController` / progress store 寫 DB 時，同步更新 `book.readerAnchorJson`。
+- `readerAnchorJson` 內容包含 `chapterIndex`、`charOffset`、`contentHash`、`layoutSignature`、`pageIndexSnapshot`、`localOffsetSnapshot` 中可用欄位。
+- DB 欄位仍是輔助恢復資料；書架與詳情頁的主進度顯示仍讀 `chapterIndex + charOffset`。
 
 要避免：
 
