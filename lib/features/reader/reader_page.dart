@@ -20,6 +20,7 @@ import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/engine/text_page.dart';
 import 'package:inkpage_reader/features/reader/models/reader_tap_action.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
+import 'package:inkpage_reader/features/reader/runtime/models/reader_tts_highlight.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_chapter_navigation_resolver.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_display_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_page_exit_coordinator.dart';
@@ -78,6 +79,8 @@ class _ReaderPageState extends State<ReaderPage>
   String? _lastLayoutSignature;
   int _lastContentSettingsGeneration = 0;
   bool _opening = false;
+  bool _followingTtsHighlight = false;
+  ReaderTtsHighlight? _lastFollowedTtsHighlight;
 
   @override
   void initState() {
@@ -120,6 +123,7 @@ class _ReaderPageState extends State<ReaderPage>
 
   void _handleControllerChanged() {
     _drainRuntimeNotice();
+    _maybeFollowTtsHighlight();
     if (mounted) setState(() {});
   }
 
@@ -152,8 +156,14 @@ class _ReaderPageState extends State<ReaderPage>
 
     final tts = ReaderTtsController(runtime: runtime)
       ..addListener(_handleControllerChanged);
-    final autoPage = ReaderAutoPageController(runtime: runtime)
-      ..addListener(_handleControllerChanged);
+    final autoPage = ReaderAutoPageController(
+      runtime: runtime,
+      viewportController: _viewportController,
+      viewportExtent:
+          () =>
+              _lastViewportSize?.height ??
+              runtime.state.layoutSpec.viewportSize.height,
+    )..addListener(_handleControllerChanged);
     final bookmarkDao = _dependencies.bookmarkDao;
     _runtime = runtime;
     _tts = tts;
@@ -339,16 +349,16 @@ class _ReaderPageState extends State<ReaderPage>
         return;
       case ReaderTapAction.nextPage:
         if (runtime.state.mode == ReaderMode.scroll &&
-            _viewportController.scrollBy != null) {
-          _viewportController.scrollBy?.call(-size.height * 0.9);
+            _viewportController.animateBy != null) {
+          unawaited(_viewportController.animateBy!(size.height * 0.9));
         } else {
           runtime.moveToNextPage();
         }
         return;
       case ReaderTapAction.prevPage:
         if (runtime.state.mode == ReaderMode.scroll &&
-            _viewportController.scrollBy != null) {
-          _viewportController.scrollBy?.call(size.height * 0.9);
+            _viewportController.animateBy != null) {
+          unawaited(_viewportController.animateBy!(-size.height * 0.9));
         } else {
           runtime.moveToPrevPage();
         }
@@ -412,6 +422,30 @@ class _ReaderPageState extends State<ReaderPage>
     if (autoPage == null) return;
     if (!autoPage.isRunning) _menu.hideControlsForAutoPage();
     autoPage.toggle();
+  }
+
+  void _maybeFollowTtsHighlight() {
+    if (_followingTtsHighlight) return;
+    final highlight = _tts?.currentHighlight;
+    if (highlight == null || !highlight.isValid) {
+      _lastFollowedTtsHighlight = null;
+      return;
+    }
+    if (highlight == _lastFollowedTtsHighlight) return;
+    final ensureVisible = _viewportController.ensureCharRangeVisible;
+    if (ensureVisible == null) return;
+
+    _lastFollowedTtsHighlight = highlight;
+    _followingTtsHighlight = true;
+    unawaited(
+      ensureVisible(
+        chapterIndex: highlight.chapterIndex,
+        startCharOffset: highlight.highlightStart,
+        endCharOffset: highlight.highlightEnd,
+      ).whenComplete(() {
+        _followingTtsHighlight = false;
+      }),
+    );
   }
 
   void _showTts() {

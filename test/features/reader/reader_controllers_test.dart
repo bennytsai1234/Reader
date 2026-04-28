@@ -15,6 +15,7 @@ import 'package:inkpage_reader/features/reader/engine/read_style.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
+import 'package:inkpage_reader/features/reader/viewport/reader_viewport_controller.dart';
 
 class _ManualTimer implements Timer {
   _ManualTimer(this.callback);
@@ -223,6 +224,58 @@ void main() {
 
       expect(runtime.nextPageCalls, 1);
       expect(controller.isRunning, isTrue);
+    });
+
+    test('timer tick uses viewport animateBy in scroll mode', () async {
+      _ManualTimer? timer;
+      final runtime = _FakeRuntime(nextPageResults: const <bool>[true]);
+      final viewportController = ReaderViewportController();
+      final deltas = <double>[];
+      viewportController.animateBy = (delta) async {
+        deltas.add(delta);
+        return true;
+      };
+      final controller = ReaderAutoPageController(
+        runtime: runtime,
+        viewportController: viewportController,
+        viewportExtent: () => 500,
+        timerFactory: (interval, callback) {
+          timer = _ManualTimer(callback);
+          return timer!;
+        },
+      );
+
+      controller.start();
+      timer!.fire();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(deltas, <double>[450]);
+      expect(runtime.nextPageCalls, 0);
+      expect(controller.isRunning, isTrue);
+    });
+
+    test('stops when viewport auto page command cannot move', () async {
+      _ManualTimer? timer;
+      final runtime = _FakeRuntime(nextPageResults: const <bool>[true]);
+      final viewportController =
+          ReaderViewportController()..animateBy = (_) async => false;
+      final controller = ReaderAutoPageController(
+        runtime: runtime,
+        viewportController: viewportController,
+        viewportExtent: () => 500,
+        timerFactory: (interval, callback) {
+          timer = _ManualTimer(callback);
+          return timer!;
+        },
+      );
+
+      controller.start();
+      timer!.fire();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(runtime.nextPageCalls, 0);
+      expect(controller.isRunning, isFalse);
+      expect(timer!.canceled, isTrue);
     });
 
     test('stops when runtime cannot move forward', () {

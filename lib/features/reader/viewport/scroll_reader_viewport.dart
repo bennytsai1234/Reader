@@ -165,11 +165,17 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
   }
 
   void _attachController() {
-    widget.controller?.scrollBy = _animateScrollBy;
+    widget.controller
+      ?..scrollBy = _scrollBy
+      ..animateBy = _animateBy
+      ..ensureCharRangeVisible = _ensureCharRangeVisible;
   }
 
   void _detachController(ReaderViewportController? controller) {
-    controller?.scrollBy = null;
+    controller
+      ?..scrollBy = null
+      ..animateBy = null
+      ..ensureCharRangeVisible = null;
   }
 
   void _resetLoadedState() {
@@ -386,6 +392,25 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
         page.localStartY;
   }
 
+  double? _lineVirtualBottom({
+    required _LoadedChapter loaded,
+    required double chapterTop,
+    required LineItem item,
+  }) {
+    final page = loaded.pageAt(item.pageIndex);
+    if (page == null) return null;
+    final pageVirtualTop = _pageVirtualTop(
+      chapterTop: chapterTop,
+      pages: loaded.pages,
+      pageIndex: item.pageIndex,
+    );
+    if (pageVirtualTop == null) return null;
+    return pageVirtualTop +
+        widget.style.paddingTop +
+        item.localBottom -
+        page.localStartY;
+  }
+
   double? _pageVirtualTop({
     required double chapterTop,
     required List<PageCache> pages,
@@ -541,13 +566,13 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     if (location != null) _lastReportedLocation = location;
   }
 
-  bool _applyVirtualScrollDelta(double delta) {
+  bool _applyVirtualScrollDelta(double delta, {bool scheduleShift = true}) {
     if (delta == 0 || _pagePlacements().isEmpty) return false;
     final nextScrollY = _clampVirtualScrollY(_virtualScrollY + delta);
     if ((nextScrollY - _virtualScrollY).abs() < 0.01) return false;
     _virtualScrollY = nextScrollY;
     _captureAndReportVisibleLocation();
-    unawaited(_shiftWindowForAnchor());
+    if (scheduleShift) unawaited(_shiftWindowForAnchor());
     if (mounted) setState(() {});
     return true;
   }
@@ -629,24 +654,109 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     );
   }
 
-  void _animateScrollBy(double delta) {
-    if (delta == 0 || _pagePlacements().isEmpty) return;
-    final target = _clampVirtualScrollY(_virtualScrollY + delta);
-    if ((target - _virtualScrollY).abs() < 0.01) return;
+  Future<bool> _scrollBy(double delta) async {
+    if (!mounted || delta == 0 || _pagePlacements().isEmpty) return false;
     _scrollAnimation.stop();
+    _isDragging = false;
+    final moved = _applyVirtualScrollDelta(delta, scheduleShift: false);
+    if (!moved) return false;
+    await _shiftWindowForAnchor();
+    await _handleScrollSettled();
+    return mounted;
+  }
+
+  Future<bool> _animateBy(double delta) {
+    if (delta == 0) return Future<bool>.value(false);
+    return _animateToVirtualScrollY(_virtualScrollY + delta);
+  }
+
+  Future<bool> _animateToVirtualScrollY(double target) async {
+    if (!mounted || _pagePlacements().isEmpty) return false;
+    final start = _virtualScrollY;
+    final clampedTarget = _clampVirtualScrollY(target);
+    if ((clampedTarget - start).abs() < 0.01) return false;
+    _scrollAnimation.stop();
+    _isDragging = false;
     _scrollAnimation.value = _virtualScrollY;
     _lastAnimationValue = _virtualScrollY;
-    unawaited(
-      _scrollAnimation
+    try {
+      await _scrollAnimation
           .animateTo(
-            target,
+            clampedTarget,
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
           )
-          .whenComplete(() {
-            if (mounted) unawaited(_handleScrollSettled());
-          }),
+          .orCancel;
+    } on TickerCanceled {
+      if (!mounted) return false;
+    }
+    if (!mounted) return false;
+    final moved = (_virtualScrollY - start).abs() >= 0.01;
+    if (!moved) return false;
+    await _shiftWindowForAnchor();
+    await _handleScrollSettled();
+    return mounted;
+  }
+
+  Future<bool> _ensureCharRangeVisible({
+    required int chapterIndex,
+    required int startCharOffset,
+    required int endCharOffset,
+  }) async {
+    if (!mounted || widget.runtime.chapterCount <= 0) return false;
+    final safeChapterIndex = _safeChapterIndex(chapterIndex);
+    final ready = await _tryEnsureChapterLoaded(safeChapterIndex);
+    if (!mounted || !ready) return false;
+    await _ensureWindowAround(safeChapterIndex);
+    if (!mounted) return false;
+
+    final loaded = _loadedChapters[safeChapterIndex];
+    final chapterTop = _chapterVirtualTops[safeChapterIndex];
+    if (loaded == null || chapterTop == null) return false;
+    final layout = LineLayout.fromPages(
+      loaded.layout.pages,
+      chapterIndex: safeChapterIndex,
     );
+    final rangeStart =
+        startCharOffset <= endCharOffset ? startCharOffset : endCharOffset;
+    final rangeEnd =
+        startCharOffset <= endCharOffset ? endCharOffset : startCharOffset;
+    final rangeItems = layout.textItems
+        .where(
+          (item) =>
+              item.endChapterPosition > rangeStart &&
+              item.chapterPosition < rangeEnd,
+        )
+        .toList(growable: false);
+    final fallback = layout.itemAtCharOffset(rangeStart);
+    final first = rangeItems.isEmpty ? fallback : rangeItems.first;
+    final last = rangeItems.isEmpty ? fallback : rangeItems.last;
+    if (first == null || last == null) return false;
+
+    final firstTop = _lineVirtualTop(
+      loaded: loaded,
+      chapterTop: chapterTop,
+      item: first,
+    );
+    final lastBottom = _lineVirtualBottom(
+      loaded: loaded,
+      chapterTop: chapterTop,
+      item: last,
+    );
+    if (firstTop == null || lastBottom == null) return false;
+
+    final viewportHeight = _viewportHeight();
+    final topPadding = math.min(80.0, viewportHeight * 0.12);
+    final bottomPadding = math.min(120.0, viewportHeight * 0.20);
+    final visibleTop = _virtualScrollY + topPadding;
+    final visibleBottom = _virtualScrollY + viewportHeight - bottomPadding;
+    if (firstTop >= visibleTop && lastBottom <= visibleBottom) return true;
+
+    final target =
+        firstTop < visibleTop
+            ? firstTop - topPadding
+            : lastBottom - viewportHeight + bottomPadding;
+    return _animateToVirtualScrollY(target);
   }
 
   Future<void> _handleScrollSettled() async {

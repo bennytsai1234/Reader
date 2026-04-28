@@ -16,6 +16,7 @@ import 'package:inkpage_reader/features/reader/runtime/reader_progress_controlle
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
 import 'package:inkpage_reader/features/reader/viewport/reader_tile_layer.dart';
+import 'package:inkpage_reader/features/reader/viewport/reader_viewport_controller.dart';
 import 'package:inkpage_reader/features/reader/viewport/scroll_reader_viewport.dart';
 import 'package:inkpage_reader/features/reader/viewport/slide_reader_viewport.dart';
 
@@ -462,6 +463,96 @@ void main() {
 
       expect(env.bookDao.writes, 1);
       expect(env.bookDao.lastLocation, env.runtime.state.committedLocation);
+
+      env.runtime.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 500));
+    });
+
+    testWidgets('scroll viewport controller scrollBy moves and settles', (
+      tester,
+    ) async {
+      final env = _RuntimeEnv();
+      final controller = ReaderViewportController();
+      await env.runtime.openBook();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 320,
+            height: 360,
+            child: ScrollReaderViewport(
+              runtime: env.runtime,
+              backgroundColor: Colors.white,
+              textColor: Colors.black,
+              style: _style(ReaderPageMode.scroll),
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final before = env.runtime.state.visibleLocation;
+      final moved = await controller.scrollBy!(240);
+      await tester.pump();
+
+      expect(moved, isTrue);
+      expect(
+        env.runtime.state.visibleLocation.chapterIndex > before.chapterIndex ||
+            env.runtime.state.visibleLocation.charOffset > before.charOffset,
+        isTrue,
+      );
+      expect(env.bookDao.writes, 1);
+      expect(env.bookDao.lastLocation, env.runtime.state.committedLocation);
+
+      env.runtime.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 500));
+    });
+
+    testWidgets('scroll viewport controller ensures char range visible', (
+      tester,
+    ) async {
+      final env = _RuntimeEnv();
+      final controller = ReaderViewportController();
+      await env.runtime.openBook();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 320,
+            height: 360,
+            child: ScrollReaderViewport(
+              runtime: env.runtime,
+              backgroundColor: Colors.white,
+              textColor: Colors.black,
+              style: _style(ReaderPageMode.scroll),
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final targetPage = env.runtime.state.pageWindow!.next!;
+      final follow = controller.ensureCharRangeVisible!(
+        chapterIndex: targetPage.chapterIndex,
+        startCharOffset: targetPage.startCharOffset,
+        endCharOffset: targetPage.endCharOffset,
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(await follow, isTrue);
+      expect(
+        env.runtime.state.visibleLocation.chapterIndex,
+        targetPage.chapterIndex,
+      );
+      expect(
+        env.runtime.state.visibleLocation.charOffset,
+        lessThanOrEqualTo(targetPage.endCharOffset),
+      );
 
       env.runtime.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
