@@ -153,6 +153,16 @@ void main() {
       expect(style.lineHeight, ReadStyle.minReadableLineHeight);
     });
 
+    test('ReadStyle compares by value to avoid viewport resets on rebuild', () {
+      final controller = ReaderSettingsController();
+
+      final first = controller.readStyleFor(EdgeInsets.zero);
+      final second = controller.readStyleFor(EdgeInsets.zero);
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+    });
+
     test(
       'layout signature includes indent but ignores justify and selection',
       () {

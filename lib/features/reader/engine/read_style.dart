@@ -91,4 +91,41 @@ class ReadStyle {
       pageMode: pageMode ?? this.pageMode,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ReadStyle &&
+        other.fontSize == fontSize &&
+        other.lineHeight == lineHeight &&
+        other.letterSpacing == letterSpacing &&
+        other.paragraphSpacing == paragraphSpacing &&
+        other.paddingTop == paddingTop &&
+        other.paddingBottom == paddingBottom &&
+        other.paddingLeft == paddingLeft &&
+        other.paddingRight == paddingRight &&
+        other.fontFamily == fontFamily &&
+        other.bold == bold &&
+        other.textIndent == textIndent &&
+        other.textFullJustify == textFullJustify &&
+        other.selectText == selectText &&
+        other.pageMode == pageMode;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    fontSize,
+    lineHeight,
+    letterSpacing,
+    paragraphSpacing,
+    paddingTop,
+    paddingBottom,
+    paddingLeft,
+    paddingRight,
+    fontFamily,
+    bold,
+    textIndent,
+    textFullJustify,
+    selectText,
+    pageMode,
+  );
 }

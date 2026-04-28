@@ -41,9 +41,41 @@ void main() {
       shellHeight - bottomPadding - kReaderPermanentInfoReservedHeight,
     );
   });
+
+  testWidgets('permanent info strip is reserved while reader is loading', (
+    tester,
+  ) async {
+    final contentKey = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 320,
+          height: 480,
+          child: _shell(
+            content: ColoredBox(key: contentKey, color: Colors.white),
+            hasVisibleContent: false,
+            isLoading: true,
+          ),
+        ),
+      ),
+    );
+
+    final shellHeight = tester.getSize(find.byType(Scaffold)).height;
+    final contentSize = tester.getSize(find.byKey(contentKey));
+
+    expect(
+      contentSize.height,
+      shellHeight - kReaderPermanentInfoReservedHeight,
+    );
+  });
 }
 
-ReaderPageShell _shell({required Widget content}) {
+ReaderPageShell _shell({
+  required Widget content,
+  bool hasVisibleContent = true,
+  bool isLoading = false,
+}) {
   return ReaderPageShell(
     book: Book(bookUrl: 'book', origin: 'local', name: '測試書'),
     scaffoldKey: GlobalKey<ScaffoldState>(),
@@ -61,8 +93,8 @@ ReaderPageShell _shell({required Widget content}) {
     controlsVisible: false,
     readBarStyleFollowPage: false,
     showReadTitleAddition: true,
-    hasVisibleContent: true,
-    isLoading: false,
+    hasVisibleContent: hasVisibleContent,
+    isLoading: isLoading,
     chapterTitle: '第一章',
     chapterUrl: '',
     originName: '',

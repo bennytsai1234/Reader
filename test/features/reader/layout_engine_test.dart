@@ -188,6 +188,22 @@ void main() {
       }
     });
 
+    test('hard line breaks never render inside a single TextLine', () {
+      const rawText = '第一行是來源內硬換行\n第二行是一句很長很長的中文內容，必須重新排到自己的 line box。';
+      final spec = _spec(width: 180, height: 280);
+      final layout = LayoutEngine().layout(
+        BookContent.fromRaw(chapterIndex: 0, title: '標題', rawText: rawText),
+        spec,
+      );
+      final bodyLines = layout.lines.where((line) => !line.isTitle).toList();
+
+      expect(bodyLines, isNotEmpty);
+      expect(bodyLines.every((line) => !line.text.contains('\n')), isTrue);
+      for (final line in bodyLines) {
+        expect(line.width, lessThanOrEqualTo(spec.contentWidth + 0.5));
+      }
+    });
+
     test(
       'page-local line boxes stay within content height without overlap',
       () {

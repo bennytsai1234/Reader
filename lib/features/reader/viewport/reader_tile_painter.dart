@@ -141,6 +141,7 @@ class ReaderTilePainter extends CustomPainter {
       text: TextSpan(text: text, style: textStyle),
       textDirection: TextDirection.ltr,
       textScaler: TextScaler.noScaling,
+      maxLines: 1,
     )..layout(maxWidth: double.infinity);
 
     if (_textPainterCache.length > 2000) {

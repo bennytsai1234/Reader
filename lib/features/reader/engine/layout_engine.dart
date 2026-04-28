@@ -149,16 +149,24 @@ class LayoutEngine {
     var lineIndex = 0;
 
     while (localStart < laidOutText.length) {
+      if (laidOutText.codeUnitAt(localStart) == 10) {
+        localStart += 1;
+        continue;
+      }
       final remaining = laidOutText.substring(localStart);
       painter.text = TextSpan(text: remaining, style: style);
       painter.layout(maxWidth: maxWidth);
       final metrics = painter.computeLineMetrics();
       if (metrics.isEmpty) break;
       final metric = metrics.first;
+      final hardBreakIndex = remaining.indexOf('\n');
       var charsConsumed = _lineCharsConsumed(
         painter: painter,
         remaining: remaining,
       );
+      if (hardBreakIndex >= 0 && hardBreakIndex < charsConsumed) {
+        charsConsumed = hardBreakIndex;
+      }
       charsConsumed = _fitLineChars(
         text: remaining,
         style: style,
@@ -203,6 +211,10 @@ class LayoutEngine {
         ),
       );
       localStart = localEnd;
+      if (localStart < laidOutText.length &&
+          laidOutText.codeUnitAt(localStart) == 10) {
+        localStart += 1;
+      }
       lineTop = lineBottom;
       lineIndex += 1;
     }

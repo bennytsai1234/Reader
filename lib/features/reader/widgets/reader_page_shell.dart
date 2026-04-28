@@ -86,7 +86,7 @@ class ReaderPageShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final permanentInfoExtent =
-        _shouldShowPermanentInfo() ? _permanentInfoExtent(context) : 0.0;
+        showReadTitleAddition ? _permanentInfoExtent(context) : 0.0;
     return PopScope<void>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
