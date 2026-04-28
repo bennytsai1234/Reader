@@ -7,12 +7,13 @@ import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target
 
 void main() {
   group('ReaderOpenTarget', () {
-    test('resume 只使用 durable chapterIndex 與 charOffset', () {
+    test('resume 使用 durable ReaderLocation 三元座標', () {
       final book = Book(
         bookUrl: 'url',
         name: 'book',
         chapterIndex: 3,
         charOffset: 128,
+        visualOffsetPx: 18,
         readerAnchorJson:
             '{"chapterIndex":3,"charOffset":128,"localOffsetSnapshot":320}',
       );
@@ -22,7 +23,11 @@ void main() {
       expect(
         target.anchor,
         const ReaderAnchor(
-          location: ReaderLocation(chapterIndex: 3, charOffset: 128),
+          location: ReaderLocation(
+            chapterIndex: 3,
+            charOffset: 128,
+            visualOffsetPx: 18,
+          ),
         ),
       );
       expect(target.location, target.anchor.location);

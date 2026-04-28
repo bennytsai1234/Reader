@@ -28,9 +28,14 @@ class _FakeBookDao extends Fake implements BookDao {
     int chapterIndex,
     String chapterTitle,
     int pos, {
+    double visualOffsetPx = 0.0,
     String? readerAnchorJson,
   }) async {
-    lastLocation = ReaderLocation(chapterIndex: chapterIndex, charOffset: pos);
+    lastLocation = ReaderLocation(
+      chapterIndex: chapterIndex,
+      charOffset: pos,
+      visualOffsetPx: visualOffsetPx,
+    );
   }
 }
 

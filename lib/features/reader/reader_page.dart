@@ -138,6 +138,7 @@ class _ReaderPageState extends State<ReaderPage>
         ReaderLocation(
           chapterIndex: widget.book.chapterIndex,
           charOffset: widget.book.charOffset,
+          visualOffsetPx: widget.book.visualOffsetPx,
         );
     final runtime = ReaderRuntime(
       book: widget.book,
@@ -549,6 +550,7 @@ class _ReaderPageState extends State<ReaderPage>
         ReaderLocation(
           chapterIndex: widget.book.chapterIndex,
           charOffset: widget.book.charOffset,
+          visualOffsetPx: widget.book.visualOffsetPx,
         );
     final chapters = runtime?.chapters ?? widget.initialChapters;
     await _sessionFacade.addCurrentBookToBookshelf(

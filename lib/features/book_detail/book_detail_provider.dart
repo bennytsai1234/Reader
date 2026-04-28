@@ -648,6 +648,7 @@ class BookDetailProvider extends ChangeNotifier {
       info.syncTime = oldBook.syncTime;
       info.chapterIndex = oldBook.chapterIndex;
       info.charOffset = oldBook.charOffset;
+      info.visualOffsetPx = oldBook.visualOffsetPx;
       info.durChapterTitle = oldBook.durChapterTitle;
       info.durChapterTime = oldBook.durChapterTime;
       info.readerAnchorJson = oldBook.readerAnchorJson;

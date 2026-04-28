@@ -31,6 +31,7 @@ extension BookLogic on Book {
     durChapterTitle = other.durChapterTitle;
     chapterIndex = other.chapterIndex;
     charOffset = other.charOffset;
+    visualOffsetPx = other.visualOffsetPx;
     readerAnchorJson = other.readerAnchorJson;
     durChapterTime = other.durChapterTime;
     wordCount = other.wordCount;
@@ -90,6 +91,7 @@ extension BookLogic on Book {
               ? toc[alignedIndex].title
               : durChapterTitle,
       charOffset: charOffset,
+      visualOffsetPx: visualOffsetPx,
       durChapterTime: durChapterTime,
       group: group,
       order: order,

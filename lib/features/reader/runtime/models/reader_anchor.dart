@@ -53,6 +53,7 @@ class ReaderAnchor {
           ReaderLocation(
             chapterIndex: asInt(json['chapterIndex']),
             charOffset: asInt(json['charOffset']),
+            visualOffsetPx: asDouble(json['visualOffsetPx']) ?? 0.0,
           ).normalized(),
       contentHash: json['contentHash'] as String?,
       layoutSignature: json['layoutSignature'] as String?,
@@ -101,6 +102,7 @@ class ReaderAnchor {
     return {
       'chapterIndex': location.chapterIndex,
       'charOffset': location.charOffset,
+      'visualOffsetPx': location.visualOffsetPx,
       if (contentHash != null) 'contentHash': contentHash,
       if (layoutSignature != null) 'layoutSignature': layoutSignature,
       if (pageIndexSnapshot != null) 'pageIndexSnapshot': pageIndexSnapshot,

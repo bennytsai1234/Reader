@@ -15,6 +15,7 @@ void main() {
               int chapterIndex,
               String title,
               int charOffset,
+              double visualOffsetPx,
               String? readerAnchorJson,
             })
           >[];
@@ -40,34 +41,50 @@ void main() {
           chapterIndex,
           title,
           charOffset,
+          visualOffsetPx,
           readerAnchorJson,
         ) async {
           writes.add((
             chapterIndex: chapterIndex,
             title: title,
             charOffset: charOffset,
+            visualOffsetPx: visualOffsetPx,
             readerAnchorJson: readerAnchorJson,
           ));
         },
       );
 
       await coordinator.persistLocation(
-        const ReaderLocation(chapterIndex: 1, charOffset: 24),
+        const ReaderLocation(
+          chapterIndex: 1,
+          charOffset: 24,
+          visualOffsetPx: 12,
+        ),
       );
 
       expect(
         coordinator.committedLocation,
-        const ReaderLocation(chapterIndex: 1, charOffset: 24),
+        const ReaderLocation(
+          chapterIndex: 1,
+          charOffset: 24,
+          visualOffsetPx: 12,
+        ),
       );
       expect(
         coordinator.durableLocation,
-        const ReaderLocation(chapterIndex: 1, charOffset: 24),
+        const ReaderLocation(
+          chapterIndex: 1,
+          charOffset: 24,
+          visualOffsetPx: 12,
+        ),
       );
       expect(book.chapterIndex, 1);
       expect(book.charOffset, 24);
+      expect(book.visualOffsetPx, 12);
       expect(book.readerAnchorJson, isNull);
       expect(writes.single.chapterIndex, 1);
       expect(writes.single.charOffset, 24);
+      expect(writes.single.visualOffsetPx, 12);
       expect(writes.single.readerAnchorJson, isNull);
     });
 
@@ -79,7 +96,7 @@ void main() {
         store: ReaderProgressStore(),
         book: () => Book(bookUrl: 'book', name: 'Book'),
         chapters: () => const [],
-        writeProgress: (_, __, ___, ____) async {},
+        writeProgress: (_, __, ___, ____, _____) async {},
       );
 
       coordinator.updatePhase(ReaderSessionPhase.contentLoading);

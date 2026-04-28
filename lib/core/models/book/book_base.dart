@@ -34,6 +34,7 @@ class BookBase {
   String? durChapterTitle; // 目前章節標題
   int chapterIndex; // 目前章節索引
   int charOffset; // 目前閱讀位置 (首行字索引)
+  double visualOffsetPx; // 目前閱讀位置的可視微調位移
   String? readerAnchorJson; // 本機精準閱讀錨點
   int durChapterTime; // 最近一次閱讀時間
   String? wordCount; // 字數
@@ -75,6 +76,7 @@ class BookBase {
     this.durChapterTitle,
     this.chapterIndex = 0,
     this.charOffset = 0,
+    this.visualOffsetPx = 0.0,
     this.readerAnchorJson,
     this.durChapterTime = 0,
     this.wordCount,

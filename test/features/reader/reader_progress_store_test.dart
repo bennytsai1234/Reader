@@ -31,37 +31,56 @@ void main() {
       int? savedChapter;
       String? savedTitle;
       int? savedOffset;
+      double? savedVisualOffsetPx;
       String? savedAnchorJson;
 
       await store.persistCharOffset(
-        write: (chapterIndex, title, charOffset, readerAnchorJson) async {
+        write: (
+          chapterIndex,
+          title,
+          charOffset,
+          visualOffsetPx,
+          readerAnchorJson,
+        ) async {
           savedChapter = chapterIndex;
           savedTitle = title;
           savedOffset = charOffset;
+          savedVisualOffsetPx = visualOffsetPx;
           savedAnchorJson = readerAnchorJson;
         },
         book: book,
         chapters: chapters,
         chapterIndex: 1,
         charOffset: 345,
+        visualOffsetPx: 24.5,
       );
 
       expect(book.chapterIndex, 1);
       expect(book.charOffset, 345);
+      expect(book.visualOffsetPx, 24.5);
       expect(book.durChapterTitle, 'c1');
       expect(
         store.lastSavedLocation,
-        const ReaderLocation(chapterIndex: 1, charOffset: 345),
+        const ReaderLocation(
+          chapterIndex: 1,
+          charOffset: 345,
+          visualOffsetPx: 24.5,
+        ),
       );
       expect(
         store.lastSavedAnchor,
         const ReaderAnchor(
-          location: ReaderLocation(chapterIndex: 1, charOffset: 345),
+          location: ReaderLocation(
+            chapterIndex: 1,
+            charOffset: 345,
+            visualOffsetPx: 24.5,
+          ),
         ),
       );
       expect(savedChapter, 1);
       expect(savedTitle, 'c1');
       expect(savedOffset, 345);
+      expect(savedVisualOffsetPx, 24.5);
       expect(savedAnchorJson, isNull);
     });
 
@@ -71,7 +90,7 @@ void main() {
       final chapters = [BookChapter(title: 'c0', index: 0)];
 
       await store.persistCharOffset(
-        write: (_, __, ___, ____) async {},
+        write: (_, __, ___, ____, _____) async {},
         book: book,
         chapters: chapters,
         chapterIndex: 0,
@@ -102,11 +121,13 @@ void main() {
         book: book,
         chapterIndex: 1,
         charOffset: 120,
+        visualOffsetPx: -16,
         title: 'c1',
       );
 
       expect(book.chapterIndex, 1);
       expect(book.charOffset, 120);
+      expect(book.visualOffsetPx, -16);
       expect(book.durChapterTitle, 'c1');
       expect(book.readerAnchorJson, isNull);
     });
@@ -120,6 +141,7 @@ void main() {
         int ci,
         String title,
         int charOffset,
+        double visualOffsetPx,
         String? readerAnchorJson,
       ) async {
         throw Exception('DB write failed');
@@ -174,7 +196,7 @@ void main() {
       final chapters = [BookChapter(title: 'c0', index: 0)];
 
       await store.persistCharOffset(
-        write: (_, __, ___, ____) async {},
+        write: (_, __, ___, ____, _____) async {},
         book: book,
         chapters: chapters,
         chapterIndex: 2,

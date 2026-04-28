@@ -87,6 +87,7 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
     int chapterIndex,
     String chapterTitle,
     int pos, {
+    double visualOffsetPx = 0.0,
     String? readerAnchorJson,
   }) {
     return (update(books)..where((t) => t.bookUrl.equals(bookUrl))).write(
@@ -94,9 +95,15 @@ class BookDao extends DatabaseAccessor<AppDatabase> with _$BookDaoMixin {
         chapterIndex: Value(chapterIndex),
         durChapterTitle: Value(chapterTitle),
         charOffset: Value(pos),
+        visualOffsetPx: Value(_normalizeVisualOffsetPx(visualOffsetPx)),
         readerAnchorJson: Value(readerAnchorJson),
         durChapterTime: Value(DateTime.now().millisecondsSinceEpoch),
       ),
     );
+  }
+
+  double _normalizeVisualOffsetPx(double value) {
+    if (!value.isFinite || value.isNaN) return 0.0;
+    return value.clamp(-80.0, 120.0).toDouble();
   }
 }

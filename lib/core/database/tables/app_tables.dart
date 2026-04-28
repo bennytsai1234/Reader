@@ -204,6 +204,8 @@ class Books extends Table {
       integer().named('chapterIndex').withDefault(const Constant(0))();
   IntColumn get charOffset =>
       integer().named('charOffset').withDefault(const Constant(0))();
+  RealColumn get visualOffsetPx =>
+      real().named('visualOffsetPx').withDefault(const Constant(0.0))();
   TextColumn get readerAnchorJson =>
       text().named('readerAnchorJson').nullable()();
   IntColumn get durChapterTime =>

@@ -18,6 +18,7 @@ class ReaderOpenTarget {
         ReaderLocation(
           chapterIndex: book.chapterIndex,
           charOffset: book.charOffset,
+          visualOffsetPx: book.visualOffsetPx,
         ).normalized();
     return ReaderOpenTarget(
       intent: ReaderOpenIntent.resume,

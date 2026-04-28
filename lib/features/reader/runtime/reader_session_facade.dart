@@ -81,6 +81,7 @@ class ReaderSessionFacade {
       book: book,
       chapterIndex: location.chapterIndex,
       charOffset: location.charOffset,
+      visualOffsetPx: location.visualOffsetPx,
       title: chapterTitle,
     );
     book.durChapterTime = DateTime.now().millisecondsSinceEpoch;
@@ -156,6 +157,7 @@ class ReaderSessionFacade {
       ReaderLocation(
         chapterIndex: resolution.targetChapterIndex,
         charOffset: book.charOffset,
+        visualOffsetPx: book.visualOffsetPx,
       ),
     );
     await loadChapter(resolution.targetChapterIndex, reason: reason);

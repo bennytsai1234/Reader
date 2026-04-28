@@ -34,6 +34,7 @@ class ReaderRuntime extends ChangeNotifier {
                    ReaderLocation(
                      chapterIndex: book.chapterIndex,
                      charOffset: book.charOffset,
+                     visualOffsetPx: book.visualOffsetPx,
                    ))
                .normalized(),
        _resolver = PageResolver(
@@ -49,6 +50,7 @@ class ReaderRuntime extends ChangeNotifier {
                      ReaderLocation(
                        chapterIndex: book.chapterIndex,
                        charOffset: book.charOffset,
+                       visualOffsetPx: book.visualOffsetPx,
                      ))
                  .normalized(),
          visibleLocation:
@@ -56,6 +58,7 @@ class ReaderRuntime extends ChangeNotifier {
                      ReaderLocation(
                        chapterIndex: book.chapterIndex,
                        charOffset: book.charOffset,
+                       visualOffsetPx: book.visualOffsetPx,
                      ))
                  .normalized(),
          layoutSpec: initialLayoutSpec,
@@ -231,6 +234,7 @@ class ReaderRuntime extends ChangeNotifier {
             normalized.charOffset
                 .clamp(page.startCharOffset, page.endCharOffset)
                 .toInt(),
+        visualOffsetPx: normalized.visualOffsetPx,
       );
       _setState(
         state.copyWith(

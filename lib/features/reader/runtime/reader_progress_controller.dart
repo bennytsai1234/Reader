@@ -56,6 +56,7 @@ class ReaderProgressController {
     final title = repository.titleFor(normalized.chapterIndex);
     book.chapterIndex = normalized.chapterIndex;
     book.charOffset = normalized.charOffset;
+    book.visualOffsetPx = normalized.visualOffsetPx;
     book.durChapterTitle = title;
     book.readerAnchorJson = null;
     writeCount += 1;
@@ -64,6 +65,7 @@ class ReaderProgressController {
       normalized.chapterIndex,
       title,
       normalized.charOffset,
+      visualOffsetPx: normalized.visualOffsetPx,
       readerAnchorJson: null,
     );
   }

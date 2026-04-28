@@ -10,6 +10,20 @@ extension BookSerialization on BookBase {
     return 0;
   }
 
+  static double toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  static double toVisualOffsetPx(dynamic value) {
+    final parsed = toDouble(value);
+    if (!parsed.isFinite || parsed.isNaN) return 0.0;
+    return parsed.clamp(-80.0, 120.0).toDouble();
+  }
+
   // 由於 factory 不能在 extension 中，這裡將其定義為普通靜態方法或讓子類調用
   static Map<String, dynamic> bookToJson(BookBase book) {
     return {
@@ -38,6 +52,7 @@ extension BookSerialization on BookBase {
       'durChapterTitle': book.durChapterTitle,
       'chapterIndex': book.chapterIndex,
       'charOffset': book.charOffset,
+      'visualOffsetPx': toVisualOffsetPx(book.visualOffsetPx),
       'readerAnchorJson': book.readerAnchorJson,
       'durChapterTime': book.durChapterTime,
       'wordCount': book.wordCount,

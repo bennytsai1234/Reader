@@ -33,6 +33,7 @@ void main() {
         author: 'Author B',
         chapterIndex: 5,
         charOffset: 100,
+        visualOffsetPx: 18.5,
         durChapterTime: 999,
         durChapterTitle: 'Chapter 5',
       );
@@ -40,24 +41,25 @@ void main() {
       final fromJson = BookProgress.fromJson(json);
       expect(fromJson.name, 'Book B');
       expect(fromJson.chapterIndex, 5);
+      expect(fromJson.visualOffsetPx, 18.5);
     });
 
-    test(
-      'Book progress coordinate json uses chapterIndex and charOffset only',
-      () {
-        final book = Book.fromJson({
-          'bookUrl': 'book',
-          'name': 'Book B',
-          'chapterIndex': 5,
-          'charOffset': 100,
-        });
+    test('Book progress coordinate json uses ReaderLocation triple', () {
+      final book = Book.fromJson({
+        'bookUrl': 'book',
+        'name': 'Book B',
+        'chapterIndex': 5,
+        'charOffset': 100,
+        'visualOffsetPx': 24.5,
+      });
 
-        expect(book.chapterIndex, 5);
-        expect(book.charOffset, 100);
-        expect(book.toJson()['chapterIndex'], 5);
-        expect(book.toJson()['charOffset'], 100);
-      },
-    );
+      expect(book.chapterIndex, 5);
+      expect(book.charOffset, 100);
+      expect(book.visualOffsetPx, 24.5);
+      expect(book.toJson()['chapterIndex'], 5);
+      expect(book.toJson()['charOffset'], 100);
+      expect(book.toJson()['visualOffsetPx'], 24.5);
+    });
 
     test('ReadRecord serialization', () {
       final record = ReadRecord(

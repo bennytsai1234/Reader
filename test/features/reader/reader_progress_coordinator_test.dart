@@ -31,6 +31,7 @@ ReaderProgressCoordinator _makeCoordinator({
         () => ReaderLocation(
           chapterIndex: b.chapterIndex,
           charOffset: b.charOffset,
+          visualOffsetPx: b.visualOffsetPx,
         ),
     shouldPersistVisiblePosition: shouldPersist ?? () => true,
     updateVisibleLocation: (_) {},
@@ -80,6 +81,7 @@ void main() {
               () => ReaderLocation(
                 chapterIndex: book.chapterIndex,
                 charOffset: book.charOffset,
+                visualOffsetPx: book.visualOffsetPx,
               ),
           shouldPersistVisiblePosition: () => true,
           updateVisibleLocation: (_) {},
@@ -138,7 +140,7 @@ void main() {
             ..charOffset = 20;
       final store = ReaderProgressStore();
       await store.persistCharOffset(
-        write: (_, __, ___, ____) async {},
+        write: (_, __, ___, ____, _____) async {},
         book: book,
         chapters: [
           BookChapter(title: 'c0', index: 0, bookUrl: 'http://test.com/book'),
@@ -156,6 +158,7 @@ void main() {
             () => ReaderLocation(
               chapterIndex: book.chapterIndex,
               charOffset: book.charOffset,
+              visualOffsetPx: book.visualOffsetPx,
             ),
         shouldPersistVisiblePosition: () => true,
         updateVisibleLocation: (_) {},
@@ -302,6 +305,7 @@ void main() {
             () => ReaderLocation(
               chapterIndex: book.chapterIndex,
               charOffset: book.charOffset,
+              visualOffsetPx: book.visualOffsetPx,
             ),
         shouldPersistVisiblePosition: () => true,
         updateVisibleLocation: (_) {},

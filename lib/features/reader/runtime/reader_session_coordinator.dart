@@ -10,26 +10,14 @@ class ReaderSessionCoordinator {
   final ReaderProgressStore _store;
   final Book Function() _book;
   final List<BookChapter> Function() _chapters;
-  final Future<void> Function(
-    int chapterIndex,
-    String title,
-    int charOffset,
-    String? readerAnchorJson,
-  )
-  _writeProgress;
+  final ReaderProgressWriter _writeProgress;
 
   ReaderSessionCoordinator({
     required ReaderSessionState state,
     required ReaderProgressStore store,
     required Book Function() book,
     required List<BookChapter> Function() chapters,
-    required Future<void> Function(
-      int chapterIndex,
-      String title,
-      int charOffset,
-      String? readerAnchorJson,
-    )
-    writeProgress,
+    required ReaderProgressWriter writeProgress,
   }) : _state = state,
        _store = store,
        _book = book,
@@ -81,6 +69,7 @@ class ReaderSessionCoordinator {
       chapters: _chapters(),
       chapterIndex: normalized.location.chapterIndex,
       charOffset: normalized.location.charOffset,
+      visualOffsetPx: normalized.location.visualOffsetPx,
       anchor: normalized,
     );
   }

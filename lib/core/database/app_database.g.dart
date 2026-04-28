@@ -273,6 +273,18 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _visualOffsetPxMeta = const VerificationMeta(
+    'visualOffsetPx',
+  );
+  @override
+  late final GeneratedColumn<double> visualOffsetPx = GeneratedColumn<double>(
+    'visualOffsetPx',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
   static const VerificationMeta _readerAnchorJsonMeta = const VerificationMeta(
     'readerAnchorJson',
   );
@@ -418,6 +430,7 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     durChapterTitle,
     chapterIndex,
     charOffset,
+    visualOffsetPx,
     readerAnchorJson,
     durChapterTime,
     wordCount,
@@ -602,6 +615,15 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
       context.handle(
         _charOffsetMeta,
         charOffset.isAcceptableOrUnknown(data['charOffset']!, _charOffsetMeta),
+      );
+    }
+    if (data.containsKey('visualOffsetPx')) {
+      context.handle(
+        _visualOffsetPxMeta,
+        visualOffsetPx.isAcceptableOrUnknown(
+          data['visualOffsetPx']!,
+          _visualOffsetPxMeta,
+        ),
       );
     }
     if (data.containsKey('readerAnchorJson')) {
@@ -797,6 +819,11 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
             DriftSqlType.int,
             data['${effectivePrefix}charOffset'],
           )!,
+      visualOffsetPx:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}visualOffsetPx'],
+          )!,
       readerAnchorJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}readerAnchorJson'],
@@ -891,6 +918,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
   final Value<String?> durChapterTitle;
   final Value<int> chapterIndex;
   final Value<int> charOffset;
+  final Value<double> visualOffsetPx;
   final Value<String?> readerAnchorJson;
   final Value<int> durChapterTime;
   final Value<String?> wordCount;
@@ -928,6 +956,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.durChapterTitle = const Value.absent(),
     this.chapterIndex = const Value.absent(),
     this.charOffset = const Value.absent(),
+    this.visualOffsetPx = const Value.absent(),
     this.readerAnchorJson = const Value.absent(),
     this.durChapterTime = const Value.absent(),
     this.wordCount = const Value.absent(),
@@ -966,6 +995,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.durChapterTitle = const Value.absent(),
     this.chapterIndex = const Value.absent(),
     this.charOffset = const Value.absent(),
+    this.visualOffsetPx = const Value.absent(),
     this.readerAnchorJson = const Value.absent(),
     this.durChapterTime = const Value.absent(),
     this.wordCount = const Value.absent(),
@@ -1005,6 +1035,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Expression<String>? durChapterTitle,
     Expression<int>? chapterIndex,
     Expression<int>? charOffset,
+    Expression<double>? visualOffsetPx,
     Expression<String>? readerAnchorJson,
     Expression<int>? durChapterTime,
     Expression<String>? wordCount,
@@ -1044,6 +1075,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       if (durChapterTitle != null) 'durChapterTitle': durChapterTitle,
       if (chapterIndex != null) 'chapterIndex': chapterIndex,
       if (charOffset != null) 'charOffset': charOffset,
+      if (visualOffsetPx != null) 'visualOffsetPx': visualOffsetPx,
       if (readerAnchorJson != null) 'readerAnchorJson': readerAnchorJson,
       if (durChapterTime != null) 'durChapterTime': durChapterTime,
       if (wordCount != null) 'wordCount': wordCount,
@@ -1084,6 +1116,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Value<String?>? durChapterTitle,
     Value<int>? chapterIndex,
     Value<int>? charOffset,
+    Value<double>? visualOffsetPx,
     Value<String?>? readerAnchorJson,
     Value<int>? durChapterTime,
     Value<String?>? wordCount,
@@ -1122,6 +1155,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       durChapterTitle: durChapterTitle ?? this.durChapterTitle,
       chapterIndex: chapterIndex ?? this.chapterIndex,
       charOffset: charOffset ?? this.charOffset,
+      visualOffsetPx: visualOffsetPx ?? this.visualOffsetPx,
       readerAnchorJson: readerAnchorJson ?? this.readerAnchorJson,
       durChapterTime: durChapterTime ?? this.durChapterTime,
       wordCount: wordCount ?? this.wordCount,
@@ -1224,6 +1258,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     if (charOffset.present) {
       map['charOffset'] = Variable<int>(charOffset.value);
     }
+    if (visualOffsetPx.present) {
+      map['visualOffsetPx'] = Variable<double>(visualOffsetPx.value);
+    }
     if (readerAnchorJson.present) {
       map['readerAnchorJson'] = Variable<String>(readerAnchorJson.value);
     }
@@ -1290,6 +1327,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
           ..write('durChapterTitle: $durChapterTitle, ')
           ..write('chapterIndex: $chapterIndex, ')
           ..write('charOffset: $charOffset, ')
+          ..write('visualOffsetPx: $visualOffsetPx, ')
           ..write('readerAnchorJson: $readerAnchorJson, ')
           ..write('durChapterTime: $durChapterTime, ')
           ..write('wordCount: $wordCount, ')
@@ -1337,6 +1375,7 @@ class _$BookInsertable implements Insertable<Book> {
       durChapterTitle: Value(_object.durChapterTitle),
       chapterIndex: Value(_object.chapterIndex),
       charOffset: Value(_object.charOffset),
+      visualOffsetPx: Value(_object.visualOffsetPx),
       readerAnchorJson: Value(_object.readerAnchorJson),
       durChapterTime: Value(_object.durChapterTime),
       wordCount: Value(_object.wordCount),
@@ -9559,6 +9598,7 @@ typedef $$BooksTableCreateCompanionBuilder =
       Value<String?> durChapterTitle,
       Value<int> chapterIndex,
       Value<int> charOffset,
+      Value<double> visualOffsetPx,
       Value<String?> readerAnchorJson,
       Value<int> durChapterTime,
       Value<String?> wordCount,
@@ -9598,6 +9638,7 @@ typedef $$BooksTableUpdateCompanionBuilder =
       Value<String?> durChapterTitle,
       Value<int> chapterIndex,
       Value<int> charOffset,
+      Value<double> visualOffsetPx,
       Value<String?> readerAnchorJson,
       Value<int> durChapterTime,
       Value<String?> wordCount,
@@ -9745,6 +9786,11 @@ class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
 
   ColumnFilters<int> get charOffset => $composableBuilder(
     column: $table.charOffset,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get visualOffsetPx => $composableBuilder(
+    column: $table.visualOffsetPx,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9934,6 +9980,11 @@ class $$BooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get visualOffsetPx => $composableBuilder(
+    column: $table.visualOffsetPx,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get readerAnchorJson => $composableBuilder(
     column: $table.readerAnchorJson,
     builder: (column) => ColumnOrderings(column),
@@ -10096,6 +10147,11 @@ class $$BooksTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get visualOffsetPx => $composableBuilder(
+    column: $table.visualOffsetPx,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get readerAnchorJson => $composableBuilder(
     column: $table.readerAnchorJson,
     builder: (column) => column,
@@ -10191,6 +10247,7 @@ class $$BooksTableTableManager
                 Value<String?> durChapterTitle = const Value.absent(),
                 Value<int> chapterIndex = const Value.absent(),
                 Value<int> charOffset = const Value.absent(),
+                Value<double> visualOffsetPx = const Value.absent(),
                 Value<String?> readerAnchorJson = const Value.absent(),
                 Value<int> durChapterTime = const Value.absent(),
                 Value<String?> wordCount = const Value.absent(),
@@ -10228,6 +10285,7 @@ class $$BooksTableTableManager
                 durChapterTitle: durChapterTitle,
                 chapterIndex: chapterIndex,
                 charOffset: charOffset,
+                visualOffsetPx: visualOffsetPx,
                 readerAnchorJson: readerAnchorJson,
                 durChapterTime: durChapterTime,
                 wordCount: wordCount,
@@ -10267,6 +10325,7 @@ class $$BooksTableTableManager
                 Value<String?> durChapterTitle = const Value.absent(),
                 Value<int> chapterIndex = const Value.absent(),
                 Value<int> charOffset = const Value.absent(),
+                Value<double> visualOffsetPx = const Value.absent(),
                 Value<String?> readerAnchorJson = const Value.absent(),
                 Value<int> durChapterTime = const Value.absent(),
                 Value<String?> wordCount = const Value.absent(),
@@ -10304,6 +10363,7 @@ class $$BooksTableTableManager
                 durChapterTitle: durChapterTitle,
                 chapterIndex: chapterIndex,
                 charOffset: charOffset,
+                visualOffsetPx: visualOffsetPx,
                 readerAnchorJson: readerAnchorJson,
                 durChapterTime: durChapterTime,
                 wordCount: wordCount,

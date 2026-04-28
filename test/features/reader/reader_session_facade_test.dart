@@ -148,7 +148,11 @@ void main() {
       await facade.addCurrentBookToBookshelf(
         book: book,
         chapters: chapters,
-        location: const ReaderLocation(chapterIndex: 1, charOffset: 256),
+        location: const ReaderLocation(
+          chapterIndex: 1,
+          charOffset: 256,
+          visualOffsetPx: 18,
+        ),
         chapterTitle: '章節 2',
         progressStore: progressStore,
         bookDao: bookDao,
@@ -160,10 +164,12 @@ void main() {
       expect(book.isInBookshelf, isTrue);
       expect(book.chapterIndex, 1);
       expect(book.charOffset, 256);
+      expect(book.visualOffsetPx, 18);
       expect(book.durChapterTitle, '章節 2');
       expect(book.durChapterTime, greaterThan(0));
       expect(bookDao.upserts, hasLength(1));
       expect(bookDao.upserts.single.isInBookshelf, isTrue);
+      expect(bookDao.upserts.single.visualOffsetPx, 18);
       expect(chapterDao.insertedBatches, hasLength(1));
       expect(chapterDao.insertedBatches.single, hasLength(1));
       expect(receivedEvent?.data, 'https://example.com/book');

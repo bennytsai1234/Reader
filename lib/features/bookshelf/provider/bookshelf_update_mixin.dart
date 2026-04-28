@@ -99,6 +99,7 @@ mixin BookshelfUpdateMixin on BookshelfProviderBase {
       info.syncTime = book.syncTime;
       info.chapterIndex = book.chapterIndex;
       info.charOffset = book.charOffset;
+      info.visualOffsetPx = book.visualOffsetPx;
       info.durChapterTitle = book.durChapterTitle;
       info.durChapterTime = book.durChapterTime;
       info.readerAnchorJson = book.readerAnchorJson;
