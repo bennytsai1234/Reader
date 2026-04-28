@@ -10,6 +10,8 @@
 
 可視位置與保存接口的細節見 `docs/reader_visible_location_design.md`。
 
+開書恢復的接口與邊界見 `docs/reader_restore_design.md`。
+
 ## 核心決策
 
 閱讀位置改成三個值：
