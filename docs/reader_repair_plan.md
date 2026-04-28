@@ -12,6 +12,8 @@
 
 開書恢復的接口與邊界見 `docs/reader_restore_design.md`。
 
+Overlay、TTS 高亮與手勢分流見 `docs/reader_overlay_gesture_design.md`。
+
 ## 核心決策
 
 閱讀位置改成三個值：
