@@ -371,7 +371,8 @@ class ReaderRuntime extends ChangeNotifier {
     if (layout.pages.isEmpty) return layout.pageForCharOffset(0);
     final basePage = layout.pageForCharOffset(location.charOffset);
     final anchorY = _anchorOffsetInViewport();
-    final desiredLineTopOnScreen = anchorY - location.visualOffsetPx;
+    final desiredLineTopOnPage =
+        anchorY - state.layoutSpec.style.paddingTop - location.visualOffsetPx;
     TextPage? bestPage;
     int? bestCharDistance;
     double? bestVisualDistance;
@@ -382,7 +383,7 @@ class ReaderRuntime extends ChangeNotifier {
     ) {
       if (index < 0 || index >= layout.pages.length) continue;
       final page = layout.pages[index];
-      final nearestLine = _nearestLineOnPage(page, desiredLineTopOnScreen);
+      final nearestLine = _nearestLineOnPage(page, desiredLineTopOnPage);
       final charDistance =
           ((nearestLine?.startCharOffset ?? page.startCharOffset) -
                   location.charOffset)
@@ -390,7 +391,7 @@ class ReaderRuntime extends ChangeNotifier {
       final visualDistance =
           nearestLine == null
               ? double.infinity
-              : (nearestLine.top - desiredLineTopOnScreen).abs();
+              : (nearestLine.top - desiredLineTopOnPage).abs();
       if (bestPage == null ||
           charDistance < bestCharDistance! ||
           (charDistance == bestCharDistance &&

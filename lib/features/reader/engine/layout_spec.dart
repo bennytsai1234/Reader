@@ -63,7 +63,6 @@ class LayoutSpec {
       style.textIndent.toString(),
       style.fontFamily ?? '',
       style.bold ? 'b' : 'r',
-      style.pageMode.name,
     ].join('|');
   }
 }

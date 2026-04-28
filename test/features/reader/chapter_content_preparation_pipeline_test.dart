@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
@@ -208,6 +210,42 @@ void main() {
       expect(retried.isReady, isTrue);
       expect(retried.content, 'remote raw');
       expect(service.contentCalls, 2);
+    });
+
+    test('本地書籍讀取錯誤會寫 failed 狀態', () async {
+      final missingPath =
+          '${Directory.systemTemp.path}/inkpage-reader-missing-${DateTime.now().microsecondsSinceEpoch}.txt';
+      final book = Book(
+        bookUrl: 'local://$missingPath',
+        origin: 'local',
+        name: 'Local Book',
+        author: 'Author',
+      );
+      final chapter = BookChapter(
+        title: 'Chapter',
+        index: 0,
+        url: 'local-chapter',
+        bookUrl: book.bookUrl,
+      );
+      final contentDao = _FakeContentDao();
+      final store = ReaderChapterContentStore(
+        chapterDao: _FakeChapterDao(),
+        contentDao: contentDao,
+      );
+      final pipeline = ChapterContentPreparationPipeline(
+        book: book,
+        contentStore: store,
+        sourceDao: _FakeSourceDao(BookSource(bookSourceUrl: 'source-1')),
+        service: _FakeBookSourceService(<Object>['unused']),
+      );
+
+      final result = await pipeline.prepare(chapterIndex: 0, chapter: chapter);
+      final entry = await store.getContentEntry(book: book, chapter: chapter);
+
+      expect(result.isFailed, isTrue);
+      expect(result.content, startsWith('檔案不存在:'));
+      expect(entry?.isFailed, isTrue);
+      expect(entry?.content, startsWith('檔案不存在:'));
     });
   });
 }

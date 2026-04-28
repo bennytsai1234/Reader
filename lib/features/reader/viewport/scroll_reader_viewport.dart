@@ -335,8 +335,16 @@ class _ScrollReaderViewportState extends State<ScrollReaderViewport>
     final location = widget.runtime.state.visibleLocation.normalized(
       chapterCount: widget.runtime.chapterCount,
     );
+    final layoutGeneration = widget.runtime.state.layoutGeneration;
     await _ensureWindowAround(location.chapterIndex);
     if (!mounted) return;
+    final currentLocation = widget.runtime.state.visibleLocation.normalized(
+      chapterCount: widget.runtime.chapterCount,
+    );
+    if (widget.runtime.state.layoutGeneration != layoutGeneration ||
+        currentLocation != location) {
+      return;
+    }
     if (!force && _initialJumpCompleted && _lastSyncedLocation == location) {
       return;
     }

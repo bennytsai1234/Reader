@@ -163,51 +163,55 @@ void main() {
       expect(first.hashCode, second.hashCode);
     });
 
-    test(
-      'layout signature includes indent but ignores justify and selection',
-      () {
-        const baseStyle = ReadStyle(
-          fontSize: 18,
-          lineHeight: 1.5,
-          letterSpacing: 0,
-          paragraphSpacing: 1,
-          paddingTop: 0,
-          paddingBottom: 0,
-          paddingLeft: 0,
-          paddingRight: 0,
-          textIndent: 2,
-          textFullJustify: false,
-          selectText: true,
-          pageMode: ReaderPageMode.scroll,
-        );
-        final base = LayoutSpec.fromViewport(
-          viewportSize: const Size(320, 480),
-          style: baseStyle,
-        );
+    test('layout signature includes indent but ignores display-only style', () {
+      const baseStyle = ReadStyle(
+        fontSize: 18,
+        lineHeight: 1.5,
+        letterSpacing: 0,
+        paragraphSpacing: 1,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        textIndent: 2,
+        textFullJustify: false,
+        selectText: true,
+        pageMode: ReaderPageMode.scroll,
+      );
+      final base = LayoutSpec.fromViewport(
+        viewportSize: const Size(320, 480),
+        style: baseStyle,
+      );
 
-        expect(
-          LayoutSpec.fromViewport(
-            viewportSize: const Size(320, 480),
-            style: baseStyle.copyWith(textIndent: 0),
-          ).layoutSignature,
-          isNot(base.layoutSignature),
-        );
-        expect(
-          LayoutSpec.fromViewport(
-            viewportSize: const Size(320, 480),
-            style: baseStyle.copyWith(textFullJustify: true),
-          ).layoutSignature,
-          base.layoutSignature,
-        );
-        expect(
-          LayoutSpec.fromViewport(
-            viewportSize: const Size(320, 480),
-            style: baseStyle.copyWith(selectText: false),
-          ).layoutSignature,
-          base.layoutSignature,
-        );
-      },
-    );
+      expect(
+        LayoutSpec.fromViewport(
+          viewportSize: const Size(320, 480),
+          style: baseStyle.copyWith(textIndent: 0),
+        ).layoutSignature,
+        isNot(base.layoutSignature),
+      );
+      expect(
+        LayoutSpec.fromViewport(
+          viewportSize: const Size(320, 480),
+          style: baseStyle.copyWith(textFullJustify: true),
+        ).layoutSignature,
+        base.layoutSignature,
+      );
+      expect(
+        LayoutSpec.fromViewport(
+          viewportSize: const Size(320, 480),
+          style: baseStyle.copyWith(selectText: false),
+        ).layoutSignature,
+        base.layoutSignature,
+      );
+      expect(
+        LayoutSpec.fromViewport(
+          viewportSize: const Size(320, 480),
+          style: baseStyle.copyWith(pageMode: ReaderPageMode.slide),
+        ).layoutSignature,
+        base.layoutSignature,
+      );
+    });
   });
 
   group('ReaderMenuController', () {

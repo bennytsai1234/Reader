@@ -13,6 +13,7 @@ import 'package:inkpage_reader/features/reader/engine/layout_spec.dart';
 import 'package:inkpage_reader/features/reader/engine/read_style.dart';
 import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_controller.dart';
+import 'package:inkpage_reader/features/reader/runtime/page_window.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
 import 'package:inkpage_reader/features/reader/viewport/reader_screen.dart';
@@ -154,6 +155,64 @@ void main() {
       );
 
       await env.runtime.flushProgress();
+      env.runtime.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 500));
+    });
+
+    testWidgets('slide drag treats placeholder neighbor as blocked edge', (
+      tester,
+    ) async {
+      final env = _RuntimeEnv(mode: ReaderMode.slide);
+      await env.runtime.openBook();
+      final current = env.runtime.state.pageWindow!.current;
+      env.runtime.state = env.runtime.state.copyWith(
+        pageWindow: PageWindow(
+          prev: null,
+          current: current,
+          next: env.runtime.debugResolver.placeholderPageFor(1),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 320,
+            height: 360,
+            child: SlideReaderViewport(
+              runtime: env.runtime,
+              backgroundColor: Colors.white,
+              textColor: Colors.black,
+              style: _style(ReaderPageMode.slide),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final viewport = find.byType(SlideReaderViewport);
+      final viewportWidth = tester.getSize(viewport).width;
+      final gesture = await tester.startGesture(tester.getCenter(viewport));
+      await gesture.moveBy(Offset(-viewportWidth, 0));
+      await tester.pump();
+
+      var translations = _slideTranslations(tester, viewport);
+      expect(translations[2], greaterThan(viewportWidth * 0.6));
+
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      translations = _slideTranslations(tester, viewport);
+      expect(translations[2], greaterThan(viewportWidth * 0.75));
+      expect(env.runtime.state.pageWindow!.current, current);
+
+      await tester.pumpAndSettle();
+      translations = _slideTranslations(tester, viewport);
+      expect(translations[1], closeTo(0, 0.001));
+      expect(translations[2], closeTo(viewportWidth, 0.001));
+      expect(env.runtime.state.pageWindow!.current, current);
+
       env.runtime.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 500));
@@ -866,4 +925,13 @@ ReaderTileLayer _centerSlideTileLayer(WidgetTester tester) {
     }
   }
   fail('No ReaderTileLayer is centered in the slide viewport.');
+}
+
+List<double> _slideTranslations(WidgetTester tester, Finder viewport) {
+  return tester
+      .widgetList<Transform>(
+        find.descendant(of: viewport, matching: find.byType(Transform)),
+      )
+      .map((transform) => transform.transform.getTranslation().x)
+      .toList(growable: false);
 }

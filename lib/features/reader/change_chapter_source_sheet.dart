@@ -308,12 +308,16 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
     String content,
   ) async {
     if (!getIt.isRegistered<ReaderChapterContentDao>()) return;
+    final chapterDao = getIt<ChapterDao>();
+    final activeChapter = await _activeChapter(chapterDao);
     final normalized = chapter.copyWith(
       index: widget.chapterIndex,
       bookUrl: widget.book.bookUrl,
+      title: activeChapter?.title ?? widget.chapterTitle,
+      url: activeChapter?.url ?? chapter.url,
     );
     await ReaderChapterContentStore(
-      chapterDao: getIt<ChapterDao>(),
+      chapterDao: chapterDao,
       contentDao: getIt<ReaderChapterContentDao>(),
     ).saveRawContent(
       book: widget.book,
@@ -321,6 +325,17 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
       content: content,
       saveChapterMetadata: false,
     );
+  }
+
+  Future<BookChapter?> _activeChapter(ChapterDao chapterDao) async {
+    final chapters = await chapterDao.getByBook(widget.book.bookUrl);
+    for (final chapter in chapters) {
+      if (chapter.index == widget.chapterIndex) return chapter;
+    }
+    for (final chapter in chapters) {
+      if (chapter.title == widget.chapterTitle) return chapter;
+    }
+    return null;
   }
 
   String? _nextReadableChapterUrl(

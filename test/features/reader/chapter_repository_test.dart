@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
@@ -33,7 +35,7 @@ class _FakeChapterDao implements ChapterDao {
 class _FakeSourceDao implements BookSourceDao {
   _FakeSourceDao(this.source);
 
-  final BookSource source;
+  final BookSource? source;
 
   @override
   Future<BookSource?> getByUrl(String url) async => source;
@@ -119,6 +121,18 @@ class _FakeContentDao implements ReaderChapterContentDao {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
+class _QueuedContentDao extends _FakeContentDao {
+  _QueuedContentDao(this.getEntryCalls);
+
+  final List<Completer<ReaderChapterContentEntry?>> getEntryCalls;
+
+  @override
+  Future<ReaderChapterContentEntry?> getEntry({required String contentKey}) {
+    if (getEntryCalls.isEmpty) return super.getEntry(contentKey: contentKey);
+    return getEntryCalls.removeAt(0).future;
+  }
+}
+
 class _FakeBookSourceService extends Fake implements BookSourceService {
   _FakeBookSourceService(this.responses);
 
@@ -136,6 +150,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     final response =
         responses[contentCalls.clamp(0, responses.length - 1).toInt()];
     contentCalls += 1;
+    if (response is Future<String>) return response;
     if (response is Exception) throw response;
     return response as String;
   }
@@ -160,13 +175,17 @@ ChapterRepository _repository({
   required List<BookChapter> chapters,
   required _FakeContentDao contentDao,
   required _FakeBookSourceService service,
+  BookSource? source,
+  bool sourceMissing = false,
 }) {
   return ChapterRepository(
     book: book,
     initialChapters: chapters,
     bookDao: _FakeBookDao(),
     chapterDao: _FakeChapterDao(chapters),
-    sourceDao: _FakeSourceDao(BookSource(bookSourceUrl: book.origin)),
+    sourceDao: _FakeSourceDao(
+      sourceMissing ? null : source ?? BookSource(bookSourceUrl: book.origin),
+    ),
     contentDao: contentDao,
     replaceDao: _FakeReplaceRuleDao(),
     service: service,
@@ -257,5 +276,85 @@ void main() {
       expect(second.plainText, '加載章節失敗: timeout');
       expect(service.contentCalls, 0);
     });
+
+    test(
+      'clearContentCache prevents stale in-flight load from repopulating cache',
+      () async {
+        final book = _book();
+        final chapter = _chapter();
+        final firstEntry = Completer<ReaderChapterContentEntry?>();
+        final secondEntry = Completer<ReaderChapterContentEntry?>();
+        final contentDao = _QueuedContentDao(
+          <Completer<ReaderChapterContentEntry?>>[firstEntry, secondEntry],
+        );
+        final repository = _repository(
+          book: book,
+          chapters: <BookChapter>[chapter],
+          contentDao: contentDao,
+          service: _FakeBookSourceService(<Object>['unused']),
+        );
+
+        final staleLoad = repository.loadContent(0);
+        await Future<void>.delayed(Duration.zero);
+        repository.clearContentCache();
+        final freshLoad = repository.loadContent(0);
+        await Future<void>.delayed(Duration.zero);
+
+        secondEntry.complete(_storedEntry(book, chapter, 'fresh body'));
+        final freshContent = await freshLoad;
+        expect(freshContent.plainText, 'fresh body');
+        expect(repository.cachedContent(0)?.plainText, 'fresh body');
+
+        firstEntry.complete(_storedEntry(book, chapter, 'stale body'));
+        final staleContent = await staleLoad;
+        expect(staleContent.plainText, 'stale body');
+        expect(repository.cachedContent(0)?.plainText, 'fresh body');
+      },
+    );
+
+    test(
+      'ensureChapters reports missing source instead of empty ready TOC',
+      () {
+        final book = _book();
+        final repository = _repository(
+          book: book,
+          chapters: <BookChapter>[],
+          contentDao: _FakeContentDao(),
+          service: _FakeBookSourceService(<Object>['unused']),
+          sourceMissing: true,
+        );
+
+        expect(
+          repository.ensureChapters(),
+          throwsA(
+            isA<ChapterRepositoryException>().having(
+              (error) => error.message,
+              'message',
+              '章節目錄載入失敗: 找不到書源',
+            ),
+          ),
+        );
+      },
+    );
   });
+}
+
+ReaderChapterContentEntry _storedEntry(
+  Book book,
+  BookChapter chapter,
+  String content,
+) {
+  return ReaderChapterContentEntry(
+    contentKey: ReaderChapterContentStore.contentKeyFor(
+      book: book,
+      chapter: chapter,
+    ),
+    origin: book.origin,
+    bookUrl: book.bookUrl,
+    chapterUrl: chapter.url,
+    chapterIndex: chapter.index,
+    status: ReaderChapterContentStatus.ready,
+    content: content,
+    updatedAt: 1,
+  );
 }

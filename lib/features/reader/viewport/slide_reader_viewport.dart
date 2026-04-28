@@ -114,11 +114,21 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
     _dragDx = 0;
   }
 
+  bool _canMoveBackward(PageWindow window) {
+    final prev = window.prev;
+    return prev != null && !prev.isPlaceholder;
+  }
+
+  bool _canMoveForward(PageWindow window) {
+    final next = window.next;
+    return next != null && !next.isPlaceholder;
+  }
+
   double _boundaryAdjustedDx(double nextDx, PageWindow window) {
-    if (nextDx > 0 && window.prev == null) {
+    if (nextDx > 0 && !_canMoveBackward(window)) {
       return nextDx * 0.35;
     }
-    if (nextDx < 0 && window.next == null) {
+    if (nextDx < 0 && !_canMoveForward(window)) {
       return nextDx * 0.35;
     }
     return nextDx;
@@ -184,10 +194,11 @@ class _SlideReaderViewportState extends State<SlideReaderViewport>
     final forward = _dragDx < 0;
     final distancePassed = _dragDx.abs() > width * 0.25;
     final velocityPassed = velocity.abs() > 700;
+    final window = widget.runtime.state.pageWindow;
     final shouldAdvance =
         (distancePassed || velocityPassed) &&
-        ((forward && widget.runtime.state.pageWindow?.next != null) ||
-            (!forward && widget.runtime.state.pageWindow?.prev != null));
+        window != null &&
+        (forward ? _canMoveForward(window) : _canMoveBackward(window));
     _pendingDirection = shouldAdvance ? (forward ? 1 : -1) : 0;
     final target = shouldAdvance ? (forward ? -width : width) : 0.0;
     _animateTo(target);

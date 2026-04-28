@@ -14,6 +14,15 @@ import 'package:inkpage_reader/features/reader/engine/reader_chapter_content_loa
 
 import 'book_content.dart';
 
+class ChapterRepositoryException implements Exception {
+  const ChapterRepositoryException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class ChapterRepository {
   ChapterRepository({
     required this.book,
@@ -56,6 +65,7 @@ class ChapterRepository {
   final Map<int, BookContent> _contentCache = <int, BookContent>{};
   final Map<int, Future<BookContent>> _contentInFlight =
       <int, Future<BookContent>>{};
+  int _contentCacheGeneration = 0;
 
   List<BookChapter> get chapters => List<BookChapter>.unmodifiable(_chapters);
   int get chapterCount => _chapters.length;
@@ -65,7 +75,12 @@ class ChapterRepository {
     _chapters = await chapterDao.getByBook(book.bookUrl);
     if (_chapters.isNotEmpty) return chapters;
     final source = await _ensureSource();
-    if (source == null) return chapters;
+    if (source == null) {
+      if (book.origin == 'local') {
+        throw const ChapterRepositoryException('本地書籍章節目錄不存在，請重新匯入');
+      }
+      throw const ChapterRepositoryException('章節目錄載入失敗: 找不到書源');
+    }
     final fetched = await service.getChapterList(source, book);
     for (var i = 0; i < fetched.length; i++) {
       fetched[i].index = i;
@@ -95,7 +110,7 @@ class ChapterRepository {
     final inFlight = _contentInFlight[safeIndex];
     if (inFlight != null) return inFlight;
     late final Future<BookContent> task;
-    task = _loadContentUncached(safeIndex);
+    task = _loadContentUncached(safeIndex, _contentCacheGeneration);
     _contentInFlight[safeIndex] = task;
     try {
       return await task;
@@ -137,7 +152,10 @@ class ChapterRepository {
     return _contentInFlight.containsKey(chapterIndex);
   }
 
-  Future<BookContent> _loadContentUncached(int chapterIndex) async {
+  Future<BookContent> _loadContentUncached(
+    int chapterIndex,
+    int cacheGeneration,
+  ) async {
     final chapter = chapterAt(chapterIndex);
     if (chapter == null) {
       return BookContent.fromRaw(
@@ -153,7 +171,9 @@ class ChapterRepository {
         title: loaded.displayTitle ?? chapter.title,
         rawText: loaded.content,
       );
-      _contentCache[chapterIndex] = content;
+      if (cacheGeneration == _contentCacheGeneration) {
+        _contentCache[chapterIndex] = content;
+      }
       return content;
     }
 
@@ -162,11 +182,14 @@ class ChapterRepository {
       title: chapter.title,
       rawText: (chapter.content ?? '').trim(),
     );
-    _contentCache[chapterIndex] = content;
+    if (cacheGeneration == _contentCacheGeneration) {
+      _contentCache[chapterIndex] = content;
+    }
     return content;
   }
 
   void clearContentCache() {
+    _contentCacheGeneration += 1;
     _contentCache.clear();
     _contentInFlight.clear();
   }
