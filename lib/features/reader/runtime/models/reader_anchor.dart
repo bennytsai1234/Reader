@@ -1,5 +1,4 @@
-import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
-import 'package:inkpage_reader/features/reader/runtime/models/reader_presentation_contract.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 
 class ReaderAnchor {
   final ReaderLocation location;
@@ -109,13 +108,6 @@ class ReaderAnchor {
       if (localOffsetSnapshot != null)
         'localOffsetSnapshot': localOffsetSnapshot,
     };
-  }
-
-  ReaderPresentationAnchor toPresentationAnchor({bool fromEnd = false}) {
-    return ReaderPresentationAnchor(
-      location: location,
-      fromEnd: fromEnd,
-    ).normalized();
   }
 
   @override

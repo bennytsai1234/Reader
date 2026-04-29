@@ -103,9 +103,9 @@ Key files:
 - `lib/features/reader/engine/page_resolver.dart`
 - `lib/features/reader/viewport/reader_screen.dart`
 
-Durable reader progress is `ReaderLocation(chapterIndex, charOffset)`. Page index and scroll offset are runtime projections only.
+Durable reader progress is `ReaderLocation(chapterIndex, charOffset, visualOffsetPx)`. Page index, page placement, scroll offset, and `virtualScrollY` are runtime projections only.
 
-Do not describe old `ReadBookController` / mixin runtime docs as current behavior. Some runtime/coordinator files remain in the tree as tested side branches or candidates, but they are not the active `ReaderPage` mainline unless referenced by that page.
+Do not describe old `ReadBookController` / mixin runtime docs as current behavior. The active reader path is `ReaderPage -> ReaderRuntime -> EngineReaderScreen -> SlideReaderViewport / ScrollReaderViewport`.
 
 ## Book Source Engine
 
@@ -125,7 +125,7 @@ Do not describe old `ReadBookController` / mixin runtime docs as current behavio
 - Keep Provider / ChangeNotifier as the app state system.
 - Use constructor injection for testable classes when practical; production can still resolve DAOs from `getIt`.
 - Keep feature UI orchestration in `features/`, cross-feature business flows in `core/services`, and parsing rules in `core/engine`.
-- Keep reader progress semantics as `chapterIndex + charOffset`.
+- Keep reader progress semantics as `chapterIndex + charOffset + visualOffsetPx`.
 - Update docs when changing module boundaries, reader runtime contracts, release flow, or database schema.
 
 ## Documentation
@@ -133,8 +133,8 @@ Do not describe old `ReadBookController` / mixin runtime docs as current behavio
 Start with:
 
 - `README.md`
-- `docs/architecture.md`
-- `docs/DATABASE.md`
-- `docs/reader_runtime.md`
-- `docs/reader_spec.md`
-- `docs/release.md`
+- `docs/README.md`
+- `docs/reader_current_state.md`
+- `docs/reader_mobile_test_plan.md`
+- `CONTRIBUTING.md`
+- `CHANGELOG.md`

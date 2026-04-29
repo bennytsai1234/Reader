@@ -25,7 +25,6 @@ import 'package:inkpage_reader/features/reader/runtime/reader_chapter_navigation
 import 'package:inkpage_reader/features/reader/runtime/reader_display_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_page_exit_coordinator.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_progress_controller.dart';
-import 'package:inkpage_reader/features/reader/runtime/reader_progress_store.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_session_facade.dart';
 import 'package:inkpage_reader/features/reader/runtime/reader_state.dart';
@@ -596,7 +595,6 @@ class _ReaderPageState extends State<ReaderPage>
       chapters: chapters,
       location: location,
       chapterTitle: _chapterTitleAt(location.chapterIndex),
-      progressStore: ReaderProgressStore(),
       bookDao: _dependencies.bookDao,
       chapterDao: _dependencies.chapterDao,
     );

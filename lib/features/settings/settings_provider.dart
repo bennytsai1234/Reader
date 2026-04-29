@@ -6,7 +6,7 @@ import 'package:inkpage_reader/core/config/app_config.dart';
 import 'package:inkpage_reader/core/constant/prefer_key.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
-import 'package:inkpage_reader/features/reader/runtime/reader_tts_source.dart';
+import 'package:inkpage_reader/core/services/tts_source_preference.dart';
 import 'provider/settings_base.dart';
 
 export 'provider/settings_base.dart';

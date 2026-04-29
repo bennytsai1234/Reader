@@ -11,7 +11,7 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/features/book_detail/book_detail_provider.dart';
 import 'package:inkpage_reader/features/book_detail/widgets/book_info_header.dart';
-import 'package:inkpage_reader/features/reader/runtime/models/reader_location.dart';
+import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
 
 class _FakeBookDao extends Fake implements BookDao {

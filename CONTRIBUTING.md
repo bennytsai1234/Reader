@@ -5,11 +5,10 @@
 ## 先讀哪些文件
 
 - [README.md](README.md)
-- [docs/architecture.md](docs/architecture.md)
-- [docs/DATABASE.md](docs/DATABASE.md)
+- [docs/README.md](docs/README.md)
 - 如果要改閱讀器：
-  - [docs/reader_runtime.md](docs/reader_runtime.md)
-  - [docs/reader_spec.md](docs/reader_spec.md)
+  - [docs/reader_current_state.md](docs/reader_current_state.md)
+  - [docs/reader_mobile_test_plan.md](docs/reader_mobile_test_plan.md)
 
 ## 環境需求
 
@@ -71,17 +70,16 @@ flutter test
 
 需要同步更新文件的改動：
 
-- repo 模組邊界：`docs/architecture.md`
-- 閱讀器 runtime / contract：`docs/reader_runtime.md`
-- 閱讀器功能規格：`docs/reader_spec.md`
-- 資料表與 migration：`docs/DATABASE.md`
-- CI / 釋出流程：`docs/release.md`
+- reader runtime / progress / layout / viewport：`docs/reader_current_state.md`
+- reader 手機實測流程：`docs/reader_mobile_test_plan.md`
+- 專案文件入口：`docs/README.md`
+- 逐版變更：`release-notes/vX.Y.Z.md`
 
 ## 程式碼規則
 
 - 狀態管理維持 Provider / ChangeNotifier，不引入第二套全域狀態框架。
 - DB 操作經由 DAO / Drift，不直接在 UI 層拼 SQL。
-- 閱讀器 durable location 是 `ReaderLocation(chapterIndex, charOffset)`。
+- 閱讀器 durable location 是 `ReaderLocation(chapterIndex, charOffset, visualOffsetPx)`。
 - 修改閱讀器時，先確認目前主線是 `ReaderPage -> ReaderRuntime -> ChapterRepository/PageResolver -> Viewport`。
 - 新的書源解析邏輯放在 `core/engine/` 對應子目錄。
 
@@ -96,4 +94,4 @@ Release 由 tag 觸發，不是手動改 `pubspec.yaml` 後上傳產物。
 3. 推送 tag `vX.Y.Z`。
 4. `build-release.yml` 回寫 `pubspec.yaml` 版本到 `main`，建 Android / iOS artifacts，並發佈 GitHub Release。
 
-完整規則見 [docs/release.md](docs/release.md)。
+逐版說明放在 [release-notes/](release-notes/)。

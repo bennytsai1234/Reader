@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:inkpage_reader/features/reader/runtime/reader_tts_source.dart';
+import 'package:inkpage_reader/core/services/tts_source_preference.dart';
 
 void main() {
   group('ReaderTtsSourcePreference', () {

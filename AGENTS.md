@@ -86,16 +86,19 @@ ReaderPage
 Durable reader progress is:
 
 ```text
-ReaderLocation(chapterIndex, charOffset)
+ReaderLocation(chapterIndex, charOffset, visualOffsetPx)
 ```
 
-Reader recovery priority:
+Reader invariants:
 
-1. Stabilize `ReaderRuntime` as the single reader state owner.
-2. Make progress writes latest-wins and reliably flushed on exit/lifecycle.
-3. Restore `ReaderAnchor` as a precision aid, while keeping `chapterIndex + charOffset` as the durable truth.
-4. Clarify slide/scroll viewport responsibilities so viewport reports visual anchors but does not own durable progress.
-5. Keep content loading, layout, and coordinate mapping deterministic and covered by tests.
+1. `ReaderRuntime` is the active reader state owner.
+2. DB progress stores only `chapterIndex`, `charOffset`, and `visualOffsetPx`.
+3. `chapter display text` is the source of truth for `charOffset`, including title text.
+4. `ChapterLayout`, `TextLine`, `LineLayout`, and `PageCache` are the shared layout truth for scroll and slide.
+5. Restore consumes DB progress and does not write DB.
+6. `saveProgress()` captures the current visible anchor before persisting.
+7. Loading, error, and placeholder pages must not publish durable reading positions.
+8. Scroll uses a fixed canvas window with signed `virtualScrollY`; `virtualScrollY` is runtime-only.
 
 ## Common Commands
 
@@ -166,9 +169,9 @@ git pull --ff-only origin main
 Useful references:
 
 - `README.md`
-- `docs/architecture.md`
-- `docs/app_flow_architecture.md`
-- `docs/DATABASE.md`
-- `docs/reader_runtime.md`
-- `docs/reader_spec.md`
-- `docs/release.md`
+- `docs/README.md`
+- `docs/reader_current_state.md`
+- `docs/reader_mobile_test_plan.md`
+- `CONTRIBUTING.md`
+- `CHANGELOG.md`
+- `release-notes/`

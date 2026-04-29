@@ -112,11 +112,11 @@
 
 常用文件：
 
-- [docs/architecture.md](docs/architecture.md)
-- [docs/reader_runtime.md](docs/reader_runtime.md)
-- [docs/reader_spec.md](docs/reader_spec.md)
-- [docs/DATABASE.md](docs/DATABASE.md)
-- [docs/release.md](docs/release.md)
+- [docs/reader_current_state.md](docs/reader_current_state.md)
+- [docs/reader_mobile_test_plan.md](docs/reader_mobile_test_plan.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [release-notes/](release-notes/)
 
 ## 授權
 
