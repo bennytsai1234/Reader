@@ -1,4 +1,0 @@
-storeFile=/abs/path/to/your-release-key.jks
-storePassword=replace-me
-keyAlias=replace-me
-keyPassword=replace-me

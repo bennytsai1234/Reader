@@ -3,28 +3,34 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:inkpage_reader/core/constant/prefer_key.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
-import 'package:inkpage_reader/features/reader/engine/reader_location.dart';
 import 'package:inkpage_reader/features/reader/runtime/models/reader_tts_highlight.dart';
-import 'package:inkpage_reader/features/reader/runtime/reader_runtime.dart';
 import 'package:inkpage_reader/features/reader/widgets/reader_controller_sheets.dart';
+import 'package:inkpage_reader/features/reader_v2/engine/reader_v2_location.dart';
+import 'package:inkpage_reader/features/reader_v2/engine/reader_v2_runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class ReaderTtsController extends ChangeNotifier
+class ReaderV2TtsController extends ChangeNotifier
     implements ReaderTtsSheetController {
-  ReaderTtsController({required this.runtime, TTSService? tts})
+  ReaderV2TtsController({required this.runtime, TTSService? tts})
     : _tts = tts ?? TTSService() {
     _tts.addListener(_handleTtsChanged);
   }
 
-  final ReaderRuntime runtime;
+  final ReaderV2Runtime runtime;
   final TTSService _tts;
-  ReaderLocation? _speechStartLocation;
+  ReaderV2Location? _speechStartLocation;
 
+  @override
   bool get isPlaying => _tts.isPlaying;
+
+  @override
   double get rate => _tts.rate;
+
+  @override
   double get pitch => _tts.pitch;
+
   String? get language => _tts.language;
-  ReaderLocation? get speechStartLocation => _speechStartLocation;
+  ReaderV2Location? get speechStartLocation => _speechStartLocation;
 
   ReaderTtsHighlight? get currentHighlight {
     final start = _speechStartLocation;
@@ -39,10 +45,10 @@ class ReaderTtsController extends ChangeNotifier
     );
   }
 
-  ReaderLocation? get highlightLocation {
+  ReaderV2Location? get highlightLocation {
     final highlight = currentHighlight;
     if (highlight == null) return null;
-    return ReaderLocation(
+    return ReaderV2Location(
       chapterIndex: highlight.chapterIndex,
       charOffset: highlight.highlightStart,
     );
@@ -61,6 +67,7 @@ class ReaderTtsController extends ChangeNotifier
     notifyListeners();
   }
 
+  @override
   Future<void> toggle() async {
     if (_tts.isPlaying) {
       await _tts.pause();
@@ -82,7 +89,7 @@ class ReaderTtsController extends ChangeNotifier
         location.charOffset.clamp(0, content.displayText.length).toInt();
     final text = content.displayText.substring(safeOffset).trim();
     if (text.isEmpty) return;
-    _speechStartLocation = ReaderLocation(
+    _speechStartLocation = ReaderV2Location(
       chapterIndex: location.chapterIndex,
       charOffset: safeOffset,
     );
@@ -90,12 +97,14 @@ class ReaderTtsController extends ChangeNotifier
     notifyListeners();
   }
 
+  @override
   Future<void> stop() async {
     _speechStartLocation = null;
     await _tts.stop();
     notifyListeners();
   }
 
+  @override
   Future<void> setRate(double value) async {
     await _tts.setRate(value);
     final prefs = await SharedPreferences.getInstance();
@@ -103,6 +112,7 @@ class ReaderTtsController extends ChangeNotifier
     notifyListeners();
   }
 
+  @override
   Future<void> setPitch(double value) async {
     await _tts.setPitch(value);
     final prefs = await SharedPreferences.getInstance();

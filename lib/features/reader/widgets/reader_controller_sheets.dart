@@ -9,6 +9,17 @@ import 'package:inkpage_reader/features/reader/widgets/settings/setting_componen
 import 'package:inkpage_reader/shared/theme/app_theme.dart';
 import 'package:inkpage_reader/shared/widgets/app_bottom_sheet.dart';
 
+abstract class ReaderTtsSheetController extends Listenable {
+  bool get isPlaying;
+  double get rate;
+  double get pitch;
+
+  Future<void> toggle();
+  Future<void> stop();
+  Future<void> setRate(double value);
+  Future<void> setPitch(double value);
+}
+
 class ReaderControllerSheets {
   const ReaderControllerSheets._();
 
@@ -36,7 +47,7 @@ class ReaderControllerSheets {
 
   static void showTts(
     BuildContext context, {
-    required ReaderTtsController tts,
+    required ReaderTtsSheetController tts,
     required ReaderSettingsController settings,
   }) {
     showModalBottomSheet(
@@ -432,7 +443,7 @@ class _ClickActionGrid extends StatelessWidget {
 class _ReaderTtsSheet extends StatelessWidget {
   const _ReaderTtsSheet({required this.tts, required this.settings});
 
-  final ReaderTtsController tts;
+  final ReaderTtsSheetController tts;
   final ReaderSettingsController settings;
 
   @override

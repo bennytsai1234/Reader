@@ -13,8 +13,8 @@ import 'package:inkpage_reader/core/services/export_book_service.dart';
 import 'package:inkpage_reader/core/storage/storage_metrics.dart';
 import 'package:inkpage_reader/features/source_manager/source_editor_page.dart';
 import 'package:inkpage_reader/features/source_manager/source_debug_page.dart';
-import 'package:inkpage_reader/features/reader/reader_page.dart';
-import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
+import 'package:inkpage_reader/features/reader_v2/engine/reader_v2_open_target.dart';
+import 'package:inkpage_reader/features/reader_v2/page/reader_v2_page.dart';
 
 import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
@@ -148,7 +148,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                                   () => _navigateToReader(
                                     context,
                                     currentBook,
-                                    ReaderOpenTarget.chapterStart(
+                                    ReaderV2OpenTarget.chapterStart(
                                       chapter.index,
                                     ),
                                     provider.allChapters,
@@ -877,14 +877,14 @@ class _BookDetailPageState extends State<BookDetailPage> {
   void _navigateToReader(
     BuildContext context,
     Book b,
-    ReaderOpenTarget openTarget,
+    ReaderV2OpenTarget openTarget,
     List<BookChapter> initialChapters,
   ) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder:
-            (_) => ReaderPage(
+            (_) => ReaderV2Page(
               book: b,
               openTarget: openTarget,
               initialChapters: initialChapters,

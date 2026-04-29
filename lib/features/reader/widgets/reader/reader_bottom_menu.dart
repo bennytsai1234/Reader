@@ -50,6 +50,10 @@ class ReaderBottomMenu extends StatelessWidget {
     required this.onScrubStart,
     required this.onScrubbing,
     required this.onScrubEnd,
+    this.showTts = true,
+    this.showAutoPage = true,
+    this.showSearch = true,
+    this.showReplaceRule = true,
   });
 
   final bool controlsVisible;
@@ -73,6 +77,10 @@ class ReaderBottomMenu extends StatelessWidget {
   final VoidCallback onScrubStart;
   final ValueChanged<int> onScrubbing;
   final ValueChanged<int> onScrubEnd;
+  final bool showTts;
+  final bool showAutoPage;
+  final bool showSearch;
+  final bool showReplaceRule;
 
   @override
   Widget build(BuildContext context) {
@@ -131,37 +139,42 @@ class ReaderBottomMenu extends StatelessWidget {
   }
 
   Widget _buildFloatingButtons(ReaderMenuStyle menuStyle) {
+    final actions = <Widget>[
+      if (showSearch)
+        _floatingFab(
+          icon: Icons.search,
+          tooltip: '搜尋',
+          onTap: onSearch,
+          menuStyle: menuStyle,
+        ),
+      if (showAutoPage)
+        _floatingFab(
+          icon: Icons.auto_stories_outlined,
+          tooltip: isAutoPaging ? '停止自動翻頁' : '開始自動翻頁',
+          onTap: onAutoPage,
+          menuStyle: menuStyle,
+          active: isAutoPaging,
+        ),
+      if (showReplaceRule)
+        _floatingFab(
+          icon: Icons.find_replace,
+          tooltip: '替換規則',
+          onTap: onReplaceRule,
+          menuStyle: menuStyle,
+        ),
+      _floatingFab(
+        icon: dayNightIcon,
+        tooltip: dayNightTooltip,
+        onTap: onToggleDayNight,
+        menuStyle: menuStyle,
+      ),
+    ];
+    if (actions.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _floatingFab(
-            icon: Icons.search,
-            tooltip: '搜尋',
-            onTap: onSearch,
-            menuStyle: menuStyle,
-          ),
-          _floatingFab(
-            icon: Icons.auto_stories_outlined,
-            tooltip: isAutoPaging ? '停止自動翻頁' : '開始自動翻頁',
-            onTap: onAutoPage,
-            menuStyle: menuStyle,
-            active: isAutoPaging,
-          ),
-          _floatingFab(
-            icon: Icons.find_replace,
-            tooltip: '替換規則',
-            onTap: onReplaceRule,
-            menuStyle: menuStyle,
-          ),
-          _floatingFab(
-            icon: dayNightIcon,
-            tooltip: dayNightTooltip,
-            onTap: onToggleDayNight,
-            menuStyle: menuStyle,
-          ),
-        ],
+        children: actions,
       ),
     );
   }
@@ -287,14 +300,15 @@ class ReaderBottomMenu extends StatelessWidget {
   }
 
   Widget _buildMainActions(ReaderMenuStyle menuStyle) {
+    final actions = <Widget>[
+      _menuIcon(Icons.list, '目錄', onOpenDrawer, menuStyle),
+      if (showTts) _menuIcon(Icons.record_voice_over, '朗讀', onTts, menuStyle),
+      _menuIcon(Icons.color_lens, '介面', onInterface, menuStyle),
+      _menuIcon(Icons.settings, '設定', onSettings, menuStyle),
+    ];
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _menuIcon(Icons.list, '目錄', onOpenDrawer, menuStyle),
-        _menuIcon(Icons.record_voice_over, '朗讀', onTts, menuStyle),
-        _menuIcon(Icons.color_lens, '介面', onInterface, menuStyle),
-        _menuIcon(Icons.settings, '設定', onSettings, menuStyle),
-      ],
+      children: actions,
     );
   }
 

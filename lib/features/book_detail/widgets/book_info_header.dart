@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:inkpage_reader/core/models/book.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/widgets/book_cover_widget.dart';
-import 'package:inkpage_reader/features/reader/runtime/models/reader_open_target.dart';
+import 'package:inkpage_reader/features/reader_v2/engine/reader_v2_open_target.dart';
 import '../book_detail_provider.dart';
 
 class BookInfoHeader extends StatelessWidget {
@@ -11,7 +11,7 @@ class BookInfoHeader extends StatelessWidget {
   final Function(BuildContext, String) showPhotoView;
   final VoidCallback onEdit;
   final Function(BuildContext, Book) showSourceOptions;
-  final void Function(BuildContext, Book, ReaderOpenTarget, List<BookChapter>)
+  final void Function(BuildContext, Book, ReaderV2OpenTarget, List<BookChapter>)
   navigateToReader;
   final Function(BuildContext, BookDetailProvider) showChangeSource;
   final Future<void> Function(BuildContext, BookDetailProvider) toggleBookshelf;
@@ -113,7 +113,7 @@ class BookInfoHeader extends StatelessWidget {
                               () => navigateToReader(
                                 context,
                                 book,
-                                ReaderOpenTarget.resume(book),
+                                ReaderV2OpenTarget.resume(book),
                                 provider.allChapters,
                               ),
                           style: actionButtonStyle,

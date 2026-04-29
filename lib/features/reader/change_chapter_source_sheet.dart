@@ -11,8 +11,8 @@ import 'package:inkpage_reader/shared/widgets/app_bottom_sheet.dart';
 import 'source/change_source_provider.dart';
 import 'widgets/change_source_filter_bar.dart';
 import 'widgets/change_source_item.dart';
-import 'reader_page.dart';
-import 'runtime/models/reader_open_target.dart';
+import 'package:inkpage_reader/features/reader_v2/engine/reader_v2_open_target.dart';
+import 'package:inkpage_reader/features/reader_v2/page/reader_v2_page.dart';
 
 class ChangeChapterSourceSheet extends StatefulWidget {
   const ChangeChapterSourceSheet({
@@ -372,9 +372,9 @@ class _ChangeChapterSourceSheetState extends State<ChangeChapterSourceSheet> {
                   nav.pushReplacement(
                     MaterialPageRoute(
                       builder:
-                          (_) => ReaderPage(
+                          (_) => ReaderV2Page(
                             book: newBook,
-                            openTarget: ReaderOpenTarget.resume(newBook),
+                            openTarget: ReaderV2OpenTarget.resume(newBook),
                           ),
                     ),
                   );
