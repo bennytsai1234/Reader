@@ -843,6 +843,25 @@ void main() {
       },
     );
 
+    test('flushProgress persists visible location without capture', () async {
+      final env = _RuntimeEnv();
+      final runtime = env.runtime;
+      await runtime.openBook();
+
+      expect(runtime.moveToNextPage(), isTrue);
+      final visible = runtime.state.visibleLocation;
+
+      expect(await runtime.saveProgress(), isNull);
+      expect(env.bookDao.writes, 0);
+
+      final saved = await runtime.flushProgress();
+
+      expect(saved, visible);
+      expect(runtime.state.committedLocation, visible);
+      expect(env.bookDao.writes, 1);
+      expect(env.bookDao.lastLocation, visible);
+    });
+
     test(
       'restoreFromLocation normalizes and updates visible location without DB write',
       () async {

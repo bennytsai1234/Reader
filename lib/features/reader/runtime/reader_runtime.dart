@@ -780,7 +780,11 @@ class ReaderRuntime extends ChangeNotifier {
     unawaited(_saveProgressLocation(location));
   }
 
-  Future<ReaderLocation?> flushProgress() => saveProgress();
+  Future<ReaderLocation?> flushProgress() {
+    if (_restoreInProgress) return Future<ReaderLocation?>.value();
+    final location = captureVisibleLocation() ?? state.visibleLocation;
+    return _saveProgressLocation(location);
+  }
 
   ReaderLocation? _normalizeCapturedLocation(ReaderLocation? location) {
     if (location == null) return null;
