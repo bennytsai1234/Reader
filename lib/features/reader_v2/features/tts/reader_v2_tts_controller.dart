@@ -9,15 +9,92 @@ import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_location.dar
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+abstract class ReaderV2TtsEngine extends ChangeNotifier {
+  bool get isPlaying;
+  double get rate;
+  double get pitch;
+  String? get language;
+  String get currentSpokenText;
+  int get currentWordStart;
+  int get currentWordEnd;
+
+  Future<void> speak(String text);
+  Future<void> stop();
+  Future<void> pause();
+  Future<void> resume();
+  Future<void> setRate(double value);
+  Future<void> setPitch(double value);
+  Future<void> setLanguage(String value);
+}
+
+class ReaderV2SystemTtsEngine extends ReaderV2TtsEngine {
+  ReaderV2SystemTtsEngine({TTSService? service})
+    : _service = service ?? TTSService() {
+    _service.addListener(notifyListeners);
+  }
+
+  final TTSService _service;
+
+  @override
+  bool get isPlaying => _service.isPlaying;
+
+  @override
+  double get rate => _service.rate;
+
+  @override
+  double get pitch => _service.pitch;
+
+  @override
+  String? get language => _service.language;
+
+  @override
+  String get currentSpokenText => _service.currentSpokenText;
+
+  @override
+  int get currentWordStart => _service.currentWordStart;
+
+  @override
+  int get currentWordEnd => _service.currentWordEnd;
+
+  @override
+  Future<void> speak(String text) => _service.speak(text);
+
+  @override
+  Future<void> stop() => _service.stop();
+
+  @override
+  Future<void> pause() => _service.pause();
+
+  @override
+  Future<void> resume() => _service.resume();
+
+  @override
+  Future<void> setRate(double value) => _service.setRate(value);
+
+  @override
+  Future<void> setPitch(double value) => _service.setPitch(value);
+
+  @override
+  Future<void> setLanguage(String value) => _service.setLanguage(value);
+
+  @override
+  void dispose() {
+    _service.removeListener(notifyListeners);
+    super.dispose();
+  }
+}
+
 class ReaderV2TtsController extends ChangeNotifier
     implements ReaderV2TtsSheetController {
-  ReaderV2TtsController({required this.runtime, TTSService? tts})
-    : _tts = tts ?? TTSService() {
+  ReaderV2TtsController({required this.runtime, ReaderV2TtsEngine? tts})
+    : _tts = tts ?? ReaderV2SystemTtsEngine(),
+      _ownsTtsEngine = tts == null {
     _tts.addListener(_handleTtsChanged);
   }
 
   final ReaderV2Runtime runtime;
-  final TTSService _tts;
+  final ReaderV2TtsEngine _tts;
+  final bool _ownsTtsEngine;
   ReaderV2Location? _speechStartLocation;
 
   @override
@@ -135,6 +212,7 @@ class ReaderV2TtsController extends ChangeNotifier
   void dispose() {
     _tts.removeListener(_handleTtsChanged);
     unawaited(_tts.stop());
+    if (_ownsTtsEngine) _tts.dispose();
     super.dispose();
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
@@ -8,9 +10,15 @@ import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/features/reader_v2/content/reader_v2_chapter_repository.dart';
 import 'package:inkpage_reader/features/reader_v2/content/reader_v2_content.dart';
+import 'package:inkpage_reader/features/reader_v2/features/auto_page/reader_v2_auto_page_controller.dart';
+import 'package:inkpage_reader/features/reader_v2/features/tts/reader_v2_tts_controller.dart';
+import 'package:inkpage_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
 import 'package:inkpage_reader/features/reader_v2/layout/reader_v2_layout_engine.dart';
 import 'package:inkpage_reader/features/reader_v2/layout/reader_v2_layout_spec.dart';
 import 'package:inkpage_reader/features/reader_v2/layout/reader_v2_style.dart';
+import 'package:inkpage_reader/features/reader_v2/render/reader_v2_page_cache.dart';
+import 'package:inkpage_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:inkpage_reader/features/reader_v2/render/reader_v2_tts_highlight_overlay_layer.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_location.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
@@ -288,6 +296,225 @@ void main() {
 
     runtime.dispose();
   });
+
+  testWidgets('slide viewport serializes rapid page commands', (tester) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.slide,
+      chapterCount: 1,
+      paragraphsPerChapter: 80,
+    );
+    final layout = await runtime.debugResolver.ensureLayout(0);
+    expect(layout.pages.length, greaterThan(2));
+    final controller = ReaderV2ViewportController();
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: SlideReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final first = controller.moveToNextPage!();
+    final second = controller.moveToNextPage!();
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(runtime.state.pageWindow?.current.pageIndex, 2);
+
+    runtime.dispose();
+  });
+
+  test(
+    'auto page uses scroll animateBy and ignores overlapping ticks',
+    () async {
+      final runtime = _runtime(
+        initialMode: ReaderV2Mode.scroll,
+        chapterCount: 2,
+        paragraphsPerChapter: 20,
+      );
+      await runtime.jumpToLocation(
+        const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+        immediateSave: false,
+      );
+      final gate = Completer<bool>();
+      var animateCalls = 0;
+      var scrollCalls = 0;
+      final viewportController =
+          ReaderV2ViewportController()
+            ..animateBy = (delta) {
+              animateCalls += 1;
+              expect(delta, greaterThan(0));
+              return gate.future;
+            }
+            ..scrollBy = (delta) async {
+              scrollCalls += 1;
+              return true;
+            };
+      final autoPage = ReaderV2AutoPageController(
+        runtime: runtime,
+        viewportController: viewportController,
+        viewportExtent: () => 400,
+      );
+
+      final first = autoPage.stepAsync();
+      final second = await autoPage.stepAsync();
+      expect(second, isFalse);
+      expect(animateCalls, 1);
+      expect(scrollCalls, 0);
+
+      gate.complete(true);
+      expect(await first, isTrue);
+
+      autoPage.dispose();
+      runtime.dispose();
+    },
+  );
+
+  test('auto page uses slide moveToNextPage command', () async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.slide,
+      chapterCount: 2,
+      paragraphsPerChapter: 20,
+    );
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+    var pageCommands = 0;
+    final viewportController =
+        ReaderV2ViewportController()
+          ..moveToNextPage = () async {
+            pageCommands += 1;
+            return true;
+          };
+    final autoPage = ReaderV2AutoPageController(
+      runtime: runtime,
+      viewportController: viewportController,
+    );
+
+    expect(await autoPage.stepAsync(), isTrue);
+    expect(pageCommands, 1);
+
+    autoPage.dispose();
+    runtime.dispose();
+  });
+
+  test(
+    'tts starts from visible location and supports pause resume stop',
+    () async {
+      final runtime = _runtime(
+        initialMode: ReaderV2Mode.scroll,
+        chapterCount: 1,
+        paragraphsPerChapter: 4,
+      );
+      await runtime.jumpToLocation(
+        const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+        immediateSave: false,
+      );
+      final engine = _FakeTtsEngine();
+      final tts = ReaderV2TtsController(runtime: runtime, tts: engine);
+
+      await tts.startFromVisibleLocation();
+      expect(engine.speakCount, 1);
+      expect(engine.currentSpokenText, isNotEmpty);
+      expect(tts.isPlaying, isTrue);
+      expect(tts.speechStartLocation?.chapterIndex, 0);
+
+      engine.emitProgress(2, 5);
+      expect(tts.currentHighlight?.highlightStart, 2);
+      expect(tts.currentHighlight?.highlightEnd, 5);
+
+      await tts.toggle();
+      expect(engine.pauseCount, 1);
+      expect(tts.isPlaying, isFalse);
+
+      await tts.toggle();
+      expect(engine.resumeCount, 1);
+      expect(tts.isPlaying, isTrue);
+
+      await tts.stop();
+      expect(tts.speechStartLocation, isNull);
+      expect(tts.currentHighlight, isNull);
+
+      tts.dispose();
+      runtime.dispose();
+    },
+  );
+
+  test('tts highlight overlay repaints only affected tiles', () {
+    final tile = ReaderV2PageCacheFactory.fromRenderPage(
+      ReaderV2RenderPage(
+        pageIndex: 0,
+        chapterIndex: 0,
+        chapterSize: 1,
+        pageSize: 1,
+        contentHeight: 80,
+        viewportHeight: 100,
+        localStartY: 0,
+        localEndY: 80,
+        lines: <ReaderV2RenderLine>[
+          ReaderV2RenderLine(
+            text: '0123456789',
+            width: 120,
+            lineTop: 0,
+            lineBottom: 20,
+            startCharOffset: 0,
+            endCharOffset: 10,
+          ),
+        ],
+      ),
+    );
+    ReaderV2TtsHighlightOverlayPainter painter(ReaderV2TtsHighlight highlight) {
+      return ReaderV2TtsHighlightOverlayPainter(
+        tile: tile,
+        style: _style(),
+        textColor: Colors.black,
+        highlight: highlight,
+      );
+    }
+
+    final oldUnrelated = painter(
+      const ReaderV2TtsHighlight(
+        chapterIndex: 1,
+        highlightStart: 0,
+        highlightEnd: 1,
+      ),
+    );
+    final newUnrelated = painter(
+      const ReaderV2TtsHighlight(
+        chapterIndex: 0,
+        highlightStart: 20,
+        highlightEnd: 22,
+      ),
+    );
+    final newAffected = painter(
+      const ReaderV2TtsHighlight(
+        chapterIndex: 0,
+        highlightStart: 2,
+        highlightEnd: 5,
+      ),
+    );
+
+    expect(newUnrelated.shouldRepaint(oldUnrelated), isFalse);
+    expect(newAffected.shouldRepaint(oldUnrelated), isTrue);
+  });
 }
 
 Future<void> _pumpViewport(WidgetTester tester) async {
@@ -423,6 +650,99 @@ class _FakeChapterDao extends Fake implements ChapterDao {
 class _FakeSourceDao extends Fake implements BookSourceDao {
   @override
   Future<BookSource?> getByUrl(String url) async => null;
+}
+
+class _FakeTtsEngine extends ReaderV2TtsEngine {
+  bool _isPlaying = false;
+  double _rate = 1.0;
+  double _pitch = 1.0;
+  String? _language = 'zh-TW';
+  String _currentSpokenText = '';
+  int _currentWordStart = -1;
+  int _currentWordEnd = -1;
+  int speakCount = 0;
+  int pauseCount = 0;
+  int resumeCount = 0;
+  int stopCount = 0;
+
+  @override
+  bool get isPlaying => _isPlaying;
+
+  @override
+  double get rate => _rate;
+
+  @override
+  double get pitch => _pitch;
+
+  @override
+  String? get language => _language;
+
+  @override
+  String get currentSpokenText => _currentSpokenText;
+
+  @override
+  int get currentWordStart => _currentWordStart;
+
+  @override
+  int get currentWordEnd => _currentWordEnd;
+
+  @override
+  Future<void> speak(String text) async {
+    speakCount += 1;
+    _currentSpokenText = text;
+    _currentWordStart = -1;
+    _currentWordEnd = -1;
+    _isPlaying = true;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> pause() async {
+    pauseCount += 1;
+    _isPlaying = false;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> resume() async {
+    resumeCount += 1;
+    _isPlaying = true;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount += 1;
+    _currentSpokenText = '';
+    _currentWordStart = -1;
+    _currentWordEnd = -1;
+    _isPlaying = false;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> setRate(double value) async {
+    _rate = value;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> setPitch(double value) async {
+    _pitch = value;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> setLanguage(String value) async {
+    _language = value;
+    notifyListeners();
+  }
+
+  void emitProgress(int start, int end) {
+    _currentWordStart = start;
+    _currentWordEnd = end;
+    notifyListeners();
+  }
 }
 
 class _FailingChapterRepository extends ReaderV2ChapterRepository {

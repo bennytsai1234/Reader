@@ -28,8 +28,10 @@ class ReaderV2ChapterSegment {
 class ReaderV2InfiniteSegmentStrip {
   final Map<int, ReaderV2ChapterSegment> _segments =
       <int, ReaderV2ChapterSegment>{};
+  int _revision = 0;
 
   bool get isEmpty => _segments.isEmpty;
+  int get revision => _revision;
 
   bool containsChapter(int chapterIndex) {
     return _segments.containsKey(chapterIndex);
@@ -52,11 +54,19 @@ class ReaderV2InfiniteSegmentStrip {
     required double startY,
     required double height,
   }) {
-    _segments[chapterIndex] = ReaderV2ChapterSegment(
+    final next = ReaderV2ChapterSegment(
       chapterIndex: chapterIndex,
       startY: startY,
       height: height,
     );
+    final previous = _segments[next.chapterIndex];
+    if (previous != null &&
+        previous.startY == next.startY &&
+        previous.height == next.height) {
+      return;
+    }
+    _segments[next.chapterIndex] = next;
+    _revision += 1;
   }
 
   double placeCenterIfAbsent({
@@ -79,13 +89,17 @@ class ReaderV2InfiniteSegmentStrip {
   }
 
   void retain(Set<int> retained) {
+    final before = _segments.length;
     _segments.removeWhere(
       (chapterIndex, _) => !retained.contains(chapterIndex),
     );
+    if (_segments.length != before) _revision += 1;
   }
 
   void clear() {
+    if (_segments.isEmpty) return;
     _segments.clear();
+    _revision += 1;
   }
 
   ({double min, double max})? scrollBounds({

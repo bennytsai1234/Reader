@@ -57,9 +57,14 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
   int _windowRequestId = 0;
   double _readingY = 0.0;
   double _lastAnimationValue = 0.0;
+  final ValueNotifier<double> _scrollOffset = ValueNotifier<double>(0.0);
   bool _initialJumpCompleted = false;
   bool _isDragging = false;
   bool _capturingVisibleLocation = false;
+  bool _visibleLocationCaptureFramePending = false;
+  bool _shiftWindowAgainRequested = false;
+  Future<void>? _shiftWindowTask;
+  Future<void> _viewportCommandTail = Future<void>.value();
 
   @override
   void initState() {
@@ -136,6 +141,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     _scrollAnimation
       ..removeListener(_handleScrollAnimationTick)
       ..dispose();
+    _scrollOffset.dispose();
     super.dispose();
   }
 
@@ -164,7 +170,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     _windowRequestId += 1;
     _lastSyncedLocation = null;
     _currentChapterIndex = null;
-    _readingY = 0.0;
+    _setReadingY(0.0);
     _lastAnimationValue = 0.0;
     _initialJumpCompleted = false;
   }
@@ -232,13 +238,10 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     return visualHeight.clamp(minHeight, fullHeight).toDouble();
   }
 
-  double _forwardWindowExtent() {
-    return _viewportHeight() + _anchorOffsetInViewport();
-  }
+  double _forwardWindowExtent() =>
+      _viewportHeight() * 1.5 + _anchorOffsetInViewport();
 
-  double _backwardWindowExtent() {
-    return _viewportHeight();
-  }
+  double _backwardWindowExtent() => _viewportHeight() * 1.25;
 
   int _safeChapterIndex(int chapterIndex) {
     final chapterCount = widget.runtime.chapterCount;
@@ -341,7 +344,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
 
     final target = _readingYForLocation(location);
     if (target != null) {
-      _readingY = _clampReadingY(target);
+      _setReadingY(_clampReadingY(target));
     }
     _initialJumpCompleted = true;
     _lastSyncedLocation = location;
@@ -398,7 +401,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     if (!stillCurrent()) return false;
     final target = _readingYForLocation(location);
     if (target == null) return false;
-    _readingY = _clampReadingY(target);
+    _setReadingY(_clampReadingY(target));
     _initialJumpCompleted = true;
     _lastSyncedLocation = location;
     _lastReportedLocation = location;
@@ -422,14 +425,53 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     if (delta == 0 || !_visiblePages.hasPages) return false;
     final nextReadingY = _clampReadingY(_readingY + delta);
     if ((nextReadingY - _readingY).abs() < 0.01) {
-      if (scheduleShift) unawaited(_shiftWindowForAnchor());
+      if (scheduleShift) unawaited(_requestShiftWindowForAnchor());
       return false;
     }
-    _readingY = nextReadingY;
-    _captureAndReportVisibleLocation();
-    if (scheduleShift) unawaited(_shiftWindowForAnchor());
-    if (mounted) setState(() {});
+    _setReadingY(nextReadingY);
+    _scheduleVisibleLocationCapture();
+    if (scheduleShift) unawaited(_requestShiftWindowForAnchor());
     return true;
+  }
+
+  void _setReadingY(double value) {
+    _readingY = value;
+    if (_scrollOffset.value != value) {
+      _scrollOffset.value = value;
+    }
+  }
+
+  void _scheduleVisibleLocationCapture() {
+    if (_visibleLocationCaptureFramePending) return;
+    _visibleLocationCaptureFramePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibleLocationCaptureFramePending = false;
+      if (!mounted) return;
+      _captureAndReportVisibleLocation();
+    });
+  }
+
+  Future<void> _requestShiftWindowForAnchor() {
+    final existing = _shiftWindowTask;
+    if (existing != null) {
+      _shiftWindowAgainRequested = true;
+      return existing;
+    }
+    final task = _runCoalescedWindowShift();
+    _shiftWindowTask = task;
+    task.whenComplete(() {
+      if (identical(_shiftWindowTask, task)) {
+        _shiftWindowTask = null;
+      }
+    });
+    return task;
+  }
+
+  Future<void> _runCoalescedWindowShift() async {
+    do {
+      _shiftWindowAgainRequested = false;
+      await _shiftWindowForAnchor();
+    } while (mounted && _shiftWindowAgainRequested);
   }
 
   Future<void> _shiftWindowForAnchor() async {
@@ -537,20 +579,47 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     );
   }
 
-  Future<bool> _scrollBy(double delta) async {
+  Future<bool> _scrollBy(double delta) {
+    return _enqueueViewportCommand(() => _scrollByNow(delta));
+  }
+
+  Future<bool> _scrollByNow(double delta) async {
     if (!mounted || delta == 0 || !_visiblePages.hasPages) return false;
     _scrollAnimation.stop();
     _isDragging = false;
     final moved = _applyReadingDelta(delta, scheduleShift: false);
     if (!moved) return false;
-    await _shiftWindowForAnchor();
+    await _requestShiftWindowForAnchor();
     await _handleScrollSettled();
     return mounted;
   }
 
   Future<bool> _animateBy(double delta) {
+    return _enqueueViewportCommand(() => _animateByNow(delta));
+  }
+
+  Future<bool> _animateByNow(double delta) {
     if (delta == 0) return Future<bool>.value(false);
     return _animateToReadingY(_readingY + delta);
+  }
+
+  Future<bool> _enqueueViewportCommand(Future<bool> Function() command) {
+    if (!mounted) return Future<bool>.value(false);
+    final completer = Completer<bool>();
+    _viewportCommandTail = _viewportCommandTail
+        .catchError((_) {})
+        .then((_) async {
+          if (!mounted) return false;
+          return command();
+        })
+        .then(
+          completer.complete,
+          onError: (Object error, StackTrace stackTrace) {
+            if (!completer.isCompleted)
+              completer.completeError(error, stackTrace);
+          },
+        );
+    return completer.future;
   }
 
   Future<bool> _animateToReadingY(double target) async {
@@ -576,12 +645,26 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     if (!mounted) return false;
     final moved = (_readingY - start).abs() >= 0.01;
     if (!moved) return false;
-    await _shiftWindowForAnchor();
+    await _requestShiftWindowForAnchor();
     await _handleScrollSettled();
     return mounted;
   }
 
   Future<bool> _ensureCharRangeVisible({
+    required int chapterIndex,
+    required int startCharOffset,
+    required int endCharOffset,
+  }) {
+    return _enqueueViewportCommand(
+      () => _ensureCharRangeVisibleNow(
+        chapterIndex: chapterIndex,
+        startCharOffset: startCharOffset,
+        endCharOffset: endCharOffset,
+      ),
+    );
+  }
+
+  Future<bool> _ensureCharRangeVisibleNow({
     required int chapterIndex,
     required int startCharOffset,
     required int endCharOffset,
@@ -681,12 +764,40 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
 
   Widget _buildCanvas() {
     final viewportHeight = _viewportHeight();
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapUp: widget.onTapUp,
+      onVerticalDragStart: _handleDragStart,
+      onVerticalDragUpdate: _handleDragUpdate,
+      onVerticalDragEnd: _handleDragEnd,
+      onVerticalDragCancel: _handleDragCancel,
+      child: ColoredBox(
+        color: widget.backgroundColor,
+        child: ClipRect(
+          child: ValueListenableBuilder<double>(
+            valueListenable: _scrollOffset,
+            builder: (context, readingY, _) {
+              return _buildVisiblePageStack(
+                readingY: readingY,
+                viewportHeight: viewportHeight,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisiblePageStack({
+    required double readingY,
+    required double viewportHeight,
+  }) {
     final children = <Widget>[];
     for (final placement in _visiblePages.visiblePages(
-      readingY: _readingY,
+      readingY: readingY,
       viewportHeight: viewportHeight,
     )) {
-      final screenY = placement.screenY(_readingY);
+      final screenY = placement.screenY(readingY);
       final pageHeight = placement.extent;
       children.add(
         Positioned(
@@ -718,18 +829,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       );
     }
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapUp: widget.onTapUp,
-      onVerticalDragStart: _handleDragStart,
-      onVerticalDragUpdate: _handleDragUpdate,
-      onVerticalDragEnd: _handleDragEnd,
-      onVerticalDragCancel: _handleDragCancel,
-      child: ColoredBox(
-        color: widget.backgroundColor,
-        child: ClipRect(child: Stack(fit: StackFit.expand, children: children)),
-      ),
-    );
+    return Stack(fit: StackFit.expand, children: children);
   }
 
   @override

@@ -12,11 +12,15 @@ class ReaderV2CachedChapterPages {
     required List<double> pageExtents,
   }) : pages = List<ReaderV2PageCache>.unmodifiable(pages),
        pageExtents = List<double>.unmodifiable(pageExtents),
+       pagePrefixOffsets = List<double>.unmodifiable(
+         _prefixOffsets(pageExtents),
+       ),
        extent = _visualExtent(pageExtents);
 
   final ReaderV2ChapterView layout;
   final List<ReaderV2PageCache> pages;
   final List<double> pageExtents;
+  final List<double> pagePrefixOffsets;
   final double extent;
 
   int get chapterIndex => layout.chapterIndex;
@@ -34,19 +38,29 @@ class ReaderV2CachedChapterPages {
 
   double? pageOffsetTop(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= pages.length) return null;
+    return pagePrefixOffsets[pageIndex];
+  }
+
+  static List<double> _prefixOffsets(List<double> pageExtents) {
+    final offsets = <double>[];
     var top = 0.0;
-    for (var index = 0; index < pageIndex; index++) {
-      top += pageExtentAt(index);
+    for (final extent in pageExtents) {
+      offsets.add(top);
+      top += _normalPageExtent(extent);
     }
-    return top;
+    return offsets;
   }
 
   static double _visualExtent(List<double> pageExtents) {
     final extent = pageExtents.fold<double>(
       0.0,
-      (total, pageExtent) => total + pageExtent,
+      (total, pageExtent) => total + _normalPageExtent(pageExtent),
     );
     return extent <= 0 ? 1.0 : extent;
+  }
+
+  static double _normalPageExtent(double extent) {
+    return extent.isFinite && extent > 0 ? extent : 1.0;
   }
 }
 
@@ -83,10 +97,12 @@ class ReaderV2ChapterPageCacheManager {
       <int, Future<ReaderV2CachedChapterPages>>{};
   final Set<int> _evictedChapters = <int>{};
   int _cacheGeneration = 0;
+  int _revision = 0;
   String? _lastInvalidationReason;
 
   bool get hasChapters => _chapters.isNotEmpty;
   int get cacheGeneration => _cacheGeneration;
+  int get revision => _revision;
   String? get lastInvalidationReason => _lastInvalidationReason;
 
   bool containsChapter(int chapterIndex) => _chapters.containsKey(chapterIndex);
@@ -117,6 +133,7 @@ class ReaderV2ChapterPageCacheManager {
         return null;
       }
       _chapters[safeIndex] = loaded;
+      _bumpRevision();
       return loaded;
     } catch (_) {
       return null;
@@ -223,6 +240,7 @@ class ReaderV2ChapterPageCacheManager {
         evicted.add(chapterIndex);
       }
     }
+    final hadEvictions = evicted.isNotEmpty;
     _evictedChapters
       ..addAll(evicted)
       ..removeWhere(retainedSafeIndexes.contains);
@@ -232,6 +250,7 @@ class ReaderV2ChapterPageCacheManager {
     _inFlightLoads.removeWhere(
       (chapterIndex, _) => !retainedSafeIndexes.contains(chapterIndex),
     );
+    if (hadEvictions) _bumpRevision();
     runtime.debugResolver.retainLayoutsFor(retainedSafeIndexes);
   }
 
@@ -257,6 +276,7 @@ class ReaderV2ChapterPageCacheManager {
 
   void invalidateAll({String? reason}) {
     _cacheGeneration += 1;
+    _bumpRevision();
     _lastInvalidationReason = reason;
     _chapters.clear();
     _inFlightLoads.clear();
@@ -280,6 +300,10 @@ class ReaderV2ChapterPageCacheManager {
   double _normalExtent(double extent) {
     if (!extent.isFinite || extent <= 0) return 1.0;
     return extent;
+  }
+
+  void _bumpRevision() {
+    _revision += 1;
   }
 
   Future<ReaderV2CachedChapterPages> _loadChapter(int chapterIndex) {

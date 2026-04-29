@@ -22,7 +22,7 @@ class ReaderV2VisiblePage {
 }
 
 class ReaderV2VisiblePageCalculator {
-  const ReaderV2VisiblePageCalculator({
+  ReaderV2VisiblePageCalculator({
     required ReaderV2ChapterPageCacheManager cacheManager,
     required ReaderV2InfiniteSegmentStrip strip,
   }) : _cacheManager = cacheManager,
@@ -30,32 +30,48 @@ class ReaderV2VisiblePageCalculator {
 
   final ReaderV2ChapterPageCacheManager _cacheManager;
   final ReaderV2InfiniteSegmentStrip _strip;
+  List<ReaderV2VisiblePage>? _cachedAllPages;
+  int? _cachedCacheRevision;
+  int? _cachedStripRevision;
 
   bool get hasPages => allPages().isNotEmpty;
 
   List<ReaderV2VisiblePage> allPages() {
+    final cacheRevision = _cacheManager.revision;
+    final stripRevision = _strip.revision;
+    final cached = _cachedAllPages;
+    if (cached != null &&
+        _cachedCacheRevision == cacheRevision &&
+        _cachedStripRevision == stripRevision) {
+      return cached;
+    }
+
     final placements = <ReaderV2VisiblePage>[];
     for (final chapterIndex in _cacheManager.chapterIndexes()) {
       final chapter = _cacheManager.chapterAt(chapterIndex);
       final chapterTop = _strip.chapterTop(chapterIndex);
       if (chapter == null || chapterTop == null) continue;
-      var pageTop = chapterTop;
       for (var pageIndex = 0; pageIndex < chapter.pages.length; pageIndex++) {
         final page = chapter.pages[pageIndex];
         final extent = chapter.pageExtentAt(pageIndex);
+        final pageOffset = chapter.pageOffsetTop(pageIndex);
+        if (pageOffset == null) continue;
         placements.add(
           ReaderV2VisiblePage(
             layout: chapter.layout,
             page: page,
-            worldTop: pageTop,
+            worldTop: chapterTop + pageOffset,
             extent: extent,
           ),
         );
-        pageTop += extent;
       }
     }
     placements.sort((a, b) => a.worldTop.compareTo(b.worldTop));
-    return placements;
+    final result = List<ReaderV2VisiblePage>.unmodifiable(placements);
+    _cachedAllPages = result;
+    _cachedCacheRevision = cacheRevision;
+    _cachedStripRevision = stripRevision;
+    return result;
   }
 
   List<ReaderV2VisiblePage> visiblePages({

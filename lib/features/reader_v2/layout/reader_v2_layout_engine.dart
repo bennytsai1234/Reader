@@ -4,9 +4,36 @@ import 'package:inkpage_reader/features/reader_v2/content/reader_v2_content.dart
 import 'reader_v2_layout.dart';
 import 'reader_v2_layout_spec.dart';
 
+typedef ReaderV2LayoutStatsObserver =
+    void Function(ReaderV2LayoutEngineStats stats);
+
+class ReaderV2LayoutEngineStats {
+  const ReaderV2LayoutEngineStats({
+    required this.chapterIndex,
+    required this.elapsed,
+    required this.lineLayoutPasses,
+    required this.widthMeasurePasses,
+    required this.fittingFallbacks,
+    required this.fittingBinarySearchPasses,
+    required this.lineCount,
+    required this.pageCount,
+  });
+
+  final int chapterIndex;
+  final Duration elapsed;
+  final int lineLayoutPasses;
+  final int widthMeasurePasses;
+  final int fittingFallbacks;
+  final int fittingBinarySearchPasses;
+  final int lineCount;
+  final int pageCount;
+}
+
 class ReaderV2LayoutEngine {
   static const String _lineStartForbidden = '。，、：；！？）》」』〉】〗;:!?)]}>';
   static const String _lineEndForbidden = '（《「『〈【〖([{<';
+  static ReaderV2LayoutEngineStats? debugLastStats;
+  static ReaderV2LayoutStatsObserver? debugOnStats;
 
   /// Reusable TextPainter for measuring line widths to reduce GC pressure.
   final TextPainter _measurePainter = TextPainter(
@@ -22,10 +49,17 @@ class ReaderV2LayoutEngine {
     maxLines: 1,
   );
 
+  int _lineLayoutPasses = 0;
+  int _widthMeasurePasses = 0;
+  int _fittingFallbacks = 0;
+  int _fittingBinarySearchPasses = 0;
+
   ReaderV2ChapterLayout layout(
     ReaderV2Content content,
     ReaderV2LayoutSpec spec,
   ) {
+    _resetStats();
+    final stopwatch = Stopwatch()..start();
     final lines = <ReaderV2TextLine>[];
     var y = 0.0;
 
@@ -73,7 +107,7 @@ class ReaderV2LayoutEngine {
     }
 
     final pages = _paginate(lines: lines, spec: spec, content: content);
-    return ReaderV2ChapterLayout(
+    final layout = ReaderV2ChapterLayout(
       chapterIndex: content.chapterIndex,
       displayText: content.displayText,
       contentHash: content.contentHash,
@@ -82,6 +116,40 @@ class ReaderV2LayoutEngine {
       pages: List<ReaderV2PageSlice>.unmodifiable(pages),
       contentHeight: lines.isEmpty ? 0.0 : lines.last.bottom,
     );
+    _publishStats(
+      chapterIndex: content.chapterIndex,
+      elapsed: stopwatch.elapsed,
+      lineCount: lines.length,
+      pageCount: pages.length,
+    );
+    return layout;
+  }
+
+  void _resetStats() {
+    _lineLayoutPasses = 0;
+    _widthMeasurePasses = 0;
+    _fittingFallbacks = 0;
+    _fittingBinarySearchPasses = 0;
+  }
+
+  void _publishStats({
+    required int chapterIndex,
+    required Duration elapsed,
+    required int lineCount,
+    required int pageCount,
+  }) {
+    final stats = ReaderV2LayoutEngineStats(
+      chapterIndex: chapterIndex,
+      elapsed: elapsed,
+      lineLayoutPasses: _lineLayoutPasses,
+      widthMeasurePasses: _widthMeasurePasses,
+      fittingFallbacks: _fittingFallbacks,
+      fittingBinarySearchPasses: _fittingBinarySearchPasses,
+      lineCount: lineCount,
+      pageCount: pageCount,
+    );
+    debugLastStats = stats;
+    debugOnStats?.call(stats);
   }
 
   TextStyle _contentTextStyle(ReaderV2LayoutSpec spec) {
@@ -199,6 +267,7 @@ class ReaderV2LayoutEngine {
     while (localStart < laidOutText.length) {
       final remaining = laidOutText.substring(localStart);
       painter.text = TextSpan(text: remaining, style: style);
+      _lineLayoutPasses += 1;
       painter.layout(maxWidth: maxWidth);
       final metrics = painter.computeLineMetrics();
       if (metrics.isEmpty) break;
@@ -328,16 +397,23 @@ class ReaderV2LayoutEngine {
     required TextStyle style,
     required double maxWidth,
   }) {
-    final clusters = text.characters.toList(growable: false);
-    if (clusters.isEmpty) return 0;
+    _fittingFallbacks += 1;
+    final clusterEndOffsets = <int>[];
+    var cursor = 0;
+    for (final cluster in text.characters) {
+      cursor += cluster.length;
+      clusterEndOffsets.add(cursor);
+    }
+    if (clusterEndOffsets.isEmpty) return 0;
     var low = 1;
-    var high = clusters.length;
+    var high = clusterEndOffsets.length;
     var best = 1;
 
     while (low <= high) {
       final mid = (low + high) >> 1;
-      final candidate = clusters.take(mid).join();
+      final candidate = text.substring(0, clusterEndOffsets[mid - 1]);
       _fitPainter.text = TextSpan(text: candidate, style: style);
+      _fittingBinarySearchPasses += 1;
       _fitPainter.layout(maxWidth: double.infinity);
       if (_fitPainter.width <= maxWidth) {
         best = mid;
@@ -346,12 +422,13 @@ class ReaderV2LayoutEngine {
         high = mid - 1;
       }
     }
-    return clusters.take(best).join().length;
+    return clusterEndOffsets[best - 1];
   }
 
   double _measureLineWidth(String text, TextStyle style) {
     if (text.isEmpty) return 0;
     _measurePainter.text = TextSpan(text: text, style: style);
+    _widthMeasurePasses += 1;
     _measurePainter.layout(maxWidth: double.infinity);
     return _measurePainter.width;
   }

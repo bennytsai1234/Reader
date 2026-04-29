@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/reader_v2/render/reader_v2_page_cache.dart';
 import 'package:inkpage_reader/features/reader_v2/layout/reader_v2_style.dart';
@@ -45,10 +47,14 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
   double _dragDx = 0;
   double _rawDragDx = 0;
   double _lastAnimationValue = 0;
+  double _lastViewportWidth = 0;
   int _pendingDirection = 0;
   int _warmedDragDirection = 0;
   bool _postFrameCapturePending = false;
   bool _pageTurnInProgress = false;
+  bool _dragActive = false;
+  final ValueNotifier<double> _dragOffset = ValueNotifier<double>(0.0);
+  Future<void> _pageCommandTail = Future<void>.value();
 
   @override
   void initState() {
@@ -97,6 +103,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     widget.runtime.unregisterVisibleLocationCapture(this);
     widget.runtime.unregisterViewportRestore(this);
     _detachController(widget.controller);
+    _dragOffset.dispose();
     _slideController.dispose();
     super.dispose();
   }
@@ -144,10 +151,16 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     final delta = current - _lastAnimationValue;
     _lastAnimationValue = current;
     if (delta == 0) return;
-    setState(() {
-      _dragDx += delta;
-      _rawDragDx = _dragDx;
-    });
+    final nextDx = _dragDx + delta;
+    _setDragOffsets(nextDx, rawDx: nextDx);
+  }
+
+  void _setDragOffsets(double dx, {double? rawDx}) {
+    _dragDx = dx;
+    _rawDragDx = rawDx ?? dx;
+    if (_dragOffset.value != dx) {
+      _dragOffset.value = dx;
+    }
   }
 
   void _resetViewport() {
@@ -157,8 +170,10 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     _pendingDirection = 0;
     _warmedDragDirection = 0;
     _pageTurnInProgress = false;
+    _dragActive = false;
     _dragDx = 0;
     _rawDragDx = 0;
+    _dragOffset.value = 0;
   }
 
   bool _canMoveBackward(ReaderV2PageWindow window) {
@@ -202,28 +217,65 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     return true;
   }
 
-  Future<bool> _moveToNextPage() {
-    return _animateToAdjacentPage(forward: true);
+  Future<bool> _moveToNextPage() =>
+      _enqueuePageCommand(() => _animateToAdjacentPage(forward: true));
+
+  Future<bool> _moveToPrevPage() =>
+      _enqueuePageCommand(() => _animateToAdjacentPage(forward: false));
+
+  Future<bool> _enqueuePageCommand(Future<bool> Function() command) {
+    if (!mounted) return Future<bool>.value(false);
+    final completer = Completer<bool>();
+    _pageCommandTail = _pageCommandTail
+        .catchError((_) {})
+        .then((_) async {
+          await _waitForSlideIdle();
+          if (!mounted) return false;
+          return command();
+        })
+        .then(
+          completer.complete,
+          onError: (Object error, StackTrace stackTrace) {
+            if (!completer.isCompleted)
+              completer.completeError(error, stackTrace);
+          },
+        );
+    return completer.future;
   }
 
-  Future<bool> _moveToPrevPage() {
-    return _animateToAdjacentPage(forward: false);
+  Future<void> _waitForSlideIdle() async {
+    while (mounted &&
+        (_dragActive || _pageTurnInProgress || _slideController.isAnimating)) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
   }
 
   Future<bool> _animateToAdjacentPage({required bool forward}) async {
     if (!mounted) return false;
-    if (_pageTurnInProgress || _slideController.isAnimating) return false;
+    if (_pageTurnInProgress || _slideController.isAnimating || _dragActive) {
+      return false;
+    }
     widget.runtime.preloadSlideNeighbor(forward: forward);
-    final width = context.size?.width ?? 0.0;
+    final width = _commandViewportWidth();
     if (!width.isFinite || width <= 0) {
       return widget.runtime.moveSlidePageAndSettle(forward: forward);
     }
-    final window = widget.runtime.state.pageWindow;
-    final neighbor =
+    var window = widget.runtime.state.pageWindow;
+    var neighbor =
         window == null ? null : (forward ? window.next : window.prev);
     if (neighbor == null) return false;
     if (neighbor.isPlaceholder) {
-      return widget.runtime.moveSlidePageAndSettle(forward: forward);
+      final ready = await widget.runtime.ensureSlideNeighborReady(
+        forward: forward,
+      );
+      if (!mounted) return false;
+      window = widget.runtime.state.pageWindow;
+      neighbor = window == null ? null : (forward ? window.next : window.prev);
+      if (neighbor == null) return false;
+      if (neighbor.isPlaceholder || !ready) {
+        widget.runtime.moveSlidePageAndSettle(forward: forward);
+        return false;
+      }
     }
     _pageTurnInProgress = true;
     try {
@@ -236,6 +288,14 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     }
   }
 
+  double _commandViewportWidth() {
+    if (_lastViewportWidth.isFinite && _lastViewportWidth > 0) {
+      return _lastViewportWidth;
+    }
+    final specWidth = widget.runtime.state.layoutSpec.viewportSize.width;
+    return specWidth.isFinite && specWidth > 0 ? specWidth : 0.0;
+  }
+
   void _finalizeAnimation(double target) {
     if (!mounted) return;
     final direction = _pendingDirection;
@@ -243,18 +303,16 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
         direction == 0
             ? false
             : widget.runtime.moveSlidePageAndSettle(forward: direction > 0);
-    setState(() {
-      _slideController.value = 0;
-      _lastAnimationValue = 0;
-      _dragDx = 0;
-      _rawDragDx = 0;
-      _pendingDirection = 0;
-    });
+    _slideController.value = 0;
+    _lastAnimationValue = 0;
+    _pendingDirection = 0;
+    _setDragOffsets(0, rawDx: 0);
     if (target != 0 && moved) return;
   }
 
   void _handleDragStart(DragStartDetails details) {
     if (_pageTurnInProgress) return;
+    _dragActive = true;
     _slideController.stop();
     _slideController.value = 0;
     _lastAnimationValue = 0;
@@ -271,10 +329,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     if (nextRawDx.abs() >= _dragWarmupDistance) {
       _warmSlideNeighbor(forward: nextRawDx < 0);
     }
-    setState(() {
-      _rawDragDx = nextRawDx;
-      _dragDx = _boundaryAdjustedDx(_rawDragDx, window);
-    });
+    _setDragOffsets(_boundaryAdjustedDx(nextRawDx, window), rawDx: nextRawDx);
   }
 
   void _warmSlideNeighbor({required bool forward}) {
@@ -286,6 +341,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
 
   void _handleDragEnd(DragEndDetails details, double width) {
     if (_pageTurnInProgress) return;
+    _dragActive = false;
     if (width <= 0) {
       _resetViewport();
       return;
@@ -403,6 +459,20 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     required int chapterIndex,
     required int startCharOffset,
     required int endCharOffset,
+  }) {
+    return _enqueuePageCommand(
+      () => _ensureCharRangeVisibleNow(
+        chapterIndex: chapterIndex,
+        startCharOffset: startCharOffset,
+        endCharOffset: endCharOffset,
+      ),
+    );
+  }
+
+  Future<bool> _ensureCharRangeVisibleNow({
+    required int chapterIndex,
+    required int startCharOffset,
+    required int endCharOffset,
   }) async {
     if (!mounted || widget.runtime.chapterCount <= 0) return false;
     final safeChapterIndex =
@@ -443,10 +513,50 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
         charOffset: safeTargetOffset,
       );
     }
+    final warmed = await _warmAdjacentTtsTarget(chapterIndex: safeChapterIndex);
+    if (warmed && mounted) {
+      final refreshedWindow = widget.runtime.state.pageWindow;
+      if (refreshedWindow != null) {
+        if (_pageContainsChar(
+          refreshedWindow.next,
+          chapterIndex: safeChapterIndex,
+          charOffset: safeTargetOffset,
+        )) {
+          return _moveToAdjacentTtsPage(
+            forward: true,
+            chapterIndex: safeChapterIndex,
+            charOffset: safeTargetOffset,
+          );
+        }
+        if (_pageContainsChar(
+          refreshedWindow.prev,
+          chapterIndex: safeChapterIndex,
+          charOffset: safeTargetOffset,
+        )) {
+          return _moveToAdjacentTtsPage(
+            forward: false,
+            chapterIndex: safeChapterIndex,
+            charOffset: safeTargetOffset,
+          );
+        }
+      }
+    }
     return _jumpToTtsPage(
       chapterIndex: safeChapterIndex,
       charOffset: safeTargetOffset,
     );
+  }
+
+  Future<bool> _warmAdjacentTtsTarget({required int chapterIndex}) async {
+    final current = widget.runtime.state.pageWindow?.current;
+    if (current == null || current.isPlaceholder) return false;
+    if (chapterIndex == current.chapterIndex + 1) {
+      return widget.runtime.ensureSlideNeighborReady(forward: true);
+    }
+    if (chapterIndex == current.chapterIndex - 1) {
+      return widget.runtime.ensureSlideNeighborReady(forward: false);
+    }
+    return false;
   }
 
   bool _pageContainsChar(
@@ -525,9 +635,10 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
   double _screenXFor({
     required int pageSlot,
     required double width,
+    required double dragDx,
     ReaderV2SlidePagePlacement? placement,
   }) {
-    final pageOffsetX = -_dragDx;
+    final pageOffsetX = -dragDx;
     return placement?.screenX(pageOffsetX) ?? width * pageSlot - pageOffsetX;
   }
 
@@ -576,6 +687,9 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
+        if (width.isFinite && width > 0) {
+          _lastViewportWidth = width;
+        }
         final height =
             constraints.maxHeight.isFinite && constraints.maxHeight > 0
                 ? constraints.maxHeight
@@ -621,46 +735,62 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
           child: ColoredBox(
             color: widget.backgroundColor,
             child: ClipRect(
-              child: Stack(
-                children: [
-                  Transform.translate(
-                    offset: Offset(
-                      _screenXFor(
-                        pageSlot: -1,
-                        width: width,
-                        placement: prevPlacement,
+              child: ValueListenableBuilder<double>(
+                valueListenable: _dragOffset,
+                builder: (context, dragDx, _) {
+                  return Stack(
+                    children: [
+                      Transform.translate(
+                        offset: Offset(
+                          _screenXFor(
+                            pageSlot: -1,
+                            width: width,
+                            dragDx: dragDx,
+                            placement: prevPlacement,
+                          ),
+                          0,
+                        ),
+                        child: SizedBox(
+                          width: width,
+                          height: height,
+                          child: prev,
+                        ),
                       ),
-                      0,
-                    ),
-                    child: SizedBox(width: width, height: height, child: prev),
-                  ),
-                  Transform.translate(
-                    offset: Offset(
-                      _screenXFor(
-                        pageSlot: 0,
-                        width: width,
-                        placement: currentPlacement,
+                      Transform.translate(
+                        offset: Offset(
+                          _screenXFor(
+                            pageSlot: 0,
+                            width: width,
+                            dragDx: dragDx,
+                            placement: currentPlacement,
+                          ),
+                          0,
+                        ),
+                        child: SizedBox(
+                          width: width,
+                          height: height,
+                          child: current,
+                        ),
                       ),
-                      0,
-                    ),
-                    child: SizedBox(
-                      width: width,
-                      height: height,
-                      child: current,
-                    ),
-                  ),
-                  Transform.translate(
-                    offset: Offset(
-                      _screenXFor(
-                        pageSlot: 1,
-                        width: width,
-                        placement: nextPlacement,
+                      Transform.translate(
+                        offset: Offset(
+                          _screenXFor(
+                            pageSlot: 1,
+                            width: width,
+                            dragDx: dragDx,
+                            placement: nextPlacement,
+                          ),
+                          0,
+                        ),
+                        child: SizedBox(
+                          width: width,
+                          height: height,
+                          child: next,
+                        ),
                       ),
-                      0,
-                    ),
-                    child: SizedBox(width: width, height: height, child: next),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           ),

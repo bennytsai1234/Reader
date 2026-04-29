@@ -119,9 +119,19 @@ class ReaderV2TtsHighlightOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ReaderV2TtsHighlightOverlayPainter oldDelegate) {
-    return oldDelegate.tile != tile ||
+    if (oldDelegate.tile != tile ||
         oldDelegate.style != style ||
-        oldDelegate.textColor != textColor ||
-        oldDelegate.highlight != highlight;
+        oldDelegate.textColor != textColor) {
+      return true;
+    }
+    return _highlightAffectsTile(oldDelegate.highlight) ||
+        _highlightAffectsTile(highlight);
+  }
+
+  bool _highlightAffectsTile(ReaderV2TtsHighlight? value) {
+    return value != null &&
+        value.isValid &&
+        value.chapterIndex == tile.chapterIndex &&
+        tile.intersectsCharRange(value.highlightStart, value.highlightEnd);
   }
 }

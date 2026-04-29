@@ -84,5 +84,33 @@ void main() {
         expect(small.contentHeight, large.contentHeight);
       },
     );
+
+    test('publishes fitting stats for profile validation', () {
+      final observed = <ReaderV2LayoutEngineStats>[];
+      ReaderV2LayoutEngine.debugLastStats = null;
+      ReaderV2LayoutEngine.debugOnStats = observed.add;
+      addTearDown(() => ReaderV2LayoutEngine.debugOnStats = null);
+
+      final content = ReaderV2Content.fromRaw(
+        chapterIndex: 4,
+        title: '統計測試',
+        rawText: List<String>.filled(
+          6,
+          '這是一段用來觸發排版統計的長文字，包含中文、punctuation，以及 emoji 😀 測試。',
+        ).join('\n\n'),
+      );
+      final layout = ReaderV2LayoutEngine().layout(content, spec());
+      final stats = ReaderV2LayoutEngine.debugLastStats;
+
+      expect(observed, hasLength(1));
+      expect(stats, isNotNull);
+      expect(stats!.chapterIndex, 4);
+      expect(stats.lineCount, layout.lines.length);
+      expect(stats.pageCount, layout.pages.length);
+      expect(stats.lineLayoutPasses, greaterThan(0));
+      expect(stats.widthMeasurePasses, greaterThan(0));
+      expect(stats.fittingFallbacks, greaterThanOrEqualTo(0));
+      expect(stats.fittingBinarySearchPasses, greaterThanOrEqualTo(0));
+    });
   });
 }

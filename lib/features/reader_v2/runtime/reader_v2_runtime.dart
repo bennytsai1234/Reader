@@ -513,11 +513,7 @@ class ReaderV2Runtime extends ChangeNotifier {
     final neighbor = forward ? window.next : window.prev;
     if (neighbor == null) return;
     if (neighbor.isPlaceholder) {
-      _scheduleNeighborPreloadFrom(
-        chapterIndex: current.chapterIndex,
-        forward: forward,
-        refreshAfter: true,
-      );
+      unawaited(ensureSlideNeighborReady(forward: forward));
       return;
     }
     final nearCurrentBoundary = _isNearChapterBoundary(
@@ -529,10 +525,48 @@ class ReaderV2Runtime extends ChangeNotifier {
       forward: forward,
     );
     if (!nearCurrentBoundary && !nearNeighborBoundary) return;
-    _scheduleNeighborPreloadFrom(
+    unawaited(
+      _scheduleNeighborPreloadFrom(
+        chapterIndex: current.chapterIndex,
+        forward: forward,
+      ),
+    );
+  }
+
+  Future<bool> ensureSlideNeighborReady({required bool forward}) async {
+    if (state.mode != ReaderV2Mode.slide) return false;
+    final window = state.pageWindow;
+    if (window == null) return false;
+    final current = window.current;
+    if (current.isPlaceholder) return false;
+    final neighbor = forward ? window.next : window.prev;
+    if (neighbor == null) return false;
+    if (!neighbor.isPlaceholder) return true;
+
+    final origin = _resolver.addressOf(current);
+    await _scheduleNeighborPreloadFrom(
       chapterIndex: current.chapterIndex,
       forward: forward,
     );
+    if (_disposed || state.mode != ReaderV2Mode.slide) return false;
+    final latestWindow = state.pageWindow;
+    if (latestWindow == null ||
+        !_samePageAddress(_resolver.addressOf(latestWindow.current), origin)) {
+      return false;
+    }
+    await refreshNeighbors();
+    if (_disposed || state.mode != ReaderV2Mode.slide) return false;
+    final refreshedWindow = state.pageWindow;
+    if (refreshedWindow == null ||
+        !_samePageAddress(
+          _resolver.addressOf(refreshedWindow.current),
+          origin,
+        )) {
+      return false;
+    }
+    final refreshedNeighbor =
+        forward ? refreshedWindow.next : refreshedWindow.prev;
+    return refreshedNeighbor != null && !refreshedNeighbor.isPlaceholder;
   }
 
   void settleCurrentSlidePage({ReaderV2Location? settledLocation}) {
@@ -850,30 +884,31 @@ class ReaderV2Runtime extends ChangeNotifier {
   void _scheduleMissingNeighborPreload({required bool forward}) {
     final window = state.pageWindow;
     if (window == null) return;
-    _scheduleNeighborPreloadFrom(
-      chapterIndex: window.current.chapterIndex,
-      forward: forward,
-      refreshAfter: true,
+    unawaited(
+      _scheduleNeighborPreloadFrom(
+        chapterIndex: window.current.chapterIndex,
+        forward: forward,
+        refreshAfter: true,
+      ),
     );
   }
 
-  void _scheduleNeighborPreloadFrom({
+  Future<void> _scheduleNeighborPreloadFrom({
     required int chapterIndex,
     required bool forward,
     bool refreshAfter = false,
   }) {
     final target = chapterIndex + (forward ? 1 : -1);
-    if (target < 0 || target >= _repository.chapterCount) return;
+    if (target < 0 || target >= _repository.chapterCount) {
+      return Future<void>.value();
+    }
     final preload = _preloadScheduler.scheduleLayout(target, priority: true);
     if (!refreshAfter) {
-      unawaited(preload);
-      return;
+      return preload;
     }
-    unawaited(
-      preload.whenComplete(() {
-        if (!_disposed) unawaited(refreshNeighbors());
-      }),
-    );
+    return preload.whenComplete(() {
+      if (!_disposed) unawaited(refreshNeighbors());
+    });
   }
 
   bool _isNearChapterBoundary(
