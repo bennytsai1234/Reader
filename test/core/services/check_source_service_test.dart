@@ -43,6 +43,10 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
   BookChapter? contentRequestChapter;
   String? capturedNextChapterUrl;
   String? capturedExploreUrl;
+  int infoRequestCount = 0;
+  int chapterRequestCount = 0;
+  int contentRequestCount = 0;
+  int? capturedChapterLimit;
   int? capturedChapterPageConcurrency;
   int? capturedContentPageConcurrency;
 
@@ -68,7 +72,12 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
   }
 
   @override
-  Future<Book> getBookInfo(BookSource source, Book book) async {
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    dynamic cancelToken,
+  }) async {
+    infoRequestCount++;
     infoRequestBook = book;
     return hydratedBook ?? book;
   }
@@ -79,8 +88,11 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     Book book, {
     int? chapterLimit,
     int? pageConcurrency,
+    dynamic cancelToken,
   }) async {
+    chapterRequestCount++;
     chapterRequestBook = book;
+    capturedChapterLimit = chapterLimit;
     capturedChapterPageConcurrency = pageConcurrency;
     return chapters;
   }
@@ -92,10 +104,12 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     BookChapter chapter, {
     String? nextChapterUrl,
     int? pageConcurrency,
+    dynamic cancelToken,
   }) async {
     if (contentError != null) {
       throw contentError!;
     }
+    contentRequestCount++;
     contentRequestBook = book;
     contentRequestChapter = chapter;
     capturedNextChapterUrl = nextChapterUrl;
@@ -199,6 +213,7 @@ void main() {
       );
       expect(fakeService.capturedChapterPageConcurrency, 1);
       expect(fakeService.capturedContentPageConcurrency, 1);
+      expect(fakeService.capturedChapterLimit, 8);
 
       final saved = fakeDao.store[source.bookSourceUrl]!;
       expect(saved.bookSourceGroup?.contains('搜尋失效') ?? false, isFalse);
@@ -208,6 +223,73 @@ void main() {
       expect(saved.respondTime, greaterThanOrEqualTo(0));
       expect(service.progressOf(source.bookSourceUrl)?.message, '校驗成功');
       expect(service.progressOf(source.bookSourceUrl)?.isFinal, isTrue);
+    },
+  );
+
+  test(
+    'standard check uses search for deep validation and discovery for list only',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'source://standard',
+        bookSourceName: '標準校驗源',
+        searchUrl: '/search?key={{key}}',
+        exploreUrl: '玄幻::/explore',
+      );
+
+      final fakeDao =
+          _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+      final fakeService =
+          _FakeBookSourceService()
+            ..searchResults = [
+              SearchBook(
+                bookUrl: 'https://example.com/book/standard',
+                name: '標準測試書',
+                author: '作者甲',
+                origin: source.bookSourceUrl,
+                originName: source.bookSourceName,
+              ),
+            ]
+            ..exploreResults = [
+              SearchBook(
+                bookUrl: 'https://example.com/book/explore-standard',
+                name: '發現測試書',
+                author: '作者乙',
+                origin: source.bookSourceUrl,
+                originName: source.bookSourceName,
+              ),
+            ]
+            ..hydratedBook = Book(
+              bookUrl: 'https://example.com/book/standard',
+              tocUrl: 'https://example.com/book/standard/catalog',
+              origin: source.bookSourceUrl,
+              originName: source.bookSourceName,
+              name: '標準測試書',
+              author: '作者甲',
+            )
+            ..chapters = [
+              BookChapter(
+                title: '第1章 開始',
+                url: 'https://example.com/book/standard/1.html',
+                bookUrl: 'https://example.com/book/standard',
+              ),
+            ]
+            ..content = '這是一段足夠長的正文內容，肯定超過十個字。';
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+
+      await service.check([source.bookSourceUrl]);
+
+      expect(fakeService.capturedExploreUrl, '/explore');
+      expect(fakeService.infoRequestCount, 1);
+      expect(fakeService.chapterRequestCount, 1);
+      expect(fakeService.contentRequestCount, 1);
+      expect(
+        fakeDao.store[source.bookSourceUrl]!.runtimeHealth.category,
+        SourceHealthCategory.healthy,
+      );
     },
   );
 

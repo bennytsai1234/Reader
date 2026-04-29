@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:inkpage_reader/core/constant/prefer_key.dart';
@@ -242,6 +243,7 @@ extension on _SourceCheckMode {
 /// 讓來源管理、搜尋池與執行期策略共用同一套狀態。
 class CheckSourceService extends ChangeNotifier {
   static const int _validationPageConcurrency = 1;
+  static const int _validationChapterLimit = 8;
   static const int _sourceCheckConcurrency = 6;
   static const Duration _notifyThrottleInterval = Duration(milliseconds: 120);
   final BookSourceService _service;
@@ -397,6 +399,21 @@ class CheckSourceService extends ChangeNotifier {
     );
   }
 
+  Future<T> _runWithCancelOnTimeout<T>({
+    required Future<T> Function(CancelToken cancelToken) action,
+    required Duration timeout,
+    required String timeoutMessage,
+  }) {
+    final cancelToken = CancelToken();
+    return action(cancelToken).timeout(
+      timeout,
+      onTimeout: () {
+        cancelToken.cancel(timeoutMessage);
+        throw TimeoutException(timeoutMessage, timeout);
+      },
+    );
+  }
+
   Future<SourceCheckEntry?> _recordSourceTimeout(
     String url,
     SourceCheckConfig config,
@@ -517,7 +534,12 @@ class CheckSourceService extends ChangeNotifier {
     }
 
     if (config.checkDiscovery) {
-      await _runDiscoveryCheck(source, config, issues);
+      await _runDiscoveryCheck(
+        source,
+        config,
+        issues,
+        runBookFlow: !config.checkSearch,
+      );
       if (_shouldIgnoreSourceUpdate(url)) return null;
     } else {
       _appendLog('  ≡ 跳過發現檢查', sourceUrl: url);
@@ -602,9 +624,16 @@ class CheckSourceService extends ChangeNotifier {
     );
     _appendLog('  ◇ 測試搜尋: $searchWord', sourceUrl: source.bookSourceUrl);
     try {
-      final searchResults = await _service
-          .searchBooks(source, searchWord)
-          .timeout(config.timeoutDuration);
+      final searchResults = await _runWithCancelOnTimeout(
+        timeout: config.timeoutDuration,
+        timeoutMessage: '搜尋超時',
+        action:
+            (cancelToken) => _service.searchBooks(
+              source,
+              searchWord,
+              cancelToken: cancelToken,
+            ),
+      );
       if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       if (searchResults.isEmpty) {
         _recordIssue(
@@ -667,8 +696,9 @@ class CheckSourceService extends ChangeNotifier {
   Future<void> _runDiscoveryCheck(
     BookSource source,
     SourceCheckConfig config,
-    List<_SourceCheckIssue> issues,
-  ) async {
+    List<_SourceCheckIssue> issues, {
+    required bool runBookFlow,
+  }) async {
     final exploreUrl = source.exploreUrl?.trim() ?? '';
     if (exploreUrl.isEmpty) {
       _appendLog('  ≡ 跳過發現檢查: 未配置發現網址', sourceUrl: source.bookSourceUrl);
@@ -718,17 +748,25 @@ class CheckSourceService extends ChangeNotifier {
         );
         return;
       }
+      final discoveryUrl = targetUrl;
 
       _setSourceProgress(
         source,
-        '發現: $targetUrl',
+        '發現: $discoveryUrl',
         isFinal: false,
         hasIssue: false,
       );
-      _appendLog('  ◇ 測試發現: $targetUrl', sourceUrl: source.bookSourceUrl);
-      final books = await _service
-          .exploreBooks(source, targetUrl)
-          .timeout(config.timeoutDuration);
+      _appendLog('  ◇ 測試發現: $discoveryUrl', sourceUrl: source.bookSourceUrl);
+      final books = await _runWithCancelOnTimeout(
+        timeout: config.timeoutDuration,
+        timeoutMessage: '發現檢查超時',
+        action:
+            (cancelToken) => _service.exploreBooks(
+              source,
+              discoveryUrl,
+              cancelToken: cancelToken,
+            ),
+      );
       if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       if (books.isEmpty) {
         _recordIssue(
@@ -747,6 +785,14 @@ class CheckSourceService extends ChangeNotifier {
               quarantined: false,
             ),
           ),
+        );
+        return;
+      }
+
+      if (!runBookFlow) {
+        _appendLog(
+          '  ✓ 發現列表可用，standard 模式不重複詳情/目錄/正文',
+          sourceUrl: source.bookSourceUrl,
         );
         return;
       }
@@ -811,9 +857,13 @@ class CheckSourceService extends ChangeNotifier {
         '  ◇ 測試${mode.label}詳情: ${book.name}',
         sourceUrl: source.bookSourceUrl,
       );
-      book = await _service
-          .getBookInfo(source, book)
-          .timeout(config.timeoutDuration);
+      book = await _runWithCancelOnTimeout(
+        timeout: config.timeoutDuration,
+        timeoutMessage: '${mode.label}詳情檢查超時',
+        action:
+            (cancelToken) =>
+                _service.getBookInfo(source, book, cancelToken: cancelToken),
+      );
       if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       if (book.name.trim().isEmpty || book.bookUrl.trim().isEmpty) {
         _recordIssue(
@@ -870,13 +920,18 @@ class CheckSourceService extends ChangeNotifier {
         '  ◇ 測試${mode.label}目錄: ${book.name}',
         sourceUrl: source.bookSourceUrl,
       );
-      final chapters = await _service
-          .getChapterList(
-            source,
-            book,
-            pageConcurrency: _validationPageConcurrency,
-          )
-          .timeout(config.timeoutDuration);
+      final chapters = await _runWithCancelOnTimeout(
+        timeout: config.timeoutDuration,
+        timeoutMessage: '${mode.label}目錄檢查超時',
+        action:
+            (cancelToken) => _service.getChapterList(
+              source,
+              book,
+              chapterLimit: _validationChapterLimit,
+              pageConcurrency: _validationPageConcurrency,
+              cancelToken: cancelToken,
+            ),
+      );
       if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
       readableChapters =
           chapters.where((chapter) => !chapter.isVolume).toList();
@@ -979,15 +1034,19 @@ class CheckSourceService extends ChangeNotifier {
         '  ◇ 測試${mode.label}正文: ${firstChapter.title}',
         sourceUrl: source.bookSourceUrl,
       );
-      final content = await _service
-          .getContent(
-            source,
-            book,
-            firstChapter,
-            nextChapterUrl: nextChapterUrl,
-            pageConcurrency: _validationPageConcurrency,
-          )
-          .timeout(config.timeoutDuration);
+      final content = await _runWithCancelOnTimeout(
+        timeout: config.timeoutDuration,
+        timeoutMessage: '${mode.label}正文檢查超時',
+        action:
+            (cancelToken) => _service.getContent(
+              source,
+              book,
+              firstChapter,
+              nextChapterUrl: nextChapterUrl,
+              pageConcurrency: _validationPageConcurrency,
+              cancelToken: cancelToken,
+            ),
+      );
       if (_shouldIgnoreSourceUpdate(source.bookSourceUrl)) return;
 
       if (looksLikeLoginRequiredContent(content)) {

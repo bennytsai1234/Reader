@@ -16,8 +16,8 @@ class AppUpdateService {
   Future<UpdateInfo?> checkUpdate({bool isBeta = false}) async {
     try {
       final repoUrl = isBeta
-          ? 'https://api.github.com/repos/gedoor/legado/releases/tags/beta'
-          : 'https://api.github.com/repos/gedoor/legado/releases/latest';
+          ? 'https://api.github.com/repos/bennytsai1234/Reader/releases/tags/beta'
+          : 'https://api.github.com/repos/bennytsai1234/Reader/releases/latest';
 
       final response = await _dio.get(repoUrl);
       if (response.statusCode != 200) return null;
@@ -71,4 +71,3 @@ class UpdateInfo {
     required this.downloadUrl,
   });
 }
-

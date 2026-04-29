@@ -132,7 +132,11 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
   final List<BookChapter> chapterList;
 
   @override
-  Future<Book> getBookInfo(BookSource source, Book book) async => book;
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    dynamic cancelToken,
+  }) async => book;
 
   @override
   Future<List<BookChapter>> getChapterList(
@@ -140,6 +144,7 @@ class _FakeBookSourceService extends Fake implements BookSourceService {
     Book book, {
     int? chapterLimit,
     int? pageConcurrency,
+    dynamic cancelToken,
   }) async {
     return chapterList;
   }

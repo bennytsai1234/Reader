@@ -13,8 +13,16 @@ import 'package:inkpage_reader/core/services/bookshelf_exchange_service.dart';
 /// BookSourceService - 書源核心業務調度 (對標 Android model/webBook/WebBook.kt)
 class BookSourceService {
   /// 獲取書籍詳情 (對標 getBookInfoAwait)
-  Future<Book> getBookInfo(BookSource source, Book book) async {
-    return await WebBook.getBookInfoAwait(source, book);
+  Future<Book> getBookInfo(
+    BookSource source,
+    Book book, {
+    CancelToken? cancelToken,
+  }) async {
+    return await WebBook.getBookInfoAwait(
+      source,
+      book,
+      cancelToken: cancelToken,
+    );
   }
 
   /// 獲取目錄列表 (對標 getChapterListAwait)
@@ -23,12 +31,14 @@ class BookSourceService {
     Book book, {
     int? chapterLimit,
     int? pageConcurrency,
+    CancelToken? cancelToken,
   }) async {
     return await WebBook.getChapterListAwait(
       source,
       book,
       chapterLimit: chapterLimit,
       pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
     );
   }
 
@@ -39,6 +49,7 @@ class BookSourceService {
     BookChapter chapter, {
     String? nextChapterUrl,
     int? pageConcurrency,
+    CancelToken? cancelToken,
   }) async {
     return await WebBook.getContentAwait(
       source,
@@ -46,6 +57,7 @@ class BookSourceService {
       chapter,
       nextChapterUrl: nextChapterUrl,
       pageConcurrency: pageConcurrency,
+      cancelToken: cancelToken,
     );
   }
 

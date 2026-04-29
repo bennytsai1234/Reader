@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:inkpage_reader/core/database/dao/chapter_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
@@ -265,6 +266,7 @@ Future<SourceValidationResult> validateSourceFlow(
   BookSourceService service,
   BookSource source, {
   required int index,
+  CancelToken? cancelToken,
 }) async {
   if (!source.isNovelTextSource) {
     return SourceValidationResult(
@@ -305,7 +307,11 @@ Future<SourceValidationResult> validateSourceFlow(
 
   try {
     stage = 'keyword';
-    final searchSeed = await pickKeywordSeed(service, source);
+    final searchSeed = await pickKeywordSeed(
+      service,
+      source,
+      cancelToken: cancelToken,
+    );
     keyword = searchSeed.keyword;
 
     stage = 'search';
@@ -321,7 +327,11 @@ Future<SourceValidationResult> validateSourceFlow(
     selectedBook = matchedBook.toBook();
 
     stage = 'detail';
-    hydratedBook = await service.getBookInfo(source, selectedBook);
+    hydratedBook = await service.getBookInfo(
+      source,
+      selectedBook,
+      cancelToken: cancelToken,
+    );
     if (hydratedBook.name.trim().isEmpty) {
       throw StateError('詳情頁書名為空');
     }
@@ -335,6 +345,7 @@ Future<SourceValidationResult> validateSourceFlow(
       hydratedBook,
       chapterLimit: sourceValidationChapterLimit,
       pageConcurrency: validationPageConcurrency,
+      cancelToken: cancelToken,
     );
     readableChapters = chapters.where((chapter) => !chapter.isVolume).toList();
     if (readableChapters.isEmpty) {
@@ -358,6 +369,7 @@ Future<SourceValidationResult> validateSourceFlow(
         hydratedBook!,
         chapter,
         pageConcurrency: validationPageConcurrency,
+        cancelToken: cancelToken,
         nextChapterUrl:
             readableChapters.length > chapterIndex + 1
                 ? readableChapters[chapterIndex + 1].url
@@ -637,8 +649,9 @@ bool _sourceMarkedBrokenForStage(BookSource source, String stage) {
 
 Future<SearchKeywordSeed> pickKeywordSeed(
   BookSourceService service,
-  BookSource source,
-) async {
+  BookSource source, {
+  CancelToken? cancelToken,
+}) async {
   // Align batch validation with Legado's CheckSourceService:
   // use ruleSearch.checkKeyWord first, otherwise fall back to the global
   // default keyword instead of probing many derived candidates.
@@ -648,6 +661,7 @@ Future<SearchKeywordSeed> pickKeywordSeed(
     keyword,
     filter: (name, author) => _nameAuthorMatchesKeyword(name, author, keyword),
     shouldBreak: (size) => size >= 1,
+    cancelToken: cancelToken,
   );
   return SearchKeywordSeed(keyword: keyword, searchBooks: searchBooks);
 }

@@ -97,6 +97,7 @@ class WebBook {
     BookSource source,
     Book book, {
     bool canReName = true,
+    CancelToken? cancelToken,
   }) async {
     if (book.infoHtml != null && book.infoHtml!.isNotEmpty) {
       final parsed = await BookInfoParser.parse(
@@ -117,7 +118,7 @@ class WebBook {
       source: source,
       ruleData: book,
     );
-    var res = await analyzeUrl.getStrResponse();
+    var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res, ruleData: book);
     _checkRedirect(source, res);
     _checkLoginRequired(res, stage: 'detail');
@@ -142,6 +143,7 @@ class WebBook {
     Book book, {
     int? chapterLimit,
     int? pageConcurrency,
+    CancelToken? cancelToken,
   }) async {
     final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final rule = AnalyzeRule(source: source, ruleData: book);
@@ -160,6 +162,7 @@ class WebBook {
         source: source,
         book: book,
         initialUrl: initialUrl,
+        cancelToken: cancelToken,
       );
 
       final firstResult = await ChapterListParser.parse(
@@ -186,6 +189,7 @@ class WebBook {
             book,
             stage: 'toc',
             concurrency: effectivePageConcurrency,
+            cancelToken: cancelToken,
           );
           for (var i = 0; i < responses.length; i++) {
             if (chapterLimit != null && allChapters.length >= chapterLimit) {
@@ -199,7 +203,9 @@ class WebBook {
               body: res.body,
               baseUrl: res.url,
               maxChapters:
-                  chapterLimit == null ? null : chapterLimit - allChapters.length,
+                  chapterLimit == null
+                      ? null
+                      : chapterLimit - allChapters.length,
             );
             allChapters.addAll(pageResult.chapters);
             // 並發模式下忽略二級 nextUrls (對標 Android getNextPageUrl=false)
@@ -207,7 +213,9 @@ class WebBook {
         } else {
           // 單 nextUrl → daisy chain 循序抓取
           String? currentUrl =
-              firstResult.nextUrls.isNotEmpty ? firstResult.nextUrls.first : null;
+              firstResult.nextUrls.isNotEmpty
+                  ? firstResult.nextUrls.first
+                  : null;
           for (
             var pageNum = 1;
             pageNum < _maxTocPages && currentUrl != null;
@@ -223,7 +231,7 @@ class WebBook {
               source: source,
               ruleData: book,
             );
-            var res = await analyzeUrl.getStrResponse();
+            var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
             res = _runLoginCheckJs(source, res, ruleData: book);
             _checkRedirect(source, res);
             _checkLoginRequired(res, stage: 'toc');
@@ -320,6 +328,7 @@ class WebBook {
     BookChapter chapter, {
     String? nextChapterUrl,
     int? pageConcurrency,
+    CancelToken? cancelToken,
   }) async {
     final effectivePageConcurrency = pageConcurrency ?? _pageConcurrency;
     final contentParts = <String>[];
@@ -333,7 +342,9 @@ class WebBook {
       source: source,
       ruleData: book,
     );
-    var firstRes = await firstAnalyzeUrl.getStrResponse();
+    var firstRes = await firstAnalyzeUrl.getStrResponse(
+      cancelToken: cancelToken,
+    );
     firstRes = _runLoginCheckJs(source, firstRes, ruleData: book);
     _checkRedirect(source, firstRes);
     _checkLoginRequired(firstRes, stage: 'content');
@@ -364,6 +375,7 @@ class WebBook {
         book,
         stage: 'content',
         concurrency: effectivePageConcurrency,
+        cancelToken: cancelToken,
       );
       for (var i = 0; i < responses.length; i++) {
         final res = responses[i];
@@ -397,7 +409,7 @@ class WebBook {
           source: source,
           ruleData: book,
         );
-        var res = await analyzeUrl.getStrResponse();
+        var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
         res = _runLoginCheckJs(source, res, ruleData: book);
         _checkRedirect(source, res);
         _checkLoginRequired(res, stage: 'content');
@@ -496,6 +508,7 @@ class WebBook {
     Book book, {
     required String stage,
     int concurrency = _pageConcurrency,
+    CancelToken? cancelToken,
   }) async {
     if (urls.isEmpty) return const [];
     final sem = _Semaphore(concurrency);
@@ -508,7 +521,7 @@ class WebBook {
               source: source,
               ruleData: book,
             );
-            var res = await analyzeUrl.getStrResponse();
+            var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
             res = _runLoginCheckJs(source, res, ruleData: book);
             _checkRedirect(source, res);
             _checkLoginRequired(res, stage: stage);
@@ -527,6 +540,7 @@ class WebBook {
     required BookSource source,
     required Book book,
     required String initialUrl,
+    CancelToken? cancelToken,
   }) async {
     final cachedBody =
         (book.tocHtml != null && book.tocHtml!.isNotEmpty)
@@ -553,7 +567,7 @@ class WebBook {
       source: source,
       ruleData: book,
     );
-    var res = await analyzeUrl.getStrResponse();
+    var res = await analyzeUrl.getStrResponse(cancelToken: cancelToken);
     res = _runLoginCheckJs(source, res, ruleData: book);
     _checkRedirect(source, res);
     _checkLoginRequired(res, stage: 'toc');
