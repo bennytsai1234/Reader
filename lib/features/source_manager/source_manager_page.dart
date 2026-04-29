@@ -6,7 +6,6 @@ import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
-import 'qr_scan_page.dart';
 import 'source_group_manage_page.dart';
 import 'package:inkpage_reader/core/models/book_source_part.dart';
 import 'package:inkpage_reader/features/search/search_page.dart';
@@ -65,7 +64,6 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                   onImportUrl: () => _showImportDialog(context, true),
                   onImportFile: () => _importFromFile(context),
                   onImportClipboard: () => _importFromClipboard(context),
-                  onScanQr: () => _scanQrCode(context, provider),
                   onManageGroups:
                       () => nav.push(
                         MaterialPageRoute(
@@ -574,19 +572,6 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
             ],
           ),
     );
-  }
-
-  Future<void> _scanQrCode(
-    BuildContext context,
-    SourceManagerProvider p,
-  ) async {
-    final nav = Navigator.of(context);
-    final res = await nav.push(
-      MaterialPageRoute(builder: (ctx) => const QrScanPage()),
-    );
-    if (res != null && res.isNotEmpty) {
-      await p.importFromUrl(res);
-    }
   }
 
   Future<void> _importFromFile(BuildContext context) async {

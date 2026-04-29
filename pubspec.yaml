@@ -30,9 +30,6 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.5
 
-  # === Scanner ===
-  mobile_scanner: ^7.2.0
-
   # === Media / TTS ===
   flutter_tts: ^4.2.5
   audio_service: ^0.18.18

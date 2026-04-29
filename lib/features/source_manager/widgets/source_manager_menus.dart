@@ -82,7 +82,6 @@ class SourceManagerMenus {
     required VoidCallback onImportUrl,
     required VoidCallback onImportFile,
     required VoidCallback onImportClipboard,
-    required VoidCallback onScanQr,
     required VoidCallback onManageGroups,
     required VoidCallback onNewSource,
     required VoidCallback onCheckAllSources,
@@ -103,9 +102,6 @@ class SourceManagerMenus {
             break;
           case 'import_clipboard':
             onImportClipboard();
-            break;
-          case 'scan_qr':
-            onScanQr();
             break;
           case 'new_source':
             onNewSource();
@@ -135,7 +131,6 @@ class SourceManagerMenus {
             _buildItem('import_url', Icons.language, '網路匯入'),
             _buildItem('import_file', Icons.file_open_outlined, '本地匯入'),
             _buildItem('import_clipboard', Icons.content_paste, '剪貼簿匯入'),
-            _buildItem('scan_qr', Icons.qr_code_scanner, '掃碼匯入'),
             _buildItem('new_source', Icons.add_circle_outline, '新建書源'),
             _buildItem('manage_groups', Icons.edit_note_outlined, '管理分組'),
             const PopupMenuDivider(),
