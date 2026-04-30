@@ -6,11 +6,11 @@ import 'package:inkpage_reader/core/config/app_config.dart';
 import 'package:inkpage_reader/core/constant/prefer_key.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:inkpage_reader/core/services/tts_service.dart';
-import 'package:inkpage_reader/core/services/tts_source_preference.dart';
 import 'provider/settings_base.dart';
 
 export 'provider/settings_base.dart';
-export 'provider/settings_sync_backup.dart';
+
+const String _systemTtsSourceKey = 'system';
 
 /// SettingsProvider - 設置提供者 (重構後)
 /// (原 Android help/config/AppConfig.kt)
@@ -57,11 +57,6 @@ class SettingsProvider extends SettingsProviderBase {
   bool disableReturnKey = false;
   bool expandTextMenu = false;
 
-  // --- 備份設定 ---
-  bool onlyLatestBackup = true;
-  bool autoCheckNewBackup = true;
-  bool autoBackup = false;
-
   // --- 朗讀設定 ---
   bool ignoreAudioFocusAloud = false;
   bool pauseReadAloudWhilePhoneCalls = false;
@@ -73,7 +68,7 @@ class SettingsProvider extends SettingsProviderBase {
   double speechRate = 1.0;
   double speechPitch = 1.0;
   double speechVolume = 1.0;
-  String ttsSourceKey = ReaderTtsSourcePreference.systemKey;
+  String ttsSourceKey = _systemTtsSourceKey;
 
   // --- 歡迎介面與圖標 ---
   String welcomeImage = '';
@@ -225,24 +220,6 @@ class SettingsProvider extends SettingsProviderBase {
   void setNightBottomBackgroundColor(Color c) {
     nightBottomBackgroundColor = c;
     save(PreferKey.cNBBackground, c.toARGB32());
-    update();
-  }
-
-  void setOnlyLatestBackup(bool v) {
-    onlyLatestBackup = v;
-    save(PreferKey.onlyLatestBackup, v);
-    update();
-  }
-
-  void setAutoCheckNewBackup(bool v) {
-    autoCheckNewBackup = v;
-    save(PreferKey.autoCheckNewBackup, v);
-    update();
-  }
-
-  void setAutoBackup(bool v) {
-    autoBackup = v;
-    save(PreferKey.autoBackup, v);
     update();
   }
 
@@ -487,11 +464,6 @@ class SettingsProvider extends SettingsProviderBase {
     showMangaUi = prefs.getBool(PreferKey.showMangaUi) ?? true;
     antiAlias = prefs.getBool(PreferKey.antiAlias) ?? true;
 
-    // --- 備份與同步 ---
-    onlyLatestBackup = prefs.getBool(PreferKey.onlyLatestBackup) ?? true;
-    autoCheckNewBackup = prefs.getBool(PreferKey.autoCheckNewBackup) ?? true;
-    autoBackup = prefs.getBool(PreferKey.autoBackup) ?? false;
-
     // --- 朗讀設定 ---
     ignoreAudioFocus = prefs.getBool(PreferKey.ignoreAudioFocus) ?? false;
     ignoreAudioFocusAloud =
@@ -508,13 +480,9 @@ class SettingsProvider extends SettingsProviderBase {
     speechPitch = prefs.getDouble(PreferKey.speechPitch) ?? 1.0;
     speechVolume = prefs.getDouble(PreferKey.speechVolume) ?? 1.0;
     final savedTtsSource = prefs.getString(PreferKey.ttsSource);
-    ttsSourceKey = ReaderTtsSourcePreference.systemKey;
-    if (savedTtsSource != null &&
-        savedTtsSource != ReaderTtsSourcePreference.systemKey) {
-      await prefs.setString(
-        PreferKey.ttsSource,
-        ReaderTtsSourcePreference.systemKey,
-      );
+    ttsSourceKey = _systemTtsSourceKey;
+    if (savedTtsSource != null && savedTtsSource != _systemTtsSourceKey) {
+      await prefs.setString(PreferKey.ttsSource, _systemTtsSourceKey);
     }
     TTSService().setRate(speechRate);
     TTSService().setPitch(speechPitch);
@@ -642,7 +610,7 @@ class SettingsProvider extends SettingsProviderBase {
   }
 
   void setTtsSourceKey(String _) {
-    ttsSourceKey = ReaderTtsSourcePreference.systemKey;
+    ttsSourceKey = _systemTtsSourceKey;
     save(PreferKey.ttsSource, ttsSourceKey);
     update();
   }

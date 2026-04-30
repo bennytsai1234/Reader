@@ -36,13 +36,6 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
                 ),
           ),
           ListTile(
-            leading: const Icon(Icons.link_off_outlined),
-            title: const Text('清除指定書源 Cookie'),
-            subtitle: const Text('輸入書源網址或網域，清除 App 與網路請求 Cookie'),
-            enabled: !_busy,
-            onTap: _showClearSourceCookieDialog,
-          ),
-          ListTile(
             leading: const Icon(Icons.storage_outlined),
             title: const Text('清除 WebView localStorage'),
             subtitle: const Text('移除網頁儲存的本機資料'),
@@ -140,44 +133,6 @@ class _DataPrivacySettingsPageState extends State<DataPrivacySettingsPage> {
     await _run(successMessage: successMessage, action: action);
   }
 
-  Future<void> _showClearSourceCookieDialog() async {
-    final controller = TextEditingController();
-    final source = await showDialog<String>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('清除指定書源 Cookie'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '書源網址或網域',
-                hintText: 'https://example.com',
-              ),
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (value) => Navigator.pop(context, value),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text),
-                child: const Text('清除'),
-              ),
-            ],
-          ),
-    );
-    controller.dispose();
-    if (source == null || source.trim().isEmpty) return;
-    await _run(
-      successMessage: '已清除指定書源 Cookie',
-      action: () => _dataService.clearSourceCookies(source),
-    );
-  }
-
   Future<void> _run({
     required String successMessage,
     required Future<void> Function() action,
@@ -213,7 +168,7 @@ class PrivacyNoticePage extends StatelessWidget {
         _NoticeSection(
           title: '本地資料',
           body:
-              '書架、書源、章節、正文快取、書籤、閱讀進度、閱讀紀錄、閱讀設定、替換規則、字典規則、TXT 目錄規則與 TTS 設定會保存在本機資料庫或本機偏好設定中。',
+              '書架、書源、章節、正文快取、書籤、閱讀進度、閱讀紀錄、閱讀設定、替換規則與 TTS 設定會保存在本機資料庫或本機偏好設定中。',
         ),
         _NoticeSection(
           title: 'Cookie 與 WebView',
@@ -230,8 +185,8 @@ class PrivacyNoticePage extends StatelessWidget {
           body: '備份檔會包含書架、書源、書籤、閱讀進度、設定、規則與已快取正文等資料。備份檔目前不加密，請自行保存於可信位置。',
         ),
         _NoticeSection(
-          title: 'Log',
-          body: 'App log 與 crash log 用於除錯，可能包含錯誤訊息、網址或書源解析資訊。App 不會自動上傳這些 log。',
+          title: 'Crash log',
+          body: 'Crash log 用於除錯，可能包含錯誤訊息、網址或書源解析資訊。App 不會自動上傳這些 log。',
         ),
       ],
     );

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/source/explore_kind.dart';
@@ -455,8 +454,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       items: [
         const PopupMenuItem<String>(value: 'edit', child: Text('編輯')),
         const PopupMenuItem<String>(value: 'top', child: Text('置頂')),
-        if (source.hasLoginUrl)
-          const PopupMenuItem<String>(value: 'login', child: Text('登入書源')),
         const PopupMenuItem<String>(value: 'search', child: Text('搜索')),
         const PopupMenuItem<String>(value: 'refresh', child: Text('刷新分類')),
         const PopupMenuItem<String>(value: 'delete', child: Text('刪除')),
@@ -478,9 +475,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
       case 'top':
         await provider.topSource(source);
         return;
-      case 'login':
-        await _openLoginUrl(source);
-        return;
       case 'search':
         final full = await provider.getFullSource(source.bookSourceUrl);
         if (full == null || !context.mounted) return;
@@ -496,14 +490,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         _confirmDelete(context, provider, source);
         return;
     }
-  }
-
-  Future<void> _openLoginUrl(BookSource source) async {
-    final loginUrl = source.loginUrl?.trim();
-    if (loginUrl == null || loginUrl.isEmpty) return;
-    final uri = Uri.tryParse(loginUrl);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   void _confirmDelete(

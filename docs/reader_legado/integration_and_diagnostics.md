@@ -6,7 +6,6 @@
 - 關於 / 診斷：`lib/features/about`
 - 代表檔案：
   - `lib/features/about/about_page.dart`
-  - `lib/features/about/app_log_page.dart`
   - `lib/features/about/crash_log_page.dart`
 
 ## Reader 上下游依賴

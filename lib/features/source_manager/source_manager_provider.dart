@@ -293,8 +293,6 @@ class SourceManagerProvider with ChangeNotifier {
       list = list.where((s) => s.enabledExplore && s.hasExploreUrl).toList();
     } else if (filterGroup == '已禁用發現') {
       list = list.where((s) => !s.enabledExplore && s.hasExploreUrl).toList();
-    } else if (filterGroup == '需登錄') {
-      list = list.where((s) => s.hasLoginUrl).toList();
     } else if (filterGroup == '無分組') {
       list =
           list

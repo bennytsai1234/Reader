@@ -5,7 +5,11 @@ class SourceEditBasic extends StatelessWidget {
   final BookSource source;
   final Map<String, TextEditingController> controllers;
 
-  const SourceEditBasic({super.key, required this.source, required this.controllers});
+  const SourceEditBasic({
+    super.key,
+    required this.source,
+    required this.controllers,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,13 +21,22 @@ class SourceEditBasic extends StatelessWidget {
         _buildField(controllers['icon']!, '書源圖示', 'URL 或 Base64'),
         _buildField(controllers['group']!, '書源分組', '多個分組用逗號分隔'),
         _buildField(controllers['comment']!, '備註', '自定義備註資訊', maxLines: 3),
-        _buildField(controllers['loginUrl']!, '登入網址', '需要登入時填寫'),
-        _buildField(controllers['header']!, '自定義 Header', 'JSON 格式', maxLines: 3),
+        _buildField(
+          controllers['header']!,
+          '自定義 Header',
+          'JSON 格式',
+          maxLines: 3,
+        ),
       ],
     );
   }
 
-  Widget _buildField(TextEditingController controller, String label, String hint, {int maxLines = 1}) {
+  Widget _buildField(
+    TextEditingController controller,
+    String label,
+    String hint, {
+    int maxLines = 1,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
@@ -38,4 +51,3 @@ class SourceEditBasic extends StatelessWidget {
     );
   }
 }
-

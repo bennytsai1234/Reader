@@ -9,16 +9,13 @@ import '../database/dao/book_group_dao.dart';
 import '../database/dao/bookmark_dao.dart';
 import '../database/dao/cache_dao.dart';
 import '../database/dao/cookie_dao.dart';
-import '../database/dao/dict_rule_dao.dart';
 import '../database/dao/download_dao.dart';
-import '../database/dao/http_tts_dao.dart';
 import '../database/dao/read_record_dao.dart';
 import '../database/dao/replace_rule_dao.dart';
 import '../database/dao/rule_sub_dao.dart';
 import '../database/dao/search_book_dao.dart';
 import '../database/dao/search_history_dao.dart';
 import '../database/dao/search_keyword_dao.dart';
-import '../database/dao/txt_toc_rule_dao.dart';
 import '../database/dao/keyboard_assist_dao.dart';
 import '../database/dao/server_dao.dart';
 import '../database/dao/source_subscription_dao.dart';
@@ -66,14 +63,8 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<CacheDao>(() => CacheDao(getIt<AppDatabase>()));
   getIt.registerLazySingleton<CookieDao>(() => CookieDao(getIt<AppDatabase>()));
-  getIt.registerLazySingleton<DictRuleDao>(
-    () => DictRuleDao(getIt<AppDatabase>()),
-  );
   getIt.registerLazySingleton<DownloadDao>(
     () => DownloadDao(getIt<AppDatabase>()),
-  );
-  getIt.registerLazySingleton<HttpTtsDao>(
-    () => HttpTtsDao(getIt<AppDatabase>()),
   );
   getIt.registerLazySingleton<ReadRecordDao>(
     () => ReadRecordDao(getIt<AppDatabase>()),
@@ -92,9 +83,6 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<SearchKeywordDao>(
     () => SearchKeywordDao(getIt<AppDatabase>()),
-  );
-  getIt.registerLazySingleton<TxtTocRuleDao>(
-    () => TxtTocRuleDao(getIt<AppDatabase>()),
   );
   getIt.registerLazySingleton<KeyboardAssistDao>(
     () => KeyboardAssistDao(getIt<AppDatabase>()),

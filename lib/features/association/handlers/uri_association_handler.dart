@@ -6,7 +6,7 @@ import 'association_base.dart';
 /// 支援 legado:// 與 yuedu:// 兩種 scheme (對標 Android OnLineImportActivity)
 ///
 /// legado:// 格式:
-///   legado://import/{type}?src={url}  — 匯入書源/規則/TTS 等
+///   legado://import/{type}?src={url}  — 匯入書源或替換規則
 ///   legado://import/addToBookshelf?src={url}  — 加入書架
 ///
 /// yuedu:// 格式 (舊版相容):
@@ -14,7 +14,11 @@ import 'association_base.dart';
 ///   yuedu://rsssource/importonline?src={url}   — 匯入 RSS (不支援，忽略)
 ///   yuedu://replace/importonline?src={url}     — 匯入替換規則
 mixin UriAssociationHandler on AssociationBase {
-  void handleUri(BuildContext context, Uri uri, Function(BuildContext, String, String) showDialog) {
+  void handleUri(
+    BuildContext context,
+    Uri uri,
+    Function(BuildContext, String, String) showDialog,
+  ) {
     AppLog.d('處理 Deep Link: $uri');
 
     final scheme = uri.scheme.toLowerCase();
@@ -26,20 +30,21 @@ mixin UriAssociationHandler on AssociationBase {
   }
 
   /// 處理 legado:// scheme
-  void _handleLegadoScheme(BuildContext context, Uri uri, Function(BuildContext, String, String) showDialog) {
+  void _handleLegadoScheme(
+    BuildContext context,
+    Uri uri,
+    Function(BuildContext, String, String) showDialog,
+  ) {
     final src = uri.queryParameters['src'];
     if (src == null || src.isEmpty) return;
 
     if (uri.host == 'import') {
       final type = uri.pathSegments.isNotEmpty ? uri.pathSegments[0] : 'auto';
       // 對應 Legado 的 path 映射:
-      // /bookSource, /replaceRule, /textTocRule, /httpTTS, /dictRule, /theme, /addToBookshelf
+      // /bookSource, /replaceRule, /addToBookshelf
       final mappedType = switch (type) {
         'bookSource' => 'bookSource',
         'replaceRule' => 'replaceRule',
-        'textTocRule' => 'txtTocRule',
-        'httpTTS' => 'httpTts',
-        'dictRule' => 'dictRule',
         'addToBookshelf' => 'book',
         _ => 'auto',
       };
@@ -52,7 +57,11 @@ mixin UriAssociationHandler on AssociationBase {
 
   /// 處理 yuedu:// scheme (舊版相容)
   /// 格式: yuedu://{host}/importonline?src={url}
-  void _handleYueduScheme(BuildContext context, Uri uri, Function(BuildContext, String, String) showDialog) {
+  void _handleYueduScheme(
+    BuildContext context,
+    Uri uri,
+    Function(BuildContext, String, String) showDialog,
+  ) {
     final src = uri.queryParameters['src'];
     if (src == null || src.isEmpty) return;
 
@@ -65,4 +74,3 @@ mixin UriAssociationHandler on AssociationBase {
     showDialog(context, type, src);
   }
 }
-

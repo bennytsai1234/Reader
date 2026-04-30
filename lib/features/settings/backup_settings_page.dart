@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:inkpage_reader/core/services/backup_service.dart';
 import 'package:inkpage_reader/core/services/restore_service.dart';
 import 'dart:io';
-import 'settings_provider.dart';
 
 class BackupSettingsPage extends StatefulWidget {
   const BackupSettingsPage({super.key});
@@ -21,39 +19,28 @@ class _BackupSettingsPageState extends State<BackupSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('備份與還原')),
-      body: Consumer<SettingsProvider>(
-        builder: (context, settings, child) {
-          return ListView(
-            children: [
-              _buildSectionTitle('本地備份與還原'),
-              ListTile(
-                title: const Text('手動備份 (本地)'),
-                subtitle: const Text('將目前所有書架與配置進行備份至手機存儲'),
-                leading: const Icon(Icons.backup_outlined),
-                onTap: _isProcessing ? null : _handleManualBackup,
-              ),
-              ListTile(
-                title: const Text('手動還原 (本地文件)'),
-                subtitle: const Text('從本地備份檔恢復資料'),
-                leading: const Icon(Icons.restore),
-                onTap: _isProcessing ? null : _handleManualRestore,
-              ),
-              if (_isProcessing)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              const Divider(),
-              _buildSectionTitle('備份設定'),
-              SwitchListTile(
-                title: const Text('僅保留最新備份'),
-                value: settings.onlyLatestBackup,
-                onChanged: (v) => settings.setOnlyLatestBackup(v),
-              ),
-              const SizedBox(height: 24),
-            ],
-          );
-        },
+      body: ListView(
+        children: [
+          _buildSectionTitle('本地備份與還原'),
+          ListTile(
+            title: const Text('手動備份 (本地)'),
+            subtitle: const Text('將目前所有書架與配置進行備份至手機存儲'),
+            leading: const Icon(Icons.backup_outlined),
+            onTap: _isProcessing ? null : _handleManualBackup,
+          ),
+          ListTile(
+            title: const Text('手動還原 (本地文件)'),
+            subtitle: const Text('從本地備份檔恢復資料'),
+            leading: const Icon(Icons.restore),
+            onTap: _isProcessing ? null : _handleManualRestore,
+          ),
+          if (_isProcessing)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }

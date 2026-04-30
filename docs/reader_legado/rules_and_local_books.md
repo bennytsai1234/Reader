@@ -3,14 +3,14 @@
 ## Reader 現況
 
 - 替換規則：`lib/features/replace_rule`
-- TXT 目錄規則：`lib/features/txt_toc_rule`
-- 字典：`lib/features/dict`
+- TXT 目錄規則：已移除使用者入口與預設匯入，資料表僅保留相容性
+- 字典規則：已移除使用者入口、查詢服務與預設匯入，資料表僅保留相容性
 - 本地格式解析：`lib/core/local_book`
 - 本地書服務：`lib/core/services/local_book_service.dart`
 
 ## Reader 上下游依賴
 
-- 直接上游依賴：`lib/core/database`、`lib/core/models`、`lib/core/engine`、`lib/core/services/dict_service.dart`、`lib/core/storage`、`lib/core/services/epub_service.dart`
+- 直接上游依賴：`lib/core/database`、`lib/core/models`、`lib/core/engine`、`lib/core/storage`、`lib/core/services/epub_service.dart`
 - 直接下游影響：`lib/features/reader_v2`、`lib/features/source_manager`、`lib/features/settings`、`lib/features/association`、`lib/features/bookshelf`，以及內容淨化、目錄解析、本地書匯入與閱讀流程
 
 ## Legado 對照

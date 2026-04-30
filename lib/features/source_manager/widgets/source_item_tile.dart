@@ -237,7 +237,6 @@ class SourceItemTile extends StatelessWidget {
     if (source.hasBookInfoRule) tags.add('詳');
     if (source.hasTocRule) tags.add('目');
     if (source.hasContentRule) tags.add('正');
-    if (source.hasLoginUrl) tags.add('登');
 
     return Wrap(
       spacing: 4,

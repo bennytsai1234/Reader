@@ -33,7 +33,6 @@ class SourceManagerMenus {
               provider.filterGroup == '已禁用發現',
               '已禁用發現',
             ),
-            _buildCheckedItem('需登錄', provider.filterGroup == '需登錄', '需登錄'),
             _buildCheckedItem('無分組', provider.filterGroup == '無分組', '無分組'),
             const PopupMenuDivider(),
             ...provider.allGroups.map(

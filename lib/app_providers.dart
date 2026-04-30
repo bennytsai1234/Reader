@@ -5,7 +5,6 @@ import 'core/services/download_service.dart';
 import 'core/services/tts_service.dart';
 import 'features/bookshelf/bookshelf_provider.dart';
 import 'features/settings/settings_provider.dart';
-import 'features/dict/dict_provider.dart';
 import 'features/book_detail/change_cover_provider.dart';
 
 /// AppProviders - 集中管理全域 Provider
@@ -14,7 +13,6 @@ class AppProviders {
     ChangeNotifierProvider(create: (_) => BookshelfProvider()),
     ChangeNotifierProvider(create: (_) => SettingsProvider()),
     ChangeNotifierProvider(create: (_) => ChangeCoverProvider()),
-    ChangeNotifierProvider(create: (_) => DictProvider()),
     ChangeNotifierProvider<DownloadService>(create: (_) => DownloadService()),
     // TTSService 從 getIt 獲取單例，保持全域一致性
     ChangeNotifierProvider.value(value: getIt<TTSService>()),

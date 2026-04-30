@@ -9,18 +9,12 @@ import 'package:inkpage_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:inkpage_reader/core/database/dao/book_group_dao.dart';
 import 'package:inkpage_reader/core/database/dao/bookmark_dao.dart';
 import 'package:inkpage_reader/core/database/dao/read_record_dao.dart';
-import 'package:inkpage_reader/core/database/dao/dict_rule_dao.dart';
-import 'package:inkpage_reader/core/database/dao/http_tts_dao.dart';
-import 'package:inkpage_reader/core/database/dao/txt_toc_rule_dao.dart';
 import 'package:inkpage_reader/core/models/book.dart';
-import 'package:inkpage_reader/core/models/dict_rule.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/core/models/replace_rule.dart';
 import 'package:inkpage_reader/core/models/bookmark.dart';
 import 'package:inkpage_reader/core/models/read_record.dart';
 import 'package:inkpage_reader/core/models/book_group.dart';
-import 'package:inkpage_reader/core/models/http_tts.dart';
-import 'package:inkpage_reader/core/models/txt_toc_rule.dart';
 import 'package:inkpage_reader/core/models/download_task.dart';
 import 'package:inkpage_reader/core/models/reader_chapter_content.dart';
 import 'package:inkpage_reader/core/database/app_database.dart';
@@ -42,9 +36,6 @@ class RestoreService {
   final BookGroupDao _groupDao = getIt<BookGroupDao>();
   final BookmarkDao _bookmarkDao = getIt<BookmarkDao>();
   final ReadRecordDao _recordDao = getIt<ReadRecordDao>();
-  final DictRuleDao _dictRuleDao = getIt<DictRuleDao>();
-  final HttpTtsDao _httpTtsDao = getIt<HttpTtsDao>();
-  final TxtTocRuleDao _txtTocRuleDao = getIt<TxtTocRuleDao>();
   final DownloadDao _downloadDao = getIt<DownloadDao>();
   final ReaderChapterContentDao _chapterContentDao =
       getIt<ReaderChapterContentDao>();
@@ -132,15 +123,6 @@ class RestoreService {
           case 'readRecords.json':
           case 'readRecord.json':
             await _recordDao.upsert(ReadRecord.fromJson(item));
-            break;
-          case 'dictRule.json':
-            await _dictRuleDao.upsert(DictRule.fromJson(item));
-            break;
-          case 'httpTts.json':
-            await _httpTtsDao.upsert(HttpTTS.fromJson(item));
-            break;
-          case 'txtTocRule.json':
-            await _txtTocRuleDao.upsert(TxtTocRule.fromJson(item));
             break;
           case 'downloadTask.json':
           case 'downloadTasks.json':

@@ -5,15 +5,9 @@ import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
-import 'package:inkpage_reader/core/database/dao/txt_toc_rule_dao.dart';
-import 'package:inkpage_reader/core/database/dao/http_tts_dao.dart';
-import 'package:inkpage_reader/core/database/dao/dict_rule_dao.dart';
 import 'package:inkpage_reader/core/database/dao/search_history_dao.dart';
 import 'package:inkpage_reader/core/database/dao/cache_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
-import 'package:inkpage_reader/core/models/txt_toc_rule.dart';
-import 'package:inkpage_reader/core/models/http_tts.dart';
-import 'package:inkpage_reader/core/models/dict_rule.dart';
 import 'chinese_utils.dart';
 import 'package:inkpage_reader/shared/theme/app_theme.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
@@ -57,10 +51,7 @@ class DefaultData {
     final savedDataVersion = prefs.getInt('default_data_version') ?? 0;
 
     if (savedDataVersion < currentDataVersion) {
-      await _loadDefaultTocRules();
-      await _loadDefaultHttpTts();
       await _loadDefaultSources();
-      await _loadDefaultDictRules();
       await prefs.setInt('default_data_version', currentDataVersion);
     }
 
@@ -105,55 +96,6 @@ class DefaultData {
     }
   }
 
-  /// 載入預設目錄規則 (對標 importDefaultTocRules)
-  static Future<void> _loadDefaultTocRules() async {
-    try {
-      final jsonStr = await rootBundle.loadString(
-        'assets/default_sources/txtTocRule.json',
-      );
-      final List<dynamic> list = jsonDecode(jsonStr);
-      final rules = list.map((e) => TxtTocRule.fromJson(e)).toList();
-      await getIt<TxtTocRuleDao>().insertOrUpdateAll(rules);
-    } catch (e) {
-      AppLog.e(
-        'Error loading default TOC rules: $e. Falling back to hardcoded rules.',
-        error: e,
-      );
-      // 如果 Asset 缺失，回退到基礎硬編碼規則 (原 Android 應急邏輯)
-      final defaultRules = [
-        TxtTocRule(
-          id: 0,
-          name: '標準章節',
-          rule: r'第[一二三四五六七八九十百千萬零\d]+[章回節卷集幕計].*',
-          enable: true,
-        ),
-        TxtTocRule(id: 0, name: '數字章節', rule: r'^\s*\d+.*', enable: true),
-      ];
-      try {
-        await getIt<TxtTocRuleDao>().insertOrUpdateAll(defaultRules);
-      } catch (dbError) {
-        AppLog.e(
-          'Failed to insert hardcoded TOC rules: $dbError',
-          error: dbError,
-        );
-      }
-    }
-  }
-
-  /// 載入預設 HTTP TTS (對標 importDefaultHttpTTS)
-  static Future<void> _loadDefaultHttpTts() async {
-    try {
-      final jsonStr = await rootBundle.loadString(
-        'assets/default_sources/httpTTS.json',
-      );
-      final List<dynamic> list = jsonDecode(jsonStr);
-      final engines = list.map((e) => HttpTTS.fromJson(e)).toList();
-      await getIt<HttpTtsDao>().insertOrUpdateAll(engines);
-    } catch (e) {
-      AppLog.e('Default HttpTTS Asset Not Found', error: e);
-    }
-  }
-
   /// 載入預設書源
   static Future<void> _loadDefaultSources() async {
     try {
@@ -166,20 +108,6 @@ class DefaultData {
       await getIt<BookSourceDao>().insertOrUpdateAll(sources);
     } catch (e) {
       AppLog.e('Error loading default sources: $e', error: e);
-    }
-  }
-
-  /// 載入預設字典規則 (對標 importDefaultDictRules)
-  static Future<void> _loadDefaultDictRules() async {
-    try {
-      final jsonStr = await rootBundle.loadString(
-        'assets/default_sources/dictRules.json',
-      );
-      final List<dynamic> list = jsonDecode(jsonStr);
-      final rules = list.map((e) => DictRule.fromJson(e)).toList();
-      await getIt<DictRuleDao>().insertOrUpdateAll(rules);
-    } catch (e) {
-      AppLog.e('Default DictRules Asset Not Found', error: e);
     }
   }
 

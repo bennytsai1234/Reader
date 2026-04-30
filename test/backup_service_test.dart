@@ -80,22 +80,17 @@ void main() {
         'replaceRule.json',
         'bookmark.json',
         'readRecord.json',
-        'txtTocRule.json',
         'bookGroup.json',
-        'dictRule.json',
-        'httpTts.json',
         'downloadTask.json',
         'readerChapterContent.json',
         'config.json',
       ];
 
-      expect(expectedFiles.length, 13);
+      expect(expectedFiles.length, 10);
       expect(expectedFiles, contains('manifest.json'));
       expect(expectedFiles, contains('bookshelf.json'));
       expect(expectedFiles, contains('bookSource.json'));
       expect(expectedFiles, contains('bookGroup.json'));
-      expect(expectedFiles, contains('dictRule.json'));
-      expect(expectedFiles, contains('httpTts.json'));
       expect(expectedFiles, contains('downloadTask.json'));
       expect(expectedFiles, contains('readerChapterContent.json'));
       expect(expectedFiles, contains('config.json'));

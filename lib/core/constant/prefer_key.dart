@@ -147,7 +147,6 @@ class PreferKey {
   static const String showLastUpdateTime = 'showLastUpdateTime';
   static const String showWaitUpCount = 'showWaitUpCount';
   static const String clearWebViewData = 'clearWebViewData';
-  static const String onlyLatestBackup = 'onlyLatestBackup';
   static const String brightnessVwPos = 'brightnessVwPos';
   static const String shrinkDatabase = 'shrinkDatabase';
   static const String batchChangeSourceDelay = 'batchChangeSourceDelay';
@@ -169,7 +168,6 @@ class PreferKey {
   static const String disableMangaScale = 'disableMangaScale';
   static const String disableMangaPageAnim = 'disableMangaPageAnim';
   static const String paddingDisplayCutouts = 'paddingDisplayCutouts';
-  static const String autoCheckNewBackup = 'autoCheckNewBackup';
 
   static const String cPrimary = 'colorPrimary';
   static const String cAccent = 'colorAccent';
@@ -216,7 +214,6 @@ class PreferKey {
   static const String lastVersionCode = 'last_version_code';
 
   // 備份與同步
-  static const String autoBackup = 'auto_backup';
   static const String lastBackup = 'last_backup';
 
   // 音訊與朗讀

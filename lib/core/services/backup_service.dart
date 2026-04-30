@@ -6,12 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
 import 'package:inkpage_reader/core/database/dao/book_group_dao.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
-import 'package:inkpage_reader/core/database/dao/dict_rule_dao.dart';
-import 'package:inkpage_reader/core/database/dao/http_tts_dao.dart';
 import 'package:inkpage_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:inkpage_reader/core/database/dao/bookmark_dao.dart';
 import 'package:inkpage_reader/core/database/dao/read_record_dao.dart';
-import 'package:inkpage_reader/core/database/dao/txt_toc_rule_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/services/app_version.dart';
 import 'package:inkpage_reader/core/storage/app_storage_paths.dart';
@@ -78,23 +75,8 @@ class BackupService {
       );
       await _writeJson(
         backupFolder,
-        'txtTocRule.json',
-        await getIt<TxtTocRuleDao>().getAll(),
-      );
-      await _writeJson(
-        backupFolder,
         'bookGroup.json',
         await getIt<BookGroupDao>().getAll(),
-      );
-      await _writeJson(
-        backupFolder,
-        'dictRule.json',
-        await getIt<DictRuleDao>().getAll(),
-      );
-      await _writeJson(
-        backupFolder,
-        'httpTts.json',
-        await getIt<HttpTtsDao>().getAll(),
       );
       await _writeJson(
         backupFolder,

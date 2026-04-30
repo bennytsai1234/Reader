@@ -1,18 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'settings_provider.dart';
 
 import 'package:inkpage_reader/features/source_manager/source_manager_page.dart';
-import 'package:inkpage_reader/features/dict/dict_rule_page.dart';
 import 'package:inkpage_reader/features/read_record/read_record_page.dart';
-import 'package:inkpage_reader/features/bookmark/bookmark_page.dart';
 import 'package:inkpage_reader/features/cache_manager/download_manager_page.dart';
-import 'package:inkpage_reader/features/txt_toc_rule/txt_toc_rule_page.dart';
-import 'appearance_settings_page.dart';
 import 'reading_settings_page.dart';
 import 'tts_settings_page.dart';
 import 'backup_settings_page.dart';
-import 'other_settings_page.dart';
 import 'package:inkpage_reader/features/about/about_page.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -22,164 +15,95 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('我的'), elevation: 0),
-      body: Consumer<SettingsProvider>(
-        builder: (context, settings, child) {
-          return ListView(
-            children: [
-              // --- 核心管理 ---
-              _buildCategoryHeader(context, '書源與規則'),
-              _buildListTile(
-                context,
-                icon: Icons.source_outlined,
-                title: '書源管理',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SourceManagerPage(),
-                      ),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.format_list_bulleted,
-                title: '本地目錄規則',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const TxtTocRulePage()),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.translate,
-                title: '字典規則',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const DictRulePage()),
-                    ),
-              ),
+      body: ListView(
+        children: [
+          _buildCategoryHeader(context, '書源'),
+          _buildListTile(
+            context,
+            icon: Icons.source_outlined,
+            title: '書源管理',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+                ),
+          ),
 
-              const Divider(),
-              // --- 設定分類 ---
-              _buildCategoryHeader(context, '個人化設定'),
-              _buildListTile(
-                context,
-                icon: Icons.palette_outlined,
-                title: '外觀與主題',
-                summary: '主題模式、歡迎介面、發現分頁',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AppearanceSettingsPage(),
-                      ),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.chrome_reader_mode_outlined,
-                title: '閱讀設定',
-                summary: '打點區、排版、換源',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ReadingSettingsPage(),
-                      ),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.volume_up_outlined,
-                title: '朗讀與語音',
-                summary: '語速、音調、語音引擎',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const TtsSettingsPage(),
-                      ),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.backup_outlined,
-                title: '備份與還原',
-                summary: '本地備份、數據遷移',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const BackupSettingsPage(),
-                      ),
-                    ),
-              ),
+          const Divider(),
+          _buildCategoryHeader(context, '個人化設定'),
+          _buildListTile(
+            context,
+            icon: Icons.chrome_reader_mode_outlined,
+            title: '閱讀設定',
+            summary: '打點區、排版、繁簡轉換',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ReadingSettingsPage(),
+                  ),
+                ),
+          ),
+          _buildListTile(
+            context,
+            icon: Icons.volume_up_outlined,
+            title: '朗讀與語音',
+            summary: '語速、音調、系統語音',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TtsSettingsPage()),
+                ),
+          ),
+          _buildListTile(
+            context,
+            icon: Icons.backup_outlined,
+            title: '備份與還原',
+            summary: '本地備份、數據遷移',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BackupSettingsPage()),
+                ),
+          ),
 
-              const Divider(),
-              // --- 其他工具 ---
-              _buildCategoryHeader(context, '工具與其他'),
-              _buildListTile(
-                context,
-                icon: Icons.bookmark_border,
-                title: '書籤管理',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const BookmarkPage()),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.history,
-                title: '閱讀紀錄',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ReadRecordPage()),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.download_for_offline_outlined,
-                title: '背景下載佇列',
-                summary: '查看、暫停、重試與刪除下載任務',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DownloadManagerPage(),
-                      ),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.settings_outlined,
-                title: '其他設定',
-                summary: '資料隱私、閱讀行為',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const OtherSettingsPage(),
-                      ),
-                    ),
-              ),
-              _buildListTile(
-                context,
-                icon: Icons.info_outline,
-                title: '關於墨頁',
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AboutPage()),
-                    ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          );
-        },
+          const Divider(),
+          _buildCategoryHeader(context, '工具與其他'),
+          _buildListTile(
+            context,
+            icon: Icons.history,
+            title: '閱讀紀錄',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ReadRecordPage()),
+                ),
+          ),
+          _buildListTile(
+            context,
+            icon: Icons.download_for_offline_outlined,
+            title: '背景下載佇列',
+            summary: '查看、暫停、重試與刪除下載任務',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DownloadManagerPage(),
+                  ),
+                ),
+          ),
+          _buildListTile(
+            context,
+            icon: Icons.info_outline,
+            title: '關於墨頁',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutPage()),
+                ),
+          ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }

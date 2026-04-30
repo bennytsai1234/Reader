@@ -3,7 +3,6 @@ import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:inkpage_reader/features/read_record/read_record_page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'app_log_page.dart';
 import 'crash_log_page.dart';
 
 class AboutPage extends StatefulWidget {
@@ -79,16 +78,6 @@ class _AboutPageState extends State<AboutPage> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const ReadRecordPage()),
-                ),
-          ),
-          _buildListTile(
-            context,
-            icon: Icons.bug_report_outlined,
-            title: '應用程式日誌',
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AppLogPage()),
                 ),
           ),
           _buildListTile(

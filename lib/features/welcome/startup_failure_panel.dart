@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:inkpage_reader/features/about/app_log_page.dart';
 import 'package:inkpage_reader/features/about/crash_log_page.dart';
 
 class StartupFailurePanel extends StatelessWidget {
@@ -75,14 +74,6 @@ class StartupFailurePanel extends StatelessWidget {
                 onPressed: () => _copyDetails(context),
                 icon: const Icon(Icons.copy_outlined),
                 label: const Text('複製'),
-              ),
-              TextButton.icon(
-                onPressed:
-                    () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AppLogPage()),
-                    ),
-                icon: const Icon(Icons.bug_report_outlined),
-                label: const Text('應用日誌'),
               ),
               TextButton.icon(
                 onPressed:

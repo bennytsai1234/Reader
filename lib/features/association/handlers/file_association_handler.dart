@@ -12,7 +12,13 @@ import 'package:inkpage_reader/features/bookshelf/bookshelf_provider.dart';
 
 /// AssociationHandlerService 的檔案分享與解析邏輯擴展
 mixin FileAssociationHandler on AssociationBase {
-  void handleSharedMedia(BuildContext context, List<SharedMediaFile> media, Function(BuildContext, String, String, {bool isFile, String? jsonData}) showImportDialog, Function(BuildContext, String) showForceImportDialog) async {
+  void handleSharedMedia(
+    BuildContext context,
+    List<SharedMediaFile> media,
+    Function(BuildContext, String, String, {bool isFile, String? jsonData})
+    showImportDialog,
+    Function(BuildContext, String) showForceImportDialog,
+  ) async {
     for (var file in media) {
       AppLog.d('收到分享檔案: ${file.path}');
       final ext = p.extension(file.path).toLowerCase();
@@ -20,7 +26,12 @@ mixin FileAssociationHandler on AssociationBase {
         if (!context.mounted) {
           return;
         }
-        _handleSharedFile(context, file.path, showImportDialog, showForceImportDialog);
+        _handleSharedFile(
+          context,
+          file.path,
+          showImportDialog,
+          showForceImportDialog,
+        );
       } else if (isSupportedLocalBookExtension(ext)) {
         if (!context.mounted) {
           return;
@@ -46,31 +57,36 @@ mixin FileAssociationHandler on AssociationBase {
 
       if (context.mounted) {
         context.read<BookshelfProvider>().importLocalBookPath(targetPath);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已將書籍複製並匯入: $fileName')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已將書籍複製並匯入: $fileName')));
       }
     } catch (e) {
       AppLog.e('搬移並匯入書籍失敗: $e', error: e);
     }
   }
 
-  Future<void> _handleSharedFile(BuildContext context, String path, Function(BuildContext, String, String, {bool isFile, String? jsonData}) showImportDialog, Function(BuildContext, String) showForceImportDialog) async {
+  Future<void> _handleSharedFile(
+    BuildContext context,
+    String path,
+    Function(BuildContext, String, String, {bool isFile, String? jsonData})
+    showImportDialog,
+    Function(BuildContext, String) showForceImportDialog,
+  ) async {
     try {
       final content = await File(path).readAsString();
       final data = jsonDecode(content);
       var type = 'auto';
-      
-      final dynamic first = (data is List && data.isNotEmpty) ? data.first : data;
+
+      final dynamic first =
+          (data is List && data.isNotEmpty) ? data.first : data;
       if (first is Map) {
         if (first.containsKey('bookSourceUrl')) {
           type = 'bookSource';
         } else if (first.containsKey('pattern')) {
           type = 'replaceRule';
-        } else if (first.containsKey('loginUrl')) {
-          type = 'httpTts';
         } else if (first.containsKey('themeName')) {
           type = 'theme';
-        } else if (first.containsKey('chapterName')) {
-          type = 'txtRule';
         }
       }
 

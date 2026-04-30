@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'package:url_launcher/url_launcher.dart';
 import 'source_manager_provider.dart';
 import 'source_editor_page.dart';
 import 'source_group_manage_page.dart';
@@ -327,18 +326,6 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
             }
           },
         ),
-        if (s.hasLoginUrl)
-          ListTile(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            leading: const Icon(Icons.login_outlined),
-            title: const Text('登入書源', style: TextStyle(fontSize: 14)),
-            onTap: () async {
-              Navigator.pop(context);
-              await _openLoginUrl(s);
-            },
-          ),
         if (s.hasExploreUrl)
           ListTile(
             shape: RoundedRectangleBorder(
@@ -662,13 +649,5 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
         MaterialPageRoute(builder: (_) => SourceEditorPage(source: full)),
       );
     }
-  }
-
-  Future<void> _openLoginUrl(BookSourcePart source) async {
-    final loginUrl = source.loginUrl?.trim();
-    if (loginUrl == null || loginUrl.isEmpty) return;
-    final uri = Uri.tryParse(loginUrl);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
