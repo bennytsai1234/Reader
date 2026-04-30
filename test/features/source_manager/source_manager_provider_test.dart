@@ -21,6 +21,7 @@ Future<String> _readFixture(String path) => File(path).readAsString();
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
   final Map<String, BookSource> store = <String, BookSource>{};
+  int getByUrlCallCount = 0;
 
   @override
   Future<List<BookSource>> getAllPart() async => store.values.toList();
@@ -29,7 +30,10 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
   Future<List<BookSource>> getAll() async => store.values.toList();
 
   @override
-  Future<BookSource?> getByUrl(String url) async => store[url];
+  Future<BookSource?> getByUrl(String url) async {
+    getByUrlCallCount += 1;
+    return store[url];
+  }
 
   @override
   Future<void> upsert(BookSource source) async {
@@ -149,6 +153,20 @@ void main() {
   });
 
   test(
+    'parseSourcesDetailedAsync supports nyasama source fixture subset',
+    () async {
+      final provider = SourceManagerProvider();
+      final jsonStr = await _readFixture(_nyasamaFixturePath);
+
+      final parsed = await provider.parseSourcesDetailedAsync(jsonStr);
+
+      expect(parsed.allSources, hasLength(4));
+      expect(parsed.importableSources.first.bookSourceName, 'BB成人小说');
+      expect(parsed.importableSources[2].searchUrl, contains('@js:java.put'));
+    },
+  );
+
+  test(
     'importFromUrl imports nyasama raw JSON string without double encoding',
     () async {
       networkBody = await _readFixture(_nyasamaFixturePath);
@@ -259,6 +277,7 @@ void main() {
         unsupportedSources: [unsupportedSource],
       );
 
+      expect(fakeDao.getByUrlCallCount, 0);
       expect(preview.newSources, hasLength(2));
       expect(preview.unsupportedSources, [unsupportedSource]);
     },

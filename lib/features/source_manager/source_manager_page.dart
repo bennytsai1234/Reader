@@ -176,31 +176,63 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
     if (p.isLoading) return const Center(child: CircularProgressIndicator());
     final list = p.sources;
     if (list.isEmpty) return const Center(child: Text('暫無書源'));
+    final groupByHost = p.groupByDomain;
+    final hostLabels =
+        groupByHost
+            ? list
+                .map((source) => p.getSourceHost(source.bookSourceUrl))
+                .toList(growable: false)
+            : const <String>[];
 
     // 只有在手動排序 (0) 模式下才允許拖拽
-    final bool canReorder = p.sortMode == 0 && !p.groupByDomain;
+    final bool canReorder = p.sortMode == 0 && !groupByHost;
 
     if (canReorder) {
       return ReorderableListView.builder(
         itemCount: list.length,
         onReorder: (oldIndex, newIndex) => p.reorderSource(oldIndex, newIndex),
-        itemBuilder: (ctx, i) => _buildItem(p, list[i], index: i),
+        itemBuilder:
+            (ctx, i) => _buildItem(
+              p,
+              list[i],
+              index: i,
+              showHostHeader: false,
+              hostLabel: '',
+            ),
       );
     } else {
       return ListView.separated(
         itemCount: list.length,
         separatorBuilder: (ctx, i) => const Divider(height: 1),
-        itemBuilder: (ctx, i) => _buildItem(p, list[i], index: i),
+        itemBuilder: (ctx, i) {
+          final showHostHeader =
+              groupByHost && (i == 0 || hostLabels[i - 1] != hostLabels[i]);
+          return _buildItem(
+            p,
+            list[i],
+            index: i,
+            showHostHeader: showHostHeader,
+            hostLabel: groupByHost ? hostLabels[i] : '',
+          );
+        },
       );
     }
   }
 
-  Widget _buildItem(SourceManagerProvider p, BookSourcePart s, {int? index}) {
+  Widget _buildItem(
+    SourceManagerProvider p,
+    BookSourcePart s, {
+    int? index,
+    required bool showHostHeader,
+    required String hostLabel,
+  }) {
     return SourceItemTile(
       key: ValueKey(s.bookSourceUrl),
       source: s,
       provider: p,
       index: index,
+      showHostHeader: showHostHeader,
+      hostLabel: hostLabel,
       isSelected: p.selectedUrls.contains(s.bookSourceUrl),
       onTap: () async {
         if (p.selectedUrls.isNotEmpty) {
@@ -491,7 +523,7 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
     final p = context.read<SourceManagerProvider>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final parsed = p.parseSourcesDetailed(jsonStr);
+      final parsed = await p.parseSourcesDetailedAsync(jsonStr);
       if (parsed.allSources.isEmpty) {
         if (parsed.unsupportedSources.isNotEmpty) {
           messenger.showSnackBar(

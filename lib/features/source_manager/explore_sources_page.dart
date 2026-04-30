@@ -18,12 +18,14 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
   static const _defaultRepos = [
     {
       'name': 'Legado 官方書源庫 (Yuedu)',
-      'url': 'https://raw.githubusercontent.com/gedoor/legado/master/app/src/main/assets/default_book_sources.json'
+      'url':
+          'https://raw.githubusercontent.com/gedoor/legado/master/app/src/main/assets/default_book_sources.json',
     },
     {
       'name': '開源書源分享庫 1',
-      'url': 'https://raw.githubusercontent.com/yuedu-source/yuedu-source/main/source.json'
-    }
+      'url':
+          'https://raw.githubusercontent.com/yuedu-source/yuedu-source/main/source.json',
+    },
   ];
 
   List<Map<String, String>> _repositories = [];
@@ -44,11 +46,13 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
     if (raw != null) {
       final decoded = jsonDecode(raw) as List;
       setState(() {
-        _repositories = decoded.map((e) => Map<String, String>.from(e as Map)).toList();
+        _repositories =
+            decoded.map((e) => Map<String, String>.from(e as Map)).toList();
       });
     } else {
       setState(() {
-        _repositories = _defaultRepos.map((e) => Map<String, String>.from(e)).toList();
+        _repositories =
+            _defaultRepos.map((e) => Map<String, String>.from(e)).toList();
       });
     }
   }
@@ -63,34 +67,50 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
     final urlCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('新增書源庫'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '名稱', hintText: '我的書源庫')),
-            const SizedBox(height: 8),
-            TextField(controller: urlCtrl, decoration: const InputDecoration(labelText: 'URL', hintText: 'https://...')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          ElevatedButton(
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              final url = urlCtrl.text.trim();
-              if (name.isNotEmpty && url.isNotEmpty) {
-                setState(() {
-                  _repositories.add({'name': name, 'url': url});
-                });
-                _saveRepos();
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('新增'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('新增書源庫'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '名稱',
+                    hintText: '我的書源庫',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: urlCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'URL',
+                    hintText: 'https://...',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final name = nameCtrl.text.trim();
+                  final url = urlCtrl.text.trim();
+                  if (name.isNotEmpty && url.isNotEmpty) {
+                    setState(() {
+                      _repositories.add({'name': name, 'url': url});
+                    });
+                    _saveRepos();
+                  }
+                  Navigator.pop(ctx);
+                },
+                child: const Text('新增'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -121,7 +141,10 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
 
         var sources = <BookSource>[];
         if (decoded is List) {
-          sources = decoded.map((e) => BookSource.fromJson(e as Map<String, dynamic>)).toList();
+          sources =
+              decoded
+                  .map((e) => BookSource.fromJson(e as Map<String, dynamic>))
+                  .toList();
         } else if (decoded is Map) {
           sources = [BookSource.fromJson(decoded as Map<String, dynamic>)];
         }
@@ -145,18 +168,22 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
     if (_selectedIndices.isEmpty) return;
 
     final provider = context.read<SourceManagerProvider>();
-    final toImport = _selectedIndices.map((i) => _fetchedSources[i]).toList();
-
-    var count = 0;
-    for (var source in toImport) {
-      final jsonStr = jsonEncode(source.toJson());
-      count += await provider.importFromText(jsonStr);
-    }
+    final toImport = _selectedIndices
+        .map((i) => _fetchedSources[i])
+        .map((source) {
+          if (source.isNovelTextSource) return source;
+          source.enabled = false;
+          source.enabledExplore = false;
+          source.addGroup(nonNovelSourceGroupTag);
+          return source;
+        })
+        .toList(growable: false);
+    final count = await provider.importSources(toImport);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('成功匯入 $count 個書源'))
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('成功匯入 $count 個書源')));
       Navigator.pop(context);
     }
   }
@@ -167,11 +194,18 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
       appBar: AppBar(
         title: const Text('網路書源庫'),
         actions: [
-          IconButton(icon: const Icon(Icons.add), tooltip: '新增書源庫', onPressed: _showAddRepoDialog),
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: '新增書源庫',
+            onPressed: _showAddRepoDialog,
+          ),
           if (_selectedIndices.isNotEmpty)
             TextButton(
               onPressed: _importSelected,
-              child: Text('匯入 (${_selectedIndices.length})', style: const TextStyle(color: Colors.white)),
+              child: Text(
+                '匯入 (${_selectedIndices.length})',
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
         ],
       ),
@@ -191,14 +225,27 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
                     onLongPress: () {
                       showDialog(
                         context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('刪除書源庫'),
-                          content: Text('確定刪除「${repo['name']}」？'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-                            TextButton(onPressed: () { Navigator.pop(ctx); _deleteRepo(index); }, child: const Text('刪除', style: TextStyle(color: Colors.red))),
-                          ],
-                        ),
+                        builder:
+                            (ctx) => AlertDialog(
+                              title: const Text('刪除書源庫'),
+                              content: Text('確定刪除「${repo['name']}」？'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('取消'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    _deleteRepo(index);
+                                  },
+                                  child: const Text(
+                                    '刪除',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            ),
                       );
                     },
                     child: ActionChip(
@@ -212,31 +259,57 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
           ),
           const Divider(),
           Expanded(
-            child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _errorMsg.isNotEmpty
-                ? Center(child: Text(_errorMsg, style: const TextStyle(color: Colors.red)))
-                : _fetchedSources.isEmpty
-                  ? const Center(child: Text('請選擇上方書源庫以載入資料'))
-                  : Column(
+            child:
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _errorMsg.isNotEmpty
+                    ? Center(
+                      child: Text(
+                        _errorMsg,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    )
+                    : _fetchedSources.isEmpty
+                    ? const Center(child: Text('請選擇上方書源庫以載入資料'))
+                    : Column(
                       children: [
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
                           child: Row(
                             children: [
-                              Text('共 ${_fetchedSources.length} 個書源', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                              Text(
+                                '共 ${_fetchedSources.length} 個書源',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
                               const Spacer(),
                               TextButton(
                                 onPressed: () {
                                   setState(() {
-                                    if (_selectedIndices.length == _fetchedSources.length) {
+                                    if (_selectedIndices.length ==
+                                        _fetchedSources.length) {
                                       _selectedIndices.clear();
                                     } else {
-                                      _selectedIndices = Set.from(List.generate(_fetchedSources.length, (i) => i));
+                                      _selectedIndices = Set.from(
+                                        List.generate(
+                                          _fetchedSources.length,
+                                          (i) => i,
+                                        ),
+                                      );
                                     }
                                   });
                                 },
-                                child: Text(_selectedIndices.length == _fetchedSources.length ? '取消全選' : '全選'),
+                                child: Text(
+                                  _selectedIndices.length ==
+                                          _fetchedSources.length
+                                      ? '取消全選'
+                                      : '全選',
+                                ),
                               ),
                             ],
                           ),
@@ -246,7 +319,9 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
                             itemCount: _fetchedSources.length,
                             itemBuilder: (context, index) {
                               final source = _fetchedSources[index];
-                              final isSelected = _selectedIndices.contains(index);
+                              final isSelected = _selectedIndices.contains(
+                                index,
+                              );
                               return ListTile(
                                 leading: Checkbox(
                                   value: isSelected,
@@ -261,7 +336,11 @@ class _ExploreSourcesPageState extends State<ExploreSourcesPage> {
                                   },
                                 ),
                                 title: Text(source.bookSourceName),
-                                subtitle: Text(source.bookSourceUrl, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
+                                  source.bookSourceUrl,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 onTap: () {
                                   setState(() {
                                     if (isSelected) {

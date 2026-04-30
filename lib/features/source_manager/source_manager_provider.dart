@@ -12,6 +12,34 @@ import 'package:inkpage_reader/core/services/check_source_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'widgets/import_preview_dialog.dart';
 
+Map<String, List<Map<String, dynamic>>> _parseSourcesPayloadForIsolate(
+  String jsonStr,
+) {
+  final decoded = jsonDecode(jsonStr);
+  final List<dynamic> list = decoded is List ? decoded : [decoded];
+  final importable = <Map<String, dynamic>>[];
+  final unsupported = <Map<String, dynamic>>[];
+  for (final e in list) {
+    if (e is! Map<String, dynamic>) continue;
+    final source = BookSource.fromJson(e);
+    if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
+      continue;
+    }
+    if (!source.isNovelTextSource) {
+      source.enabled = false;
+      source.enabledExplore = false;
+      source.addGroup(nonNovelSourceGroupTag);
+      unsupported.add(source.toJson());
+      continue;
+    }
+    importable.add(source.toJson());
+  }
+  return <String, List<Map<String, dynamic>>>{
+    'importable': importable,
+    'unsupported': unsupported,
+  };
+}
+
 class ParsedSourceImportResult {
   final List<BookSource> importableSources;
   final List<BookSource> unsupportedSources;
@@ -32,6 +60,8 @@ class SourceManagerProvider with ChangeNotifier {
   final CheckSourceService checkService = CheckSourceService();
 
   List<BookSourcePart> _sources = [];
+  List<BookSourcePart>? _visibleSourcesCache;
+  bool _visibleSourcesDirty = true;
 
   String filterGroup = '全部';
   String _searchQuery = '';
@@ -44,6 +74,16 @@ class SourceManagerProvider with ChangeNotifier {
   int get totalSourceCount => _sources.length;
 
   List<BookSourcePart> get sources {
+    if (_visibleSourcesDirty || _visibleSourcesCache == null) {
+      _visibleSourcesCache = List<BookSourcePart>.unmodifiable(
+        _computeVisibleSources(),
+      );
+      _visibleSourcesDirty = false;
+    }
+    return _visibleSourcesCache!;
+  }
+
+  List<BookSourcePart> _computeVisibleSources() {
     var list = List<BookSourcePart>.from(_sources);
 
     // 全文搜尋
@@ -126,13 +166,21 @@ class SourceManagerProvider with ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> loadSources() async {
-    _isLoading = true;
-    notifyListeners();
-    _sources = await _dao.getAllPart();
-    _updateGroups();
-    _isLoading = false;
-    notifyListeners();
+  Future<void> loadSources({bool showLoading = true}) async {
+    if (showLoading) {
+      _isLoading = true;
+      notifyListeners();
+    }
+    try {
+      _sources = await _dao.getAllPart();
+      _updateGroups();
+      _markVisibleSourcesDirty();
+    } finally {
+      if (showLoading) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
   }
 
   /// 獲取完整書源 (用於編輯或調試)
@@ -150,26 +198,31 @@ class SourceManagerProvider with ChangeNotifier {
 
   void setFilterGroup(String group) {
     filterGroup = group;
+    _markVisibleSourcesDirty();
     notifyListeners();
   }
 
   void setSortMode(int mode) {
     sortMode = mode;
+    _markVisibleSourcesDirty();
     notifyListeners();
   }
 
   void toggleSortDesc() {
     sortDesc = !sortDesc;
+    _markVisibleSourcesDirty();
     notifyListeners();
   }
 
   void setSearchQuery(String query) {
     _searchQuery = query;
+    _markVisibleSourcesDirty();
     notifyListeners();
   }
 
   void toggleGroupByDomain() {
     groupByDomain = !groupByDomain;
+    _markVisibleSourcesDirty();
     notifyListeners();
   }
 
@@ -184,14 +237,15 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   bool shouldShowHostHeaderAt(int index) {
-    if (!groupByDomain || index < 0 || index >= sources.length) {
+    final visible = sources;
+    if (!groupByDomain || index < 0 || index >= visible.length) {
       return false;
     }
     if (index == 0) {
       return true;
     }
-    return getSourceHost(sources[index - 1].bookSourceUrl) !=
-        getSourceHost(sources[index].bookSourceUrl);
+    return getSourceHost(visible[index - 1].bookSourceUrl) !=
+        getSourceHost(visible[index].bookSourceUrl);
   }
 
   void toggleSelect(String url) {
@@ -404,7 +458,7 @@ class SourceManagerProvider with ChangeNotifier {
   Future<void> reorderSource(int oldIndex, int newIndex) async {
     if (sortMode != 0 || groupByDomain) return;
     if (newIndex > oldIndex) newIndex -= 1;
-    final list = sources;
+    final list = List<BookSourcePart>.from(sources);
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
     await _dao.updateCustomOrder(list);
@@ -528,6 +582,23 @@ class SourceManagerProvider with ChangeNotifier {
     return parseSourcesDetailed(jsonStr).allSources;
   }
 
+  Future<ParsedSourceImportResult> parseSourcesDetailedAsync(
+    String jsonStr,
+  ) async {
+    final payload = await compute(_parseSourcesPayloadForIsolate, jsonStr);
+    List<BookSource> decodeList(String key) {
+      final rawList = payload[key] ?? const <Map<String, dynamic>>[];
+      return rawList
+          .map((item) => BookSource.fromJson(Map<String, dynamic>.from(item)))
+          .toList(growable: false);
+    }
+
+    return ParsedSourceImportResult(
+      importableSources: decodeList('importable'),
+      unsupportedSources: decodeList('unsupported'),
+    );
+  }
+
   ParsedSourceImportResult parseSourcesDetailed(String jsonStr) {
     final decoded = jsonDecode(jsonStr);
     final List<dynamic> list = decoded is List ? decoded : [decoded];
@@ -562,12 +633,16 @@ class SourceManagerProvider with ChangeNotifier {
     final newSources = <BookSource>[];
     final updatedSources = <BookSource>[];
     final unchangedSources = <BookSource>[];
+    final existingByUrl = <String, int>{};
+    for (final source in await _dao.getAllPart()) {
+      existingByUrl[source.bookSourceUrl] = source.lastUpdateTime;
+    }
 
     for (final s in incoming) {
-      final existing = await _dao.getByUrl(s.bookSourceUrl);
-      if (existing == null) {
+      final existingUpdateTime = existingByUrl[s.bookSourceUrl];
+      if (existingUpdateTime == null) {
         newSources.add(s);
-      } else if (existing.lastUpdateTime != s.lastUpdateTime) {
+      } else if (existingUpdateTime != s.lastUpdateTime) {
         updatedSources.add(s);
       } else {
         unchangedSources.add(s);
@@ -589,7 +664,7 @@ class SourceManagerProvider with ChangeNotifier {
     notifyListeners();
     try {
       await _dao.insertOrUpdateAll(sources);
-      await loadSources();
+      await loadSources(showLoading: false);
       return sources.length;
     } finally {
       _isLoading = false;
@@ -601,10 +676,10 @@ class SourceManagerProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final parsed = parseSourcesDetailed(jsonStr);
+      final parsed = await parseSourcesDetailedAsync(jsonStr);
       if (parsed.allSources.isEmpty) return 0;
       await _dao.insertOrUpdateAll(parsed.allSources);
-      await loadSources();
+      await loadSources(showLoading: false);
       return parsed.allSources.length;
     } catch (_) {
       return 0;
@@ -615,16 +690,10 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   Future<int> importFromUrl(String url) async {
-    _isLoading = true;
-    notifyListeners();
     try {
       final text = await fetchImportTextFromUrl(url);
       return await importFromJson(text);
-    } catch (_) {
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    } catch (_) {}
     return 0;
   }
 
@@ -672,6 +741,11 @@ class SourceManagerProvider with ChangeNotifier {
 
   Future<int> importFromText(String text) async {
     return await importFromJson(text);
+  }
+
+  void _markVisibleSourcesDirty() {
+    _visibleSourcesDirty = true;
+    _visibleSourcesCache = null;
   }
 
   int Function(BookSourcePart a, BookSourcePart b) _buildComparator() {

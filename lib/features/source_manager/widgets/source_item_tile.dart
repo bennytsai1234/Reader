@@ -15,6 +15,8 @@ class SourceItemTile extends StatelessWidget {
   final VoidCallback onShowMenu;
   final ValueChanged<bool?> onEnabledChanged;
   final int? index;
+  final bool showHostHeader;
+  final String hostLabel;
 
   const SourceItemTile({
     super.key,
@@ -27,14 +29,13 @@ class SourceItemTile extends StatelessWidget {
     required this.onShowMenu,
     required this.onEnabledChanged,
     this.index,
+    this.showHostHeader = false,
+    this.hostLabel = '',
   });
 
   @override
   Widget build(BuildContext context) {
     final canDrag = provider.sortMode == 0 && !provider.groupByDomain;
-    final showHostHeader =
-        index != null && provider.shouldShowHostHeaderAt(index!);
-    final host = provider.getSourceHost(source.bookSourceUrl);
     final hasStatusDot = source.hasExploreUrl;
     final checkProgress = provider.checkService.progressOf(
       source.bookSourceUrl,
@@ -48,7 +49,7 @@ class SourceItemTile extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Text(
-              host,
+              hostLabel,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w700,
