@@ -561,7 +561,16 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                   }
                   Navigator.pop(ctx);
                   if (isUrl) {
-                    await p.importFromUrl(input);
+                    try {
+                      final jsonText = await p.fetchImportTextFromUrl(input);
+                      if (!context.mounted) return;
+                      await _importWithPreview(context, jsonText);
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('網路匯入失敗: $e')));
+                    }
                   } else {
                     if (!context.mounted) return;
                     await _importWithPreview(context, input);

@@ -1,0 +1,58 @@
+[
+  {
+    "bookSourceName": "BB成人小说",
+    "bookSourceUrl": "https://bbxxxx.com",
+    "bookSourceType": 0,
+    "enabled": true,
+    "enabledExplore": true,
+    "searchUrl": "/search/?q={{key}}&page={{page}}",
+    "ruleSearch": {
+      "bookList": "class.novel-item",
+      "bookUrl": "class.info@tag.a@href",
+      "name": "class.info@tag.a@text",
+      "author": "class.meta@text"
+    }
+  },
+  {
+    "bookSourceName": "🎓 爱丽丝书屋",
+    "bookSourceUrl": "https://www.alicesw.com/",
+    "bookSourceType": 0,
+    "enabled": true,
+    "enabledExplore": true,
+    "searchUrl": "/search.html?q={{key}}&p={{page}}",
+    "ruleSearch": {
+      "bookList": ".list-group-item",
+      "bookUrl": ":root@[0]@[0]@href",
+      "name": ":root@[0]@[0]@text##^\\d+\\.\\s*",
+      "author": ":root@[1]@[0]@text"
+    }
+  },
+  {
+    "bookSourceName": "随心看吧",
+    "bookSourceUrl": "https://m.suixkan.com#♤guaner",
+    "bookSourceType": 0,
+    "enabled": true,
+    "enabledExplore": true,
+    "searchUrl": "https://m.suixkan.com/s/1.html?keyword={{key}}\n@js:java.put('key',key);result",
+    "ruleSearch": {
+      "bookList": "class.v-list-item\n@js:\nlist=result.toArray();\nlist1=[];\nfor(i in list){\nif(list[i].text().indexOf(java.get('key'))>-1){\nlist1.push(list[i])\n}\n}\nlist1.map(x=>x)",
+      "bookUrl": "##=\"newWebView\\('([^']+)'##$1###",
+      "name": ".v-title@text",
+      "author": ".v-author@text"
+    }
+  },
+  {
+    "bookSourceName": "🎃酷匠阅读🎃",
+    "bookSourceUrl": "https://app.kujiang.com#🎃",
+    "bookSourceType": 0,
+    "enabled": true,
+    "enabledExplore": true,
+    "searchUrl": "https://app.kujiang.com/v1/book/search202107?keyword={{key}}",
+    "ruleSearch": {
+      "bookList": "$.body.list",
+      "bookUrl": "https://app.kujiang.com/v1/book/get_book_infos?from=search&subsite=m&book={{$.book}}",
+      "name": "v_book",
+      "author": "penname"
+    }
+  }
+]

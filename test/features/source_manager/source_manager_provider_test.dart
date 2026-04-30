@@ -1,12 +1,23 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:inkpage_reader/core/constant/source_type.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
+import 'package:inkpage_reader/core/services/network_service.dart';
 import 'package:inkpage_reader/features/source_manager/source_manager_provider.dart';
+
+const _nyasamaSourceUrl =
+    'https://shuyuan.nyasama.net/shuyuan/382015f6ff010d7fee368c6daabd5081.json';
+const _nyasamaFixturePath =
+    'test/features/source_manager/fixtures/nyasama_sources_subset.json';
+
+Future<String> _readFixture(String path) => File(path).readAsString();
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
   final Map<String, BookSource> store = <String, BookSource>{};
@@ -40,13 +51,51 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
   }
 }
 
+class _FakeNetworkService extends Fake implements NetworkService {
+  _FakeNetworkService(this.body);
+
+  final String body;
+
+  @override
+  Dio get dio => Dio()..httpClientAdapter = _StaticResponseAdapter(body);
+}
+
+class _StaticResponseAdapter implements HttpClientAdapter {
+  _StaticResponseAdapter(this.body);
+
+  final String body;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      body,
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>['text/plain; charset=utf-8'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   late _FakeSourceDao fakeDao;
+  late String networkBody;
 
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     fakeDao = _FakeSourceDao();
+    networkBody = '';
     GetIt.instance.registerLazySingleton<BookSourceDao>(() => fakeDao);
+    GetIt.instance.registerLazySingleton<NetworkService>(
+      () => _FakeNetworkService(networkBody),
+    );
   });
 
   tearDown(() async {
@@ -85,86 +134,135 @@ void main() {
     expect(parsed[1].bookSourceName, '第二个书源');
   });
 
-  test('parseSourcesDetailed preserves unsupported sources as disabled entries', () {
+  test('parseSources supports nyasama source fixture subset', () async {
     final provider = SourceManagerProvider();
-    final jsonStr = jsonEncode([
-      {
-        'bookSourceName': '純小說站',
-        'bookSourceUrl': 'https://novel.example.com',
-        'bookSourceType': SourceType.book,
-      },
-      {
-        'bookSourceName': '有聲站',
-        'bookSourceUrl': 'https://audio.example.com',
-        'bookSourceType': SourceType.audio,
-      },
-      {
-        'bookSourceName': '漫畫站',
-        'bookSourceUrl': 'https://comic.example.com',
-        'bookSourceType': SourceType.book,
-      },
-    ]);
+    final jsonStr = await _readFixture(_nyasamaFixturePath);
 
-    final parsed = provider.parseSourcesDetailed(jsonStr);
+    final parsed = provider.parseSources(jsonStr);
 
-    expect(parsed.importableSources, hasLength(1));
-    expect(parsed.importableSources.single.bookSourceName, '純小說站');
-    expect(parsed.unsupportedSources, hasLength(2));
-    expect(parsed.allSources, hasLength(3));
-    expect(parsed.unsupportedSources.first.enabled, isFalse);
-    expect(
-      parsed.unsupportedSources.first.bookSourceGroup,
-      contains(nonNovelSourceGroupTag),
-    );
+    expect(parsed, hasLength(4));
+    expect(parsed.first.bookSourceName, 'BB成人小说');
+    expect(parsed.first.bookSourceType, SourceType.book);
+    expect(parsed.first.ruleSearch?.bookList, 'class.novel-item');
+    expect(parsed[2].searchUrl, contains('@js:java.put'));
+    expect(parsed[3].bookSourceUrl, 'https://app.kujiang.com#🎃');
   });
 
-  test('checkAllSources uses all stored sources instead of current filter', () async {
-    fakeDao.store['https://enabled.example.com'] = BookSource(
-      bookSourceUrl: 'https://enabled.example.com',
-      bookSourceName: '啟用源',
-      bookSourceType: SourceType.book,
-      enabled: true,
-    );
-    fakeDao.store['https://disabled.example.com'] = BookSource(
-      bookSourceUrl: 'https://disabled.example.com',
-      bookSourceName: '停用源',
-      bookSourceType: SourceType.book,
-      enabled: false,
-    );
+  test(
+    'importFromUrl imports nyasama raw JSON string without double encoding',
+    () async {
+      networkBody = await _readFixture(_nyasamaFixturePath);
+      final provider = SourceManagerProvider();
 
+      final count = await provider.importFromUrl(_nyasamaSourceUrl);
+
+      expect(count, 4);
+      expect(fakeDao.store.keys, contains('https://bbxxxx.com'));
+      expect(
+        fakeDao.store['https://m.suixkan.com#♤guaner']?.ruleSearch?.bookUrl,
+        '##="newWebView\\(\'([^\']+)\'##\$1###',
+      );
+    },
+  );
+
+  test('importPayloadToText strips BOM and decodes bytes', () {
     final provider = SourceManagerProvider();
-    await provider.loadSources();
-    provider.setFilterGroup('已啟用');
+    final payload = utf8.encode('\uFEFF[{"bookSourceName":"A"}]');
 
-    await provider.checkAllSources();
+    final text = provider.importPayloadToTextForTest(payload);
 
-    expect(provider.lastCheckReport.total, 2);
+    expect(text, '[{"bookSourceName":"A"}]');
   });
 
-  test('previewImport keeps unsupported new sources in import buckets', () async {
-    final provider = SourceManagerProvider();
-    final novelSource = BookSource(
-      bookSourceUrl: 'https://novel.example.com',
-      bookSourceName: '小說源',
-      bookSourceType: SourceType.book,
-    );
-    final unsupportedSource = BookSource(
-      bookSourceUrl: 'https://audio.example.com',
-      bookSourceName: '有聲源',
-      bookSourceType: SourceType.audio,
-      enabled: false,
-      enabledExplore: false,
-      bookSourceGroup: nonNovelSourceGroupTag,
-    );
+  test(
+    'parseSourcesDetailed preserves unsupported sources as disabled entries',
+    () {
+      final provider = SourceManagerProvider();
+      final jsonStr = jsonEncode([
+        {
+          'bookSourceName': '純小說站',
+          'bookSourceUrl': 'https://novel.example.com',
+          'bookSourceType': SourceType.book,
+        },
+        {
+          'bookSourceName': '有聲站',
+          'bookSourceUrl': 'https://audio.example.com',
+          'bookSourceType': SourceType.audio,
+        },
+        {
+          'bookSourceName': '漫畫站',
+          'bookSourceUrl': 'https://comic.example.com',
+          'bookSourceType': SourceType.book,
+        },
+      ]);
 
-    final preview = await provider.previewImport(
-      [novelSource, unsupportedSource],
-      unsupportedSources: [unsupportedSource],
-    );
+      final parsed = provider.parseSourcesDetailed(jsonStr);
 
-    expect(preview.newSources, hasLength(2));
-    expect(preview.unsupportedSources, [unsupportedSource]);
-  });
+      expect(parsed.importableSources, hasLength(1));
+      expect(parsed.importableSources.single.bookSourceName, '純小說站');
+      expect(parsed.unsupportedSources, hasLength(2));
+      expect(parsed.allSources, hasLength(3));
+      expect(parsed.unsupportedSources.first.enabled, isFalse);
+      expect(
+        parsed.unsupportedSources.first.bookSourceGroup,
+        contains(nonNovelSourceGroupTag),
+      );
+    },
+  );
+
+  test(
+    'checkAllSources uses all stored sources instead of current filter',
+    () async {
+      fakeDao.store['https://enabled.example.com'] = BookSource(
+        bookSourceUrl: 'https://enabled.example.com',
+        bookSourceName: '啟用源',
+        bookSourceType: SourceType.book,
+        enabled: true,
+      );
+      fakeDao.store['https://disabled.example.com'] = BookSource(
+        bookSourceUrl: 'https://disabled.example.com',
+        bookSourceName: '停用源',
+        bookSourceType: SourceType.book,
+        enabled: false,
+      );
+
+      final provider = SourceManagerProvider();
+      await provider.loadSources();
+      provider.setFilterGroup('已啟用');
+
+      await provider.checkAllSources();
+
+      expect(provider.lastCheckReport.total, 2);
+    },
+  );
+
+  test(
+    'previewImport keeps unsupported new sources in import buckets',
+    () async {
+      final provider = SourceManagerProvider();
+      final novelSource = BookSource(
+        bookSourceUrl: 'https://novel.example.com',
+        bookSourceName: '小說源',
+        bookSourceType: SourceType.book,
+      );
+      final unsupportedSource = BookSource(
+        bookSourceUrl: 'https://audio.example.com',
+        bookSourceName: '有聲源',
+        bookSourceType: SourceType.audio,
+        enabled: false,
+        enabledExplore: false,
+        bookSourceGroup: nonNovelSourceGroupTag,
+      );
+
+      final preview = await provider.previewImport(
+        [novelSource, unsupportedSource],
+        unsupportedSources: [unsupportedSource],
+      );
+
+      expect(preview.newSources, hasLength(2));
+      expect(preview.unsupportedSources, [unsupportedSource]);
+    },
+  );
 
   test('deleteNonNovelSources removes existing non-novel sources', () async {
     fakeDao.store['https://novel.example.com'] = BookSource(

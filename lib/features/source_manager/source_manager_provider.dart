@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/di/injection.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
@@ -617,16 +618,56 @@ class SourceManagerProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final response = await getIt<NetworkService>().dio.get(url);
-      if (response.statusCode == 200) {
-        return await importFromJson(jsonEncode(response.data));
-      }
+      final text = await fetchImportTextFromUrl(url);
+      return await importFromJson(text);
     } catch (_) {
     } finally {
       _isLoading = false;
       notifyListeners();
     }
     return 0;
+  }
+
+  Future<String> fetchImportTextFromUrl(String url) async {
+    final trimmedUrl = url.trim();
+    final uri = Uri.tryParse(trimmedUrl);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      throw FormatException('無效的匯入網址', url);
+    }
+
+    final response = await getIt<NetworkService>().dio.getUri<dynamic>(
+      uri,
+      options: Options(responseType: ResponseType.plain),
+    );
+    final statusCode = response.statusCode ?? 0;
+    if (statusCode < 200 || statusCode >= 300) {
+      throw StateError('匯入網址回應異常：HTTP $statusCode');
+    }
+    return _importPayloadToText(response.data);
+  }
+
+  @visibleForTesting
+  String importPayloadToTextForTest(dynamic data) => _importPayloadToText(data);
+
+  String _importPayloadToText(dynamic data) {
+    if (data == null) return '';
+    if (data is String) {
+      return _stripBom(data.trim());
+    }
+    if (data is Uint8List) {
+      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
+    }
+    if (data is List<int>) {
+      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
+    }
+    return jsonEncode(data);
+  }
+
+  String _stripBom(String value) {
+    if (value.isNotEmpty && value.codeUnitAt(0) == 0xFEFF) {
+      return value.substring(1);
+    }
+    return value;
   }
 
   Future<int> importFromText(String text) async {
