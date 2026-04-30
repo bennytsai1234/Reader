@@ -436,7 +436,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     _capturingVisibleLocation = true;
     final ReaderV2Location? location;
     try {
-      location = widget.runtime.captureVisibleLocation(notifyIfChanged: false);
+      location = widget.runtime.captureVisibleLocation();
     } finally {
       _capturingVisibleLocation = false;
     }
@@ -668,6 +668,10 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       return;
     }
     _animationTickCount += 1;
+    if (_animationTickCount == 1 ||
+        _animationTickCount % _animationShiftThrottleEveryTicks == 0) {
+      _scheduleVisibleLocationCapture();
+    }
     if (_animationTickCount % _animationShiftThrottleEveryTicks == 0) {
       _scheduleWindowShiftForAnchor();
     }

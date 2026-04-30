@@ -402,6 +402,70 @@ void main() {
     runtime.dispose();
   });
 
+  testWidgets('scroll viewport reports visible page before drag settles', (
+    tester,
+  ) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.scroll,
+      chapterCount: 1,
+      paragraphsPerChapter: 80,
+    );
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: ScrollReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            controller: ReaderV2ViewportController(),
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final layout = await runtime.debugResolver.ensureLayout(0);
+    expect(layout.pages.length, greaterThan(1));
+    final startPageIndex =
+        layout
+            .pageForCharOffset(runtime.state.visibleLocation.charOffset)
+            .pageIndex;
+
+    var notifyCount = 0;
+    ReaderV2Location? notifiedLocation;
+    void listener() {
+      notifyCount += 1;
+      notifiedLocation = runtime.state.visibleLocation;
+    }
+
+    runtime.addListener(listener);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(ScrollReaderV2Viewport)),
+    );
+    await gesture.moveBy(const Offset(0, -420));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(notifyCount, greaterThan(0));
+    expect(notifiedLocation, isNotNull);
+    final notifiedPageIndex =
+        layout.pageForCharOffset(notifiedLocation!.charOffset).pageIndex;
+    expect(notifiedPageIndex, greaterThan(startPageIndex));
+
+    await gesture.up();
+    await _pumpViewportCommand(tester);
+    runtime.removeListener(listener);
+    runtime.dispose();
+  });
+
   testWidgets('scroll viewport survives a fast multi-page jump', (
     tester,
   ) async {
