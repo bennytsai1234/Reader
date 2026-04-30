@@ -224,9 +224,12 @@ class _BookDetailPageState extends State<BookDetailPage> {
       if (!confirmed || !context.mounted) return;
       final result = await provider.setInBookshelf(false);
       if (!context.mounted) return;
+      messenger.clearSnackBars();
       messenger.showSnackBar(
         SnackBar(
           content: Text(result.message),
+          duration: const Duration(seconds: 4),
+          persist: false,
           action:
               result.success
                   ? SnackBarAction(
