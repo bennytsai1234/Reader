@@ -244,7 +244,7 @@ extension on _SourceCheckMode {
 class CheckSourceService extends ChangeNotifier {
   static const int _validationPageConcurrency = 1;
   static const int _validationChapterLimit = 8;
-  static const int _sourceCheckConcurrency = 6;
+  static const int _sourceCheckConcurrency = 8;
   static const Duration _notifyThrottleInterval = Duration(milliseconds: 120);
   final BookSourceService _service;
   final BookSourceDao _sourceDao;

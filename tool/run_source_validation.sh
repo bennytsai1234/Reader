@@ -4,7 +4,7 @@ set -euo pipefail
 START="${1:-${SOURCE_START:-0}}"
 LIMIT="${2:-${SOURCE_LIMIT:-10}}"
 TIMEOUT_SECONDS="${SOURCE_TIMEOUT_SECONDS:-20}"
-CONCURRENCY="${SOURCE_CONCURRENCY:-4}"
+CONCURRENCY="${SOURCE_CONCURRENCY:-6}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 quickjs_lib="$("${SCRIPT_DIR}/with_quickjs_env.sh" python3 - <<'PY'

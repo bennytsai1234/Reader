@@ -19,7 +19,7 @@ void main() {
   final perSourceTimeoutSeconds =
       int.tryParse(Platform.environment['SOURCE_TIMEOUT_SECONDS'] ?? '') ?? 20;
   final sourceConcurrency =
-      int.tryParse(Platform.environment['SOURCE_CONCURRENCY'] ?? '') ?? 4;
+      int.tryParse(Platform.environment['SOURCE_CONCURRENCY'] ?? '') ?? 6;
   late final List<SourceValidationResult> results;
 
   setUpAll(() async {
