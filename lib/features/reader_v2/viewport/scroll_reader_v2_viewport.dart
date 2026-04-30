@@ -62,6 +62,7 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
   bool _isDragging = false;
   bool _capturingVisibleLocation = false;
   bool _visibleLocationCaptureFramePending = false;
+  bool _shiftWindowFramePending = false;
   bool _shiftWindowAgainRequested = false;
   Future<void>? _shiftWindowTask;
   Future<void> _viewportCommandTail = Future<void>.value();
@@ -239,9 +240,9 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
   }
 
   double _forwardWindowExtent() =>
-      _viewportHeight() * 1.5 + _anchorOffsetInViewport();
+      _viewportHeight() * 8.0 + _anchorOffsetInViewport();
 
-  double _backwardWindowExtent() => _viewportHeight() * 1.25;
+  double _backwardWindowExtent() => _viewportHeight() * 3.0;
 
   int _safeChapterIndex(int chapterIndex) {
     final chapterCount = widget.runtime.chapterCount;
@@ -425,12 +426,12 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     if (delta == 0 || !_visiblePages.hasPages) return false;
     final nextReadingY = _clampReadingY(_readingY + delta);
     if ((nextReadingY - _readingY).abs() < 0.01) {
-      if (scheduleShift) unawaited(_requestShiftWindowForAnchor());
+      if (scheduleShift) _scheduleWindowShiftForAnchor();
       return false;
     }
     _setReadingY(nextReadingY);
     _scheduleVisibleLocationCapture();
-    if (scheduleShift) unawaited(_requestShiftWindowForAnchor());
+    if (scheduleShift) _scheduleWindowShiftForAnchor();
     return true;
   }
 
@@ -448,6 +449,16 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       _visibleLocationCaptureFramePending = false;
       if (!mounted) return;
       _captureAndReportVisibleLocation();
+    });
+  }
+
+  void _scheduleWindowShiftForAnchor() {
+    if (_shiftWindowFramePending) return;
+    _shiftWindowFramePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _shiftWindowFramePending = false;
+      if (!mounted) return;
+      unawaited(_requestShiftWindowForAnchor());
     });
   }
 

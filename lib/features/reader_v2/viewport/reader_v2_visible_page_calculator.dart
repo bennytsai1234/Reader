@@ -78,33 +78,70 @@ class ReaderV2VisiblePageCalculator {
     required double readingY,
     required double viewportHeight,
   }) {
+    final pages = allPages();
+    if (pages.isEmpty) return const <ReaderV2VisiblePage>[];
     final visibleTop = readingY;
     final visibleBottom = readingY + viewportHeight;
-    return allPages()
-        .where(
-          (placement) =>
-              placement.worldTop < visibleBottom &&
-              placement.worldBottom > visibleTop,
-        )
-        .toList(growable: false);
+    final start = _firstPageEndingAfter(pages, visibleTop);
+    if (start >= pages.length) return const <ReaderV2VisiblePage>[];
+
+    final visible = <ReaderV2VisiblePage>[];
+    for (var index = start; index < pages.length; index++) {
+      final placement = pages[index];
+      if (placement.worldTop >= visibleBottom) break;
+      if (placement.worldBottom > visibleTop) {
+        visible.add(placement);
+      }
+    }
+    return visible;
   }
 
   ReaderV2VisiblePage? placementAtWorldY(double worldY) {
-    ReaderV2VisiblePage? nearest;
-    var nearestDistance = double.infinity;
-    for (final placement in allPages()) {
-      if (worldY >= placement.worldTop && worldY < placement.worldBottom) {
-        return placement;
-      }
-      final distance =
-          worldY < placement.worldTop
-              ? placement.worldTop - worldY
-              : worldY - placement.worldBottom;
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = placement;
+    final pages = allPages();
+    if (pages.isEmpty) return null;
+    final candidateIndex = _lastPageStartingAtOrBefore(pages, worldY);
+    if (candidateIndex >= 0) {
+      final candidate = pages[candidateIndex];
+      if (worldY < candidate.worldBottom) return candidate;
+    }
+    if (candidateIndex < 0) return pages.first;
+    if (candidateIndex >= pages.length - 1) return pages.last;
+
+    final before = pages[candidateIndex];
+    final after = pages[candidateIndex + 1];
+    final distanceToBefore = (worldY - before.worldBottom).abs();
+    final distanceToAfter = (after.worldTop - worldY).abs();
+    return distanceToBefore <= distanceToAfter ? before : after;
+  }
+
+  int _firstPageEndingAfter(List<ReaderV2VisiblePage> pages, double worldY) {
+    var low = 0;
+    var high = pages.length;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      if (pages[mid].worldBottom > worldY) {
+        high = mid;
+      } else {
+        low = mid + 1;
       }
     }
-    return nearest;
+    return low;
+  }
+
+  int _lastPageStartingAtOrBefore(
+    List<ReaderV2VisiblePage> pages,
+    double worldY,
+  ) {
+    var low = 0;
+    var high = pages.length;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      if (pages[mid].worldTop <= worldY) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low - 1;
   }
 }

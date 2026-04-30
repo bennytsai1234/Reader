@@ -169,7 +169,7 @@ class ReaderV2ChapterPageCacheManager {
     final previous = <ReaderV2CachedChapterPages>[];
     var previousIndex = center.chapterIndex - 1;
     var loadedPreviousCount = 0;
-    var backwardCoveredExtent = center.extent;
+    var backwardCoveredExtent = 0.0;
     while (previousIndex >= 0 &&
         (loadedPreviousCount == 0 ||
             backwardCoveredExtent < _normalExtent(backwardExtent))) {
@@ -189,7 +189,7 @@ class ReaderV2ChapterPageCacheManager {
     final next = <ReaderV2CachedChapterPages>[];
     var nextIndex = center.chapterIndex + 1;
     var loadedNextCount = 0;
-    var forwardCoveredExtent = center.extent;
+    var forwardCoveredExtent = 0.0;
     while (nextIndex < runtime.chapterCount &&
         (loadedNextCount == 0 ||
             forwardCoveredExtent < _normalExtent(forwardExtent))) {

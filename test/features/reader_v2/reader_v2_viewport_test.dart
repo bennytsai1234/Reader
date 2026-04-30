@@ -23,6 +23,7 @@ import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_location.dar
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_chapter_page_cache_manager.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/scroll_reader_v2_viewport.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/slide_reader_v2_viewport.dart';
@@ -119,6 +120,80 @@ void main() {
       runtime.dispose();
     },
   );
+
+  test(
+    'scroll cache window covers adjacent extent beyond center chapter',
+    () async {
+      final runtime = _runtime(
+        initialMode: ReaderV2Mode.scroll,
+        chapterCount: 8,
+        paragraphsPerChapter: 2,
+      );
+      await runtime.jumpToLocation(
+        const ReaderV2Location(chapterIndex: 2, charOffset: 0),
+        immediateSave: false,
+      );
+      final manager = ReaderV2ChapterPageCacheManager(
+        runtime: runtime,
+        pageExtent: (page) => page.height,
+      );
+      final center = await manager.ensureChapter(2);
+      expect(center, isNotNull);
+
+      final window = await manager.ensureWindowAround(
+        centerChapterIndex: 2,
+        backwardExtent: center!.extent * 1.5,
+        forwardExtent: center.extent * 2.5,
+      );
+
+      expect(window, isNotNull);
+      expect(window!.previous.length, greaterThanOrEqualTo(2));
+      expect(window.next.length, greaterThanOrEqualTo(3));
+
+      runtime.dispose();
+    },
+  );
+
+  testWidgets('scroll viewport survives a fast multi-page jump', (
+    tester,
+  ) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.scroll,
+      chapterCount: 12,
+      paragraphsPerChapter: 3,
+    );
+    final controller = ReaderV2ViewportController();
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: ScrollReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final moved = await controller.scrollBy!(360 * 8);
+    await _pumpViewport(tester);
+
+    expect(moved, isTrue);
+    expect(tester.takeException(), isNull);
+    expect(runtime.captureVisibleLocation(), isNotNull);
+
+    runtime.dispose();
+  });
 
   testWidgets('slide viewport ensureCharRangeVisible jumps to TTS page', (
     tester,
