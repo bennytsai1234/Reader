@@ -53,6 +53,26 @@ void main() {
     expect(tapCalls, 1);
   });
 
+  testWidgets('stationary tap is reported as content tap', (tester) async {
+    var tapCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox.expand(
+          child: ReaderV2GestureLayer(
+            onTapUp: (_) => tapCalls += 1,
+            child: const ColoredBox(color: Colors.white),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tapAt(const Offset(120, 180));
+    await tester.pump();
+
+    expect(tapCalls, 1);
+  });
+
   testWidgets('drag remains available to viewport child', (tester) async {
     var tapCalls = 0;
     var dragUpdates = 0;

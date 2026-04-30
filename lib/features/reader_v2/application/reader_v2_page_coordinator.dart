@@ -37,7 +37,7 @@ class ReaderV2PageCoordinator {
     );
     switch (action) {
       case ReaderV2TapAction.menu:
-        _host.menu.toggleControls();
+        _host.menu.showControls();
         return;
       case ReaderV2TapAction.nextPage:
         _movePage(forward: true);

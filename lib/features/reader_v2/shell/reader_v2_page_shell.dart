@@ -37,7 +37,8 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.onAutoPage,
     required this.onToggleDayNight,
     required this.onReplaceRule,
-    required this.onToggleControls,
+    required this.onShowControls,
+    required this.onDismissControls,
     required this.onPrevChapter,
     required this.onNextChapter,
     required this.onScrubStart,
@@ -77,7 +78,8 @@ class ReaderV2PageShell extends StatelessWidget {
   final VoidCallback onAutoPage;
   final VoidCallback onToggleDayNight;
   final VoidCallback onReplaceRule;
-  final VoidCallback onToggleControls;
+  final VoidCallback onShowControls;
+  final VoidCallback onDismissControls;
   final VoidCallback onPrevChapter;
   final VoidCallback onNextChapter;
   final VoidCallback onScrubStart;
@@ -117,7 +119,7 @@ class ReaderV2PageShell extends StatelessWidget {
                   height: topSystemExtent,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (_) => onToggleControls(),
+                    onTapDown: (_) => onShowControls(),
                     child: _TopSystemInfoBar(shell: this),
                   ),
                 ),
@@ -129,7 +131,7 @@ class ReaderV2PageShell extends StatelessWidget {
                   height: permanentInfoExtent,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (_) => onToggleControls(),
+                    onTapDown: (_) => onShowControls(),
                     child: _PermanentInfoBar(shell: this),
                   ),
                 ),
@@ -137,7 +139,7 @@ class ReaderV2PageShell extends StatelessWidget {
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapDown: (_) => onToggleControls(),
+                    onTapDown: (_) => onDismissControls(),
                   ),
                 ),
               ReaderV2TopMenu(

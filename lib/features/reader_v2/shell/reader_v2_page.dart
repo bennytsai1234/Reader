@@ -163,7 +163,8 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         onAutoPage: _coordinator.toggleAutoPage,
         onToggleDayNight: settings.toggleDayNightTheme,
         onReplaceRule: () => _coordinator.openReplaceRule(context),
-        onToggleControls: menu.toggleControls,
+        onShowControls: menu.showControls,
+        onDismissControls: menu.dismissControls,
         onPrevChapter: () => unawaited(_coordinator.jumpRelativeChapter(-1)),
         onNextChapter: () => unawaited(_coordinator.jumpRelativeChapter(1)),
         onScrubStart: () => menu.onScrubStart(chapterIndex),
@@ -202,14 +203,18 @@ class _ReaderV2PageState extends State<ReaderV2Page>
           style: style,
           viewportController: _host.viewportController,
           ttsHighlight: _host.tts?.currentHighlight,
-          onContentTapUp:
-              _host.menu.controlsVisible
-                  ? null
-                  : (details) =>
-                      _coordinator.handleTap(details, _lastViewportSize),
+          onContentTapUp: _handleContentTap,
         );
       },
     );
+  }
+
+  void _handleContentTap(TapUpDetails details) {
+    if (_host.menu.controlsVisible) {
+      _host.menu.dismissControls();
+      return;
+    }
+    _coordinator.handleTap(details, _lastViewportSize);
   }
 
   void _drainRuntimeNotice() {

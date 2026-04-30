@@ -8,11 +8,6 @@ class ReaderV2MenuController extends ChangeNotifier {
 
   bool get hasPendingChapterNavigation => pendingChapterNavigationIndex != null;
 
-  void toggleControls() {
-    controlsVisible = !controlsVisible;
-    notifyListeners();
-  }
-
   void dismissControls() {
     if (!controlsVisible) return;
     controlsVisible = false;
