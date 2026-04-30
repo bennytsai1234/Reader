@@ -41,6 +41,8 @@ class SlideReaderV2Viewport extends StatefulWidget {
 class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     with SingleTickerProviderStateMixin {
   static const double _dragWarmupDistance = 12;
+  static const double _axisIntentSlop = 12;
+  static const double _verticalIntentRatio = 1.2;
 
   late final AnimationController _slideController;
   late int _lastLayoutGeneration;
@@ -54,7 +56,10 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
   bool _pageTurnInProgress = false;
   bool _dragActive = false;
   bool _queueingBusyDrag = false;
+  bool _rejectingVerticalIntent = false;
+  bool _horizontalIntentAccepted = false;
   double _queuedBusyDragDx = 0;
+  Offset? _dragDownGlobalPosition;
   final ValueNotifier<double> _dragOffset = ValueNotifier<double>(0.0);
   Future<void> _pageCommandTail = Future<void>.value();
 
@@ -174,7 +179,10 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     _pageTurnInProgress = false;
     _dragActive = false;
     _queueingBusyDrag = false;
+    _rejectingVerticalIntent = false;
+    _horizontalIntentAccepted = false;
     _queuedBusyDragDx = 0;
+    _dragDownGlobalPosition = null;
     _dragDx = 0;
     _rawDragDx = 0;
     _dragOffset.value = 0;
@@ -196,6 +204,39 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
       return nextDx * 0.35;
     }
     return nextDx;
+  }
+
+  bool _isMostlyVerticalDrag(Offset currentGlobalPosition) {
+    final down = _dragDownGlobalPosition;
+    if (down == null) return false;
+    final delta = currentGlobalPosition - down;
+    final dx = delta.dx.abs();
+    final dy = delta.dy.abs();
+    return dy > _axisIntentSlop && dy > dx * _verticalIntentRatio;
+  }
+
+  bool _ensureHorizontalIntent(Offset currentGlobalPosition) {
+    if (_horizontalIntentAccepted) return true;
+    if (_isMostlyVerticalDrag(currentGlobalPosition)) {
+      _rejectingVerticalIntent = true;
+      _setDragOffsets(0, rawDx: 0);
+      return false;
+    }
+    final down = _dragDownGlobalPosition;
+    if (down == null) {
+      _horizontalIntentAccepted = true;
+      return true;
+    }
+    final dx = (currentGlobalPosition.dx - down.dx).abs();
+    if (dx <= _axisIntentSlop) return false;
+    _horizontalIntentAccepted = true;
+    return true;
+  }
+
+  double _rawDxForUpdate(DragUpdateDetails details) {
+    final down = _dragDownGlobalPosition;
+    if (down == null) return _rawDragDx + details.delta.dx;
+    return details.globalPosition.dx - down.dx;
   }
 
   Future<bool> _animateTo(
@@ -322,6 +363,8 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     }
     _dragActive = true;
     _queueingBusyDrag = false;
+    _rejectingVerticalIntent = false;
+    _horizontalIntentAccepted = false;
     _queuedBusyDragDx = 0;
     _slideController.stop();
     _slideController.value = 0;
@@ -332,6 +375,8 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
+    if (_rejectingVerticalIntent) return;
+    if (!_ensureHorizontalIntent(details.globalPosition)) return;
     if (_queueingBusyDrag) {
       _queuedBusyDragDx += details.delta.dx;
       return;
@@ -339,7 +384,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     if (_pageTurnInProgress) return;
     final window = widget.runtime.state.pageWindow;
     if (window == null) return;
-    final nextRawDx = _rawDragDx + details.delta.dx;
+    final nextRawDx = _rawDxForUpdate(details);
     if (nextRawDx.abs() >= _dragWarmupDistance) {
       _warmSlideNeighbor(forward: nextRawDx < 0);
     }
@@ -354,6 +399,16 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
   }
 
   void _handleDragEnd(DragEndDetails details, double width) {
+    _dragDownGlobalPosition = null;
+    if (_rejectingVerticalIntent) {
+      _rejectingVerticalIntent = false;
+      _horizontalIntentAccepted = false;
+      _dragActive = false;
+      _queueingBusyDrag = false;
+      _queuedBusyDragDx = 0;
+      _setDragOffsets(0, rawDx: 0);
+      return;
+    }
     if (_queueingBusyDrag) {
       _queueingBusyDrag = false;
       if (width <= 0) return;
@@ -416,6 +471,7 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
   }
 
   void _handleDragCancel() {
+    _dragDownGlobalPosition = null;
     if (_queueingBusyDrag) {
       _queueingBusyDrag = false;
       _queuedBusyDragDx = 0;
@@ -780,6 +836,8 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: widget.onTapUp,
+          onHorizontalDragDown:
+              (details) => _dragDownGlobalPosition = details.globalPosition,
           onHorizontalDragStart: _handleDragStart,
           onHorizontalDragUpdate: _handleDragUpdate,
           onHorizontalDragEnd: (details) => _handleDragEnd(details, width),

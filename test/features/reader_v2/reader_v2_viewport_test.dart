@@ -18,6 +18,7 @@ import 'package:inkpage_reader/features/reader_v2/layout/reader_v2_layout_spec.d
 import 'package:inkpage_reader/features/reader_v2/layout/reader_v2_style.dart';
 import 'package:inkpage_reader/features/reader_v2/render/reader_v2_page_cache.dart';
 import 'package:inkpage_reader/features/reader_v2/render/reader_v2_render_page.dart';
+import 'package:inkpage_reader/features/reader_v2/render/reader_v2_tile_layer.dart';
 import 'package:inkpage_reader/features/reader_v2/render/reader_v2_tts_highlight_overlay_layer.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_location.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
@@ -364,6 +365,58 @@ void main() {
     await _pumpViewport(tester);
 
     expect(runtime.captureVisibleLocation()?.chapterIndex, 2);
+
+    runtime.dispose();
+  });
+
+  testWidgets('slide viewport ignores mostly vertical swipes at book start', (
+    tester,
+  ) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.slide,
+      chapterCount: 1,
+      paragraphsPerChapter: 80,
+    );
+    final layout = await runtime.debugResolver.ensureLayout(0);
+    expect(layout.pages.length, greaterThan(1));
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: SlideReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            controller: ReaderV2ViewportController(),
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final currentTile = find.byType(ReaderV2TileLayer).first;
+    expect(tester.getTopLeft(currentTile).dx, closeTo(0, 0.001));
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(SlideReaderV2Viewport)),
+    );
+    await gesture.moveBy(const Offset(-28, -180));
+    await tester.pump();
+
+    expect(tester.getTopLeft(currentTile).dx, closeTo(0, 0.001));
+
+    await gesture.up();
+    await _pumpViewportCommand(tester);
+
+    expect(runtime.state.pageWindow?.current.pageIndex, 0);
+    expect(tester.takeException(), isNull);
 
     runtime.dispose();
   });
