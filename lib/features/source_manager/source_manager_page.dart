@@ -17,13 +17,27 @@ import 'widgets/source_check_status_bar.dart';
 import 'widgets/source_manager_menus.dart';
 import 'widgets/source_manager_dialogs.dart';
 
-class SourceManagerPage extends StatefulWidget {
+class SourceManagerPage extends StatelessWidget {
   const SourceManagerPage({super.key});
+
   @override
-  State<SourceManagerPage> createState() => _SourceManagerPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => SourceManagerProvider(),
+      child: const _SourceManagerPageContent(),
+    );
+  }
 }
 
-class _SourceManagerPageState extends State<SourceManagerPage> {
+class _SourceManagerPageContent extends StatefulWidget {
+  const _SourceManagerPageContent();
+
+  @override
+  State<_SourceManagerPageContent> createState() =>
+      _SourceManagerPageContentState();
+}
+
+class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   final _searchController = TextEditingController();
 
   @override
@@ -51,12 +65,7 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                 SourceManagerMenus.buildGroupMenu(
                   context,
                   provider,
-                  onManageGroups:
-                      () => nav.push(
-                        MaterialPageRoute(
-                          builder: (_) => const SourceGroupManagePage(),
-                        ),
-                      ),
+                  onManageGroups: () => _openGroupManagePage(nav, provider),
                 ),
                 SourceManagerMenus.buildMoreMenu(
                   context,
@@ -64,12 +73,7 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                   onImportUrl: () => _showImportDialog(context, true),
                   onImportFile: () => _importFromFile(context),
                   onImportClipboard: () => _importFromClipboard(context),
-                  onManageGroups:
-                      () => nav.push(
-                        MaterialPageRoute(
-                          builder: (_) => const SourceGroupManagePage(),
-                        ),
-                      ),
+                  onManageGroups: () => _openGroupManagePage(nav, provider),
                   onNewSource:
                       () => nav.push(
                         MaterialPageRoute(
@@ -169,6 +173,21 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _openGroupManagePage(
+    NavigatorState nav,
+    SourceManagerProvider provider,
+  ) {
+    return nav.push(
+      MaterialPageRoute(
+        builder:
+            (_) => ChangeNotifierProvider<SourceManagerProvider>.value(
+              value: provider,
+              child: const SourceGroupManagePage(),
+            ),
+      ),
     );
   }
 

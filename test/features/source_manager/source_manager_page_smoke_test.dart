@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:inkpage_reader/core/database/dao/book_source_dao.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
 import 'package:inkpage_reader/features/source_manager/source_manager_page.dart';
-import 'package:inkpage_reader/features/source_manager/source_manager_provider.dart';
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
   @override
@@ -33,14 +31,7 @@ void main() {
   testWidgets('SourceManagerPage can render with the new check result flow', (
     tester,
   ) async {
-    final provider = SourceManagerProvider();
-
-    await tester.pumpWidget(
-      ChangeNotifierProvider<SourceManagerProvider>.value(
-        value: provider,
-        child: const MaterialApp(home: SourceManagerPage()),
-      ),
-    );
+    await tester.pumpWidget(const MaterialApp(home: SourceManagerPage()));
     await tester.pumpAndSettle();
 
     expect(find.text('書源管理'), findsOneWidget);

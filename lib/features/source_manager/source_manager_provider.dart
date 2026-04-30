@@ -55,8 +55,193 @@ class ParsedSourceImportResult {
   ];
 }
 
+class SourceImportService {
+  SourceImportService({BookSourceDao? dao, NetworkService? networkService})
+    : _dao = dao ?? getIt<BookSourceDao>(),
+      _networkService = networkService;
+
+  final BookSourceDao _dao;
+  NetworkService? _networkService;
+
+  NetworkService get _network => _networkService ??= getIt<NetworkService>();
+
+  /// 解析 JSON 字串為書源列表 (不匯入)
+  List<BookSource> parseSources(String jsonStr) {
+    return parseSourcesDetailed(jsonStr).allSources;
+  }
+
+  Future<ParsedSourceImportResult> parseSourcesDetailedAsync(
+    String jsonStr,
+  ) async {
+    final payload = await compute(_parseSourcesPayloadForIsolate, jsonStr);
+    List<BookSource> decodeList(String key) {
+      final rawList = payload[key] ?? const <Map<String, dynamic>>[];
+      return rawList
+          .map((item) => BookSource.fromJson(Map<String, dynamic>.from(item)))
+          .toList(growable: false);
+    }
+
+    return ParsedSourceImportResult(
+      importableSources: decodeList('importable'),
+      unsupportedSources: decodeList('unsupported'),
+    );
+  }
+
+  ParsedSourceImportResult parseSourcesDetailed(String jsonStr) {
+    final decoded = jsonDecode(jsonStr);
+    final List<dynamic> list = decoded is List ? decoded : [decoded];
+    final result = <BookSource>[];
+    final unsupported = <BookSource>[];
+    for (final e in list) {
+      if (e is! Map<String, dynamic>) continue;
+      final source = BookSource.fromJson(e);
+      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
+        continue;
+      }
+      if (!source.isNovelTextSource) {
+        source.enabled = false;
+        source.enabledExplore = false;
+        source.addGroup(nonNovelSourceGroupTag);
+        unsupported.add(source);
+        continue;
+      }
+      result.add(source);
+    }
+    return ParsedSourceImportResult(
+      importableSources: result,
+      unsupportedSources: unsupported,
+    );
+  }
+
+  /// 預覽匯入：分類為新增、更新、無變化
+  Future<ImportPreviewResult> previewImport(
+    List<BookSource> incoming, {
+    List<BookSource> unsupportedSources = const <BookSource>[],
+  }) async {
+    final newSources = <BookSource>[];
+    final updatedSources = <BookSource>[];
+    final unchangedSources = <BookSource>[];
+    final existingByUrl = <String, int>{};
+    for (final source in await _dao.getAllPart()) {
+      existingByUrl[source.bookSourceUrl] = source.lastUpdateTime;
+    }
+
+    for (final s in incoming) {
+      final existingUpdateTime = existingByUrl[s.bookSourceUrl];
+      if (existingUpdateTime == null) {
+        newSources.add(s);
+      } else if (existingUpdateTime != s.lastUpdateTime) {
+        updatedSources.add(s);
+      } else {
+        unchangedSources.add(s);
+      }
+    }
+
+    return ImportPreviewResult(
+      newSources: newSources,
+      updatedSources: updatedSources,
+      unchangedSources: unchangedSources,
+      unsupportedSources: unsupportedSources,
+    );
+  }
+
+  Future<int> importSources(List<BookSource> sources) async {
+    if (sources.isEmpty) return 0;
+    final preparedSources = await _prepareImportSources(sources);
+    await _dao.insertOrUpdateAll(preparedSources);
+    return preparedSources.length;
+  }
+
+  Future<int> importFromJson(String jsonStr) async {
+    try {
+      final parsed = await parseSourcesDetailedAsync(jsonStr);
+      if (parsed.allSources.isEmpty) return 0;
+      return importSources(parsed.allSources);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<int> importFromUrl(String url) async {
+    try {
+      final text = await fetchImportTextFromUrl(url);
+      return await importFromJson(text);
+    } catch (_) {}
+    return 0;
+  }
+
+  Future<String> fetchImportTextFromUrl(String url) async {
+    final trimmedUrl = url.trim();
+    final uri = Uri.tryParse(trimmedUrl);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      throw FormatException('無效的匯入網址', url);
+    }
+
+    final response = await _network.dio.getUri<dynamic>(
+      uri,
+      options: Options(responseType: ResponseType.plain),
+    );
+    final statusCode = response.statusCode ?? 0;
+    if (statusCode < 200 || statusCode >= 300) {
+      throw StateError('匯入網址回應異常：HTTP $statusCode');
+    }
+    return _importPayloadToText(response.data);
+  }
+
+  @visibleForTesting
+  String importPayloadToTextForTest(dynamic data) => _importPayloadToText(data);
+
+  Future<List<BookSource>> _prepareImportSources(
+    List<BookSource> sources,
+  ) async {
+    final orderByUrl = <String, int>{};
+    var maxOrder = -1;
+    for (final source in await _dao.getAllPart()) {
+      orderByUrl[source.bookSourceUrl] = source.customOrder;
+      if (source.customOrder > maxOrder) {
+        maxOrder = source.customOrder;
+      }
+    }
+
+    final assignedOrderByUrl = Map<String, int>.from(orderByUrl);
+    var nextOrder = maxOrder + 1;
+    for (final source in sources) {
+      final existingOrder = assignedOrderByUrl[source.bookSourceUrl];
+      if (existingOrder != null) {
+        source.customOrder = existingOrder;
+      } else {
+        source.customOrder = nextOrder++;
+        assignedOrderByUrl[source.bookSourceUrl] = source.customOrder;
+      }
+    }
+    return sources;
+  }
+
+  String _importPayloadToText(dynamic data) {
+    if (data == null) return '';
+    if (data is String) {
+      return _stripBom(data.trim());
+    }
+    if (data is Uint8List) {
+      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
+    }
+    if (data is List<int>) {
+      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
+    }
+    return jsonEncode(data);
+  }
+
+  String _stripBom(String value) {
+    if (value.isNotEmpty && value.codeUnitAt(0) == 0xFEFF) {
+      return value.substring(1);
+    }
+    return value;
+  }
+}
+
 class SourceManagerProvider with ChangeNotifier {
   final BookSourceDao _dao = getIt<BookSourceDao>();
+  final SourceImportService _importService;
   final CheckSourceService checkService = CheckSourceService();
 
   List<BookSourcePart> _sources = [];
@@ -148,7 +333,8 @@ class SourceManagerProvider with ChangeNotifier {
   List<String> _allGroups = [];
   List<String> get allGroups => _allGroups;
 
-  SourceManagerProvider() {
+  SourceManagerProvider({SourceImportService? importService})
+    : _importService = importService ?? SourceImportService() {
     checkService.addListener(_handleCheckServiceChanged);
     loadSources();
     checkService.loadConfig();
@@ -578,84 +764,23 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   /// 解析 JSON 字串為書源列表 (不匯入)
-  List<BookSource> parseSources(String jsonStr) {
-    return parseSourcesDetailed(jsonStr).allSources;
-  }
+  List<BookSource> parseSources(String jsonStr) =>
+      _importService.parseSources(jsonStr);
 
-  Future<ParsedSourceImportResult> parseSourcesDetailedAsync(
-    String jsonStr,
-  ) async {
-    final payload = await compute(_parseSourcesPayloadForIsolate, jsonStr);
-    List<BookSource> decodeList(String key) {
-      final rawList = payload[key] ?? const <Map<String, dynamic>>[];
-      return rawList
-          .map((item) => BookSource.fromJson(Map<String, dynamic>.from(item)))
-          .toList(growable: false);
-    }
+  Future<ParsedSourceImportResult> parseSourcesDetailedAsync(String jsonStr) =>
+      _importService.parseSourcesDetailedAsync(jsonStr);
 
-    return ParsedSourceImportResult(
-      importableSources: decodeList('importable'),
-      unsupportedSources: decodeList('unsupported'),
-    );
-  }
-
-  ParsedSourceImportResult parseSourcesDetailed(String jsonStr) {
-    final decoded = jsonDecode(jsonStr);
-    final List<dynamic> list = decoded is List ? decoded : [decoded];
-    final result = <BookSource>[];
-    final unsupported = <BookSource>[];
-    for (final e in list) {
-      if (e is! Map<String, dynamic>) continue;
-      final source = BookSource.fromJson(e);
-      if (source.bookSourceUrl.isEmpty || source.bookSourceName.isEmpty) {
-        continue;
-      }
-      if (!source.isNovelTextSource) {
-        source.enabled = false;
-        source.enabledExplore = false;
-        source.addGroup(nonNovelSourceGroupTag);
-        unsupported.add(source);
-        continue;
-      }
-      result.add(source);
-    }
-    return ParsedSourceImportResult(
-      importableSources: result,
-      unsupportedSources: unsupported,
-    );
-  }
+  ParsedSourceImportResult parseSourcesDetailed(String jsonStr) =>
+      _importService.parseSourcesDetailed(jsonStr);
 
   /// 預覽匯入：分類為新增、更新、無變化
   Future<ImportPreviewResult> previewImport(
     List<BookSource> incoming, {
     List<BookSource> unsupportedSources = const <BookSource>[],
-  }) async {
-    final newSources = <BookSource>[];
-    final updatedSources = <BookSource>[];
-    final unchangedSources = <BookSource>[];
-    final existingByUrl = <String, int>{};
-    for (final source in await _dao.getAllPart()) {
-      existingByUrl[source.bookSourceUrl] = source.lastUpdateTime;
-    }
-
-    for (final s in incoming) {
-      final existingUpdateTime = existingByUrl[s.bookSourceUrl];
-      if (existingUpdateTime == null) {
-        newSources.add(s);
-      } else if (existingUpdateTime != s.lastUpdateTime) {
-        updatedSources.add(s);
-      } else {
-        unchangedSources.add(s);
-      }
-    }
-
-    return ImportPreviewResult(
-      newSources: newSources,
-      updatedSources: updatedSources,
-      unchangedSources: unchangedSources,
-      unsupportedSources: unsupportedSources,
-    );
-  }
+  }) => _importService.previewImport(
+    incoming,
+    unsupportedSources: unsupportedSources,
+  );
 
   /// 直接匯入書源列表（跳過預覽）
   Future<int> importSources(List<BookSource> sources) async {
@@ -663,9 +788,9 @@ class SourceManagerProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      await _dao.insertOrUpdateAll(sources);
+      final count = await _importService.importSources(sources);
       await loadSources(showLoading: false);
-      return sources.length;
+      return count;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -676,11 +801,10 @@ class SourceManagerProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final parsed = await parseSourcesDetailedAsync(jsonStr);
-      if (parsed.allSources.isEmpty) return 0;
-      await _dao.insertOrUpdateAll(parsed.allSources);
+      final count = await _importService.importFromJson(jsonStr);
+      if (count <= 0) return 0;
       await loadSources(showLoading: false);
-      return parsed.allSources.length;
+      return count;
     } catch (_) {
       return 0;
     } finally {
@@ -698,46 +822,12 @@ class SourceManagerProvider with ChangeNotifier {
   }
 
   Future<String> fetchImportTextFromUrl(String url) async {
-    final trimmedUrl = url.trim();
-    final uri = Uri.tryParse(trimmedUrl);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      throw FormatException('無效的匯入網址', url);
-    }
-
-    final response = await getIt<NetworkService>().dio.getUri<dynamic>(
-      uri,
-      options: Options(responseType: ResponseType.plain),
-    );
-    final statusCode = response.statusCode ?? 0;
-    if (statusCode < 200 || statusCode >= 300) {
-      throw StateError('匯入網址回應異常：HTTP $statusCode');
-    }
-    return _importPayloadToText(response.data);
+    return _importService.fetchImportTextFromUrl(url);
   }
 
   @visibleForTesting
-  String importPayloadToTextForTest(dynamic data) => _importPayloadToText(data);
-
-  String _importPayloadToText(dynamic data) {
-    if (data == null) return '';
-    if (data is String) {
-      return _stripBom(data.trim());
-    }
-    if (data is Uint8List) {
-      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
-    }
-    if (data is List<int>) {
-      return _stripBom(utf8.decode(data, allowMalformed: true).trim());
-    }
-    return jsonEncode(data);
-  }
-
-  String _stripBom(String value) {
-    if (value.isNotEmpty && value.codeUnitAt(0) == 0xFEFF) {
-      return value.substring(1);
-    }
-    return value;
-  }
+  String importPayloadToTextForTest(dynamic data) =>
+      _importService.importPayloadToTextForTest(data);
 
   Future<int> importFromText(String text) async {
     return await importFromJson(text);

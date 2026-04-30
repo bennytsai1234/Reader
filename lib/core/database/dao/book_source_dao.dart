@@ -164,15 +164,50 @@ class BookSourceDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> adjustSortNumbers() async {
-    final all =
-        await (select(bookSources)
-          ..orderBy([(t) => OrderingTerm(expression: t.customOrder)])).get();
-    for (var i = 0; i < all.length; i++) {
-      if (all[i].customOrder != i) {
-        await (update(bookSources)..where(
-          (t) => t.bookSourceUrl.equals(all[i].bookSourceUrl),
-        )).write(BookSourcesCompanion(customOrder: Value(i)));
+    final stats =
+        await customSelect(
+          '''
+          SELECT
+            COUNT(*) AS sourceCount,
+            COUNT(DISTINCT customOrder) AS distinctOrderCount,
+            MIN(customOrder) AS minOrder,
+            MAX(customOrder) AS maxOrder
+          FROM book_sources
+          ''',
+          readsFrom: {bookSources},
+        ).getSingle();
+    final sourceCount = stats.read<int>('sourceCount');
+    if (sourceCount == 0) return;
+
+    final distinctOrderCount = stats.read<int>('distinctOrderCount');
+    final minOrder = stats.read<int?>('minOrder') ?? 0;
+    final maxOrder = stats.read<int?>('maxOrder') ?? 0;
+    final needsAdjustment =
+        distinctOrderCount != sourceCount ||
+        minOrder < -99999 ||
+        maxOrder > 99999;
+    if (!needsAdjustment) return;
+
+    final rows =
+        await customSelect(
+          '''
+          SELECT bookSourceUrl, customOrder
+          FROM book_sources
+          ORDER BY customOrder ASC
+          ''',
+          readsFrom: {bookSources},
+        ).get();
+    await batch((b) {
+      for (var i = 0; i < rows.length; i++) {
+        final row = rows[i];
+        if (row.read<int>('customOrder') == i) continue;
+        b.update(
+          bookSources,
+          BookSourcesCompanion(customOrder: Value(i)),
+          where:
+              (t) => t.bookSourceUrl.equals(row.read<String>('bookSourceUrl')),
+        );
       }
-    }
+    });
   }
 }

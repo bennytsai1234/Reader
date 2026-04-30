@@ -283,6 +283,47 @@ void main() {
     },
   );
 
+  test(
+    'importSources preserves existing order and appends new sources',
+    () async {
+      fakeDao.store['https://old.example.com'] = BookSource(
+        bookSourceUrl: 'https://old.example.com',
+        bookSourceName: '既有源',
+        customOrder: 5,
+      );
+      fakeDao.store['https://other.example.com'] = BookSource(
+        bookSourceUrl: 'https://other.example.com',
+        bookSourceName: '其他源',
+        customOrder: 6,
+      );
+
+      final provider = SourceManagerProvider();
+
+      final count = await provider.importSources([
+        BookSource(
+          bookSourceUrl: 'https://old.example.com',
+          bookSourceName: '更新既有源',
+          customOrder: 0,
+        ),
+        BookSource(
+          bookSourceUrl: 'https://new-1.example.com',
+          bookSourceName: '新源一',
+          customOrder: 0,
+        ),
+        BookSource(
+          bookSourceUrl: 'https://new-2.example.com',
+          bookSourceName: '新源二',
+          customOrder: 0,
+        ),
+      ]);
+
+      expect(count, 3);
+      expect(fakeDao.store['https://old.example.com']?.customOrder, 5);
+      expect(fakeDao.store['https://new-1.example.com']?.customOrder, 7);
+      expect(fakeDao.store['https://new-2.example.com']?.customOrder, 8);
+    },
+  );
+
   test('deleteNonNovelSources removes existing non-novel sources', () async {
     fakeDao.store['https://novel.example.com'] = BookSource(
       bookSourceUrl: 'https://novel.example.com',
