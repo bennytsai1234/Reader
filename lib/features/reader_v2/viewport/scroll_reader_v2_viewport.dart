@@ -306,6 +306,13 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
 
     _placeWindowInStrip(window);
     _currentChapterIndex = window.center.chapterIndex;
+    if (_scrollAnimation.isAnimating) {
+      _applyReadingTarget(
+        _scrollAnimation.value,
+        scheduleShift: false,
+        captureVisibleLocation: false,
+      );
+    }
     setState(() {});
   }
 
@@ -454,17 +461,39 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     bool scheduleShift = true,
     bool captureVisibleLocation = true,
   }) {
-    if (delta == 0 || !_visiblePages.hasPages) return false;
-    final nextReadingY = _clampReadingY(_readingY + delta);
+    return _applyReadingTarget(
+      _readingY + delta,
+      scheduleShift: scheduleShift,
+      captureVisibleLocation: captureVisibleLocation,
+    );
+  }
+
+  bool _applyReadingTarget(
+    double target, {
+    bool scheduleShift = true,
+    bool captureVisibleLocation = true,
+  }) {
+    if (!_visiblePages.hasPages) return false;
+    final direction = target - _readingY;
+    if (direction == 0) return false;
+    final nextReadingY = _clampReadingY(target);
     if ((nextReadingY - _readingY).abs() < 0.01) {
-      if (scheduleShift) _scheduleWindowShiftForAnchor();
+      if (scheduleShift || _isArtificialScrollBoundaryForTarget(target)) {
+        _scheduleWindowShiftForAnchor();
+      }
       return false;
     }
     _setReadingY(nextReadingY);
     if (captureVisibleLocation) {
       _scheduleVisibleLocationCapture();
     }
-    if (scheduleShift) _scheduleWindowShiftForAnchor();
+    if (scheduleShift ||
+        _isNearArtificialWindowEdge(
+          forward: direction > 0,
+          threshold: _shiftThreshold(),
+        )) {
+      _scheduleWindowShiftForAnchor();
+    }
     return true;
   }
 
@@ -602,8 +631,15 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     final placement = _visiblePages.placementAtWorldY(anchorWorldY);
     if (placement == null) return;
     final targetChapter = placement.page.chapterIndex;
-    if (targetChapter == current) return;
-    if (!_shouldShiftWindow(current, targetChapter, anchorWorldY)) return;
+    final threshold = _shiftThreshold();
+    final nearArtificialEdge =
+        _isNearArtificialWindowEdge(forward: true, threshold: threshold) ||
+        _isNearArtificialWindowEdge(forward: false, threshold: threshold);
+    if (targetChapter == current && !nearArtificialEdge) return;
+    if (!nearArtificialEdge &&
+        !_shouldShiftWindow(current, targetChapter, anchorWorldY)) {
+      return;
+    }
     final layoutGeneration = widget.runtime.state.layoutGeneration;
     bool anchorStillTargetsShift() {
       if (!mounted ||
@@ -621,6 +657,34 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       targetChapter,
       isCurrent: anchorStillTargetsShift,
     );
+  }
+
+  bool _isArtificialScrollBoundaryForTarget(double target) {
+    final bounds = _scrollBounds();
+    if (bounds == null || widget.runtime.chapterCount <= 0) return false;
+    const tolerance = 0.5;
+    if (target > _readingY && target >= bounds.max - tolerance) {
+      return !_strip.containsChapter(widget.runtime.chapterCount - 1);
+    }
+    if (target < _readingY && target <= bounds.min + tolerance) {
+      return !_strip.containsChapter(0);
+    }
+    return false;
+  }
+
+  bool _isNearArtificialWindowEdge({
+    required bool forward,
+    required double threshold,
+  }) {
+    final bounds = _scrollBounds();
+    if (bounds == null || widget.runtime.chapterCount <= 0) return false;
+    const tolerance = 0.5;
+    if (forward) {
+      return !_strip.containsChapter(widget.runtime.chapterCount - 1) &&
+          bounds.max - _readingY <= threshold + tolerance;
+    }
+    return !_strip.containsChapter(0) &&
+        _readingY - bounds.min <= threshold + tolerance;
   }
 
   bool _shouldShiftWindow(
@@ -661,15 +725,18 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
 
   void _handleScrollAnimationTick() {
     final current = _scrollAnimation.value;
-    final delta = current - _lastAnimationValue;
-    _lastAnimationValue = current;
-    if (delta == 0) return;
-    final moved = _applyReadingDelta(
-      delta,
+    if (current == _lastAnimationValue) return;
+    final moved = _applyReadingTarget(
+      current,
       scheduleShift: false,
       captureVisibleLocation: false,
     );
+    _lastAnimationValue = current;
     if (!moved) {
+      if (_isArtificialScrollBoundaryForTarget(current)) {
+        _scheduleWindowShiftForAnchor();
+        return;
+      }
       _scrollAnimation.stop();
       return;
     }
@@ -776,7 +843,27 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     _scrollAnimation.stop();
     _setOverscrollY(0.0);
     _isDragging = false;
-    final moved = _applyReadingDelta(delta, scheduleShift: false);
+    var remaining = delta;
+    var moved = false;
+    for (
+      var attempts = 0;
+      attempts < 8 && remaining.abs() >= 0.01;
+      attempts++
+    ) {
+      final before = _readingY;
+      final target = before + remaining;
+      final advanced = _applyReadingTarget(target, scheduleShift: false);
+      final consumed = _readingY - before;
+      moved = moved || advanced;
+      remaining -= consumed;
+      if (!_isArtificialScrollBoundaryForTarget(target)) break;
+      await _requestShiftWindowForAnchor();
+      if (!mounted) return false;
+      if (consumed.abs() < 0.01 &&
+          !_isArtificialScrollBoundaryForTarget(target)) {
+        break;
+      }
+    }
     if (!moved) return false;
     await _requestShiftWindowForAnchor();
     await _handleScrollSettled();
@@ -834,24 +921,11 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
       readingY: _readingY,
       viewportHeight: _viewportHeight(),
     )) {
-      final chapter = _cacheManager.chapterAt(placement.page.chapterIndex);
-      final chapterTop = _strip.chapterTop(placement.page.chapterIndex);
-      if (chapter == null || chapterTop == null) continue;
       for (final line in placement.page.lines) {
         if (line.text.isEmpty) continue;
-        final worldTop = _positionTracker.lineWorldTop(
-          chapter: chapter,
-          chapterTop: chapterTop,
-          line: line,
-          style: renderStyle,
-        );
-        final worldBottom = _positionTracker.lineWorldBottom(
-          chapter: chapter,
-          chapterTop: chapterTop,
-          line: line,
-          style: renderStyle,
-        );
-        if (worldTop == null || worldBottom == null) continue;
+        final worldTop = placement.worldTop + renderStyle.paddingTop + line.top;
+        final worldBottom =
+            placement.worldTop + renderStyle.paddingTop + line.bottom;
         if (worldBottom <= visibleTop + 0.5 ||
             worldTop >= visibleBottom - 0.5) {
           continue;

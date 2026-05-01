@@ -674,6 +674,49 @@ void main() {
     runtime.dispose();
   });
 
+  testWidgets('scroll viewport expands window during large continuous scroll', (
+    tester,
+  ) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.scroll,
+      chapterCount: 24,
+      paragraphsPerChapter: 4,
+    );
+    final controller = ReaderV2ViewportController();
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: ScrollReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final moved = await controller.scrollBy!(360 * 18);
+    await _pumpViewportCommand(tester);
+    final location = runtime.captureVisibleLocation();
+
+    expect(moved, isTrue);
+    expect(location, isNotNull);
+    expect(location!.chapterIndex, greaterThan(8));
+    expect(tester.takeException(), isNull);
+
+    runtime.dispose();
+  });
+
   testWidgets('slide viewport ensureCharRangeVisible jumps to TTS page', (
     tester,
   ) async {
