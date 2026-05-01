@@ -845,6 +845,50 @@ void main() {
     runtime.dispose();
   });
 
+  testWidgets('scroll viewport expands window during smooth animation', (
+    tester,
+  ) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.scroll,
+      chapterCount: 24,
+      paragraphsPerChapter: 4,
+    );
+    final controller = ReaderV2ViewportController();
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: ScrollReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final movedFuture = controller.animateBy!(360 * 18);
+    await _pumpViewportLongCommand(tester);
+    final moved = await movedFuture;
+    final location = runtime.captureVisibleLocation();
+
+    expect(moved, isTrue);
+    expect(location, isNotNull);
+    expect(location!.chapterIndex, greaterThan(8));
+    expect(tester.takeException(), isNull);
+
+    runtime.dispose();
+  });
+
   testWidgets('slide viewport ensureCharRangeVisible jumps to TTS page', (
     tester,
   ) async {
@@ -1571,6 +1615,12 @@ Future<void> _pumpViewport(WidgetTester tester) async {
 
 Future<void> _pumpViewportCommand(WidgetTester tester) async {
   for (var i = 0; i < 24; i++) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+}
+
+Future<void> _pumpViewportLongCommand(WidgetTester tester) async {
+  for (var i = 0; i < 220; i++) {
     await tester.pump(const Duration(milliseconds: 16));
   }
 }

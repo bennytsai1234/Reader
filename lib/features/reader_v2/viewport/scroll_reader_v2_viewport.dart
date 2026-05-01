@@ -902,9 +902,31 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     return _enqueueViewportCommand(() => _animateByNow(delta));
   }
 
-  Future<bool> _animateByNow(double delta) {
-    if (delta == 0) return Future<bool>.value(false);
-    return _animateToReadingY(_readingY + delta);
+  Future<bool> _animateByNow(double delta) async {
+    if (!mounted || delta == 0 || !_visiblePages.hasPages) return false;
+    var remaining = delta;
+    var moved = false;
+    for (
+      var attempts = 0;
+      attempts < 8 && remaining.abs() >= 0.01;
+      attempts++
+    ) {
+      final before = _readingY;
+      final target = before + remaining;
+      final advanced = await _animateToReadingY(target);
+      if (!mounted) return false;
+      final consumed = _readingY - before;
+      moved = moved || advanced;
+      remaining -= consumed;
+      if (!_isArtificialScrollBoundaryForTarget(target)) break;
+      await _requestShiftWindowForAnchor();
+      if (!mounted) return false;
+      if (consumed.abs() < 0.01 &&
+          !_isArtificialScrollBoundaryForTarget(target)) {
+        break;
+      }
+    }
+    return moved && mounted;
   }
 
   Future<bool> _moveToNextPage() {
