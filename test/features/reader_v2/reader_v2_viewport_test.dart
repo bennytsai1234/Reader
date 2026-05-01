@@ -329,7 +329,7 @@ void main() {
     await tapGesture.up();
     await tester.pump();
 
-    expect(tapCalls, 2);
+    expect(tapCalls, 1);
 
     final firstTile = find.byType(ReaderV2TileLayer).first;
     final startTop = tester.getTopLeft(firstTile).dy;
@@ -344,7 +344,7 @@ void main() {
     await dragGesture.up();
     await _pumpViewportCommand(tester);
 
-    expect(tapCalls, 2);
+    expect(tapCalls, 1);
     expect(tester.takeException(), isNull);
 
     runtime.dispose();
@@ -977,7 +977,7 @@ void main() {
     await tapGesture.up();
     await tester.pump();
 
-    expect(tapCalls, 2);
+    expect(tapCalls, 1);
 
     final currentTile = find.byType(ReaderV2TileLayer).first;
     expect(tester.getTopLeft(currentTile).dx, closeTo(0, 0.001));
@@ -993,7 +993,7 @@ void main() {
     await dragGesture.up();
     await _pumpViewportCommand(tester);
 
-    expect(tapCalls, 2);
+    expect(tapCalls, 1);
     expect(tester.takeException(), isNull);
 
     runtime.dispose();

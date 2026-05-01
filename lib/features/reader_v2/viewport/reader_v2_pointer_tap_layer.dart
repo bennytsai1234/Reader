@@ -1,7 +1,10 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 typedef ReaderV2PointerDownTapPolicy = bool Function(PointerDownEvent event);
+
+const double _stationaryTapTolerance = 2.0;
+const double _stationaryTapToleranceSquared =
+    _stationaryTapTolerance * _stationaryTapTolerance;
 
 class ReaderV2PointerTapLayer extends StatefulWidget {
   const ReaderV2PointerTapLayer({
@@ -42,7 +45,8 @@ class _ReaderV2PointerTapLayerState extends State<ReaderV2PointerTapLayer> {
     if (event.pointer != _pointer) return;
     final downPosition = _downPosition;
     if (downPosition == null) return;
-    if ((event.position - downPosition).distance > kTouchSlop) {
+    if ((event.position - downPosition).distanceSquared >
+        _stationaryTapToleranceSquared) {
       _dragged = true;
     }
   }
