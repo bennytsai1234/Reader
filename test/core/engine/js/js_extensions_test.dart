@@ -7,6 +7,7 @@ import 'package:inkpage_reader/core/engine/js/async_js_rewriter.dart';
 import 'package:inkpage_reader/core/engine/js/js_extensions.dart';
 import 'package:inkpage_reader/core/engine/js/js_rule_async_wrapper.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
+import 'package:inkpage_reader/core/services/source_validation_context.dart';
 
 import '../../../test_helper.dart';
 
@@ -236,6 +237,48 @@ void main() {
       );
       expect(runtime!.evaluate('typeof source.put').stringResult, 'function');
       expect(runtime!.evaluate('typeof source.get').stringResult, 'function');
+    });
+
+    test('non-interactive validation rejects interactive JS calls', () async {
+      if (runtime == null) {
+        expect(runtimeError, isNotNull);
+        return;
+      }
+      final ext = JsExtensions(
+        runtime!,
+        source: BookSource(
+          bookSourceUrl: 'https://example.com',
+          bookSourceName: 'Example',
+        ),
+      );
+      ext.inject();
+
+      Future<dynamic> runRule(String source) {
+        return SourceValidationContext.runNonInteractive(() async {
+          final rewritten = AsyncJsRewriter.rewrite(source);
+          final (callId, future) = ext.registerRuleCall();
+          final wrapped = JsRuleAsyncWrapper.wrap(rewritten, callId);
+          final evalResult = runtime!.evaluate(wrapped);
+          expect(evalResult.isError, isFalse, reason: evalResult.stringResult);
+          runtime!.executePendingJob();
+          return future;
+        });
+      }
+
+      await expectLater(
+        runRule('java.startBrowserAwait("https://example.com/captcha", "驗證")'),
+        throwsA(
+          predicate((Object error) => error.toString().contains('批量校驗不執行互動驗證')),
+        ),
+      );
+      await expectLater(
+        runRule('java.webView("", "https://example.com", "")'),
+        throwsA(
+          predicate(
+            (Object error) => error.toString().contains('批量校驗不執行 WebView'),
+          ),
+        ),
+      );
     });
 
     test('Jsoup shim supports importClass and select text helpers', () {

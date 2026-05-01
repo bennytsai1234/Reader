@@ -143,11 +143,11 @@ class JsExtensions extends JsExtensionsBase {
       return null;
     });
     runtime.onMessage('log', (args) {
-      debugPrint('JS_LOG: $args');
+      debugPrint('JS_LOG: ${_compactJsBridgeLog(args)}');
       return _decodeSyncArgs(args);
     });
     runtime.onMessage('toast', (args) {
-      debugPrint('JS_TOAST: $args');
+      debugPrint('JS_TOAST: ${_compactJsBridgeLog(args)}');
       return null;
     });
     runtime.onMessage('htmlSelectText', (args) {
@@ -476,6 +476,15 @@ class JsExtensions extends JsExtensionsBase {
       }
     }
     return args;
+  }
+
+  String _compactJsBridgeLog(dynamic args) {
+    final text = args.toString();
+    const limit = 1200;
+    if (text.length <= limit) {
+      return text;
+    }
+    return '${text.substring(0, limit)}... [truncated ${text.length - limit} chars]';
   }
 
   dynamic _resolveScopedObject(String scopeName) {

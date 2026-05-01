@@ -12,6 +12,7 @@ import 'package:inkpage_reader/core/models/search_book.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/core/services/check_source_service.dart';
 import 'package:inkpage_reader/core/services/event_bus.dart';
+import 'package:inkpage_reader/core/services/source_validation_context.dart';
 
 class _FakeBookSourceDao extends Fake implements BookSourceDao {
   final Map<String, BookSource> store = {};
@@ -359,6 +360,67 @@ void main() {
     expect(service.progressOf(source.bookSourceUrl)?.message, contains('需要登入'));
     expect(service.progressOf(source.bookSourceUrl)?.hasIssue, isTrue);
   });
+
+  test(
+    'interactive verification failures are quarantined without cleanup',
+    () async {
+      final source = BookSource(
+        bookSourceUrl: 'source://verification',
+        bookSourceName: '需要驗證來源',
+        searchUrl: '/search?key={{key}}',
+      );
+
+      final fakeDao =
+          _FakeBookSourceDao()..store[source.bookSourceUrl] = source;
+      final fakeService =
+          _FakeBookSourceService()
+            ..searchResults = [
+              SearchBook(
+                bookUrl: 'https://example.com/book/verification',
+                name: '測試書',
+                author: '作者甲',
+                origin: source.bookSourceUrl,
+                originName: source.bookSourceName,
+              ),
+            ]
+            ..hydratedBook = Book(
+              bookUrl: 'https://example.com/book/verification',
+              tocUrl: 'https://example.com/book/verification/catalog',
+              origin: source.bookSourceUrl,
+              originName: source.bookSourceName,
+              name: '測試書',
+              author: '作者甲',
+            )
+            ..chapters = [
+              BookChapter(
+                title: '第1章 開始',
+                url: 'https://example.com/book/verification/1.html',
+                bookUrl: 'https://example.com/book/verification',
+              ),
+            ]
+            ..contentError = const SourceInteractionBlockedException(
+              '批量校驗不執行互動驗證，已將此來源列入校驗失敗',
+            );
+
+      final service = CheckSourceService(
+        service: fakeService,
+        sourceDao: fakeDao,
+        eventBus: AppEventBus(),
+      );
+
+      final report = await service.check([source.bookSourceUrl]);
+
+      final saved = fakeDao.store[source.bookSourceUrl]!;
+      expect(
+        saved.runtimeHealth.category,
+        SourceHealthCategory.upstreamUnstable,
+      );
+      expect(saved.isQuarantined, isTrue);
+      expect(saved.isCleanupCandidate, isFalse);
+      expect(saved.bookSourceComment, contains('批量校驗不執行互動驗證'));
+      expect(report.cleanupCandidateUrls, isEmpty);
+    },
+  );
 
   test(
     'vip locked chapters are cleanup candidates without content fetch',

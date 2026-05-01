@@ -2,6 +2,7 @@ import 'package:flutter_js/flutter_js.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/engine/analyze_url.dart';
 import 'package:inkpage_reader/core/models/book_source.dart';
+import 'package:inkpage_reader/core/services/source_validation_context.dart';
 import '../../test_helper.dart';
 
 void main() {
@@ -98,6 +99,15 @@ void main() {
       expect(analyzer.useWebView, true);
     });
 
+    test('non-interactive validation blocks WebView fetches', () async {
+      final analyzer = AnalyzeUrl('https://example.com, {"webView": true}');
+
+      await expectLater(
+        SourceValidationContext.runNonInteractive(analyzer.getStrResponse),
+        throwsA(isA<SourceInteractionBlockedException>()),
+      );
+    });
+
     test('Source header supports @js JSON stringify and source.key alias', () {
       if (runtime == null) {
         expect(runtimeError, isNotNull);
@@ -114,21 +124,24 @@ void main() {
       expect(analyzer.headerMap['Referer'], 'https://source.example.com');
     });
 
-    test('Legacy template aliases support cookie.removeCookie and source.getKey', () async {
-      if (runtime == null) {
-        expect(runtimeError, isNotNull);
-        return;
-      }
-      final analyzer = await AnalyzeUrl.create(
-        '{{cookie.removeCookie(source.getKey())}}/search/, {"method":"POST","body":"searchkey={{key}}"}',
-        key: '龙族',
-        source: BookSource(bookSourceUrl: 'https://www.x23us.cc'),
-      );
+    test(
+      'Legacy template aliases support cookie.removeCookie and source.getKey',
+      () async {
+        if (runtime == null) {
+          expect(runtimeError, isNotNull);
+          return;
+        }
+        final analyzer = await AnalyzeUrl.create(
+          '{{cookie.removeCookie(source.getKey())}}/search/, {"method":"POST","body":"searchkey={{key}}"}',
+          key: '龙族',
+          source: BookSource(bookSourceUrl: 'https://www.x23us.cc'),
+        );
 
-      expect(analyzer.url, 'https://www.x23us.cc/search/');
-      expect(analyzer.method, 'POST');
-      expect(analyzer.body, 'searchkey=%E9%BE%99%E6%97%8F');
-    });
+        expect(analyzer.url, 'https://www.x23us.cc/search/');
+        expect(analyzer.method, 'POST');
+        expect(analyzer.body, 'searchkey=%E9%BE%99%E6%97%8F');
+      },
+    );
 
     test('source jsLib helpers are available to url template js', () async {
       if (runtime == null) {

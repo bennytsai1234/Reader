@@ -9,6 +9,7 @@ import 'package:inkpage_reader/core/engine/analyze_url.dart';
 import 'package:inkpage_reader/core/services/http_client.dart';
 import 'package:inkpage_reader/core/services/backstage_webview.dart';
 import 'package:inkpage_reader/core/services/source_verification_service.dart';
+import 'package:inkpage_reader/core/services/source_validation_context.dart';
 import 'package:inkpage_reader/core/network/interceptors/app_interceptor.dart';
 
 /// 網路/WebView/I/O 相關 `java.*` 方法的 Dart 側 handler
@@ -24,6 +25,14 @@ import 'package:inkpage_reader/core/network/interceptors/app_interceptor.dart';
 ///
 /// 純同步 handler 例如 [timeFormatUTC] 則保留同步 return，直接回傳字串。
 extension JsNetworkExtensions on JsExtensions {
+  bool _rejectNonInteractiveValidation(int callId, String message) {
+    if (!SourceValidationContext.isNonInteractive) {
+      return false;
+    }
+    rejectJsPending(callId, SourceInteractionBlockedException(message));
+    return true;
+  }
+
   List<String> _redirectsForResponse(Response response) {
     final nativeRedirects =
         response.redirects.map((record) => record.location.toString()).toList();
@@ -290,6 +299,12 @@ extension JsNetworkExtensions on JsExtensions {
     // ─── java.webView(html, url, js) ─────────────────────────────
     runtime.onMessage('webView', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
+      if (_rejectNonInteractiveValidation(
+        parsed.callId,
+        '批量校驗不執行 WebView 載入或互動驗證',
+      )) {
+        return null;
+      }
       final payload = parsed.payload;
       if (payload is! List) {
         resolveJsPending(parsed.callId, '');
@@ -317,6 +332,12 @@ extension JsNetworkExtensions on JsExtensions {
 
     runtime.onMessage('webViewGetSource', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
+      if (_rejectNonInteractiveValidation(
+        parsed.callId,
+        '批量校驗不執行 WebView 載入或互動驗證',
+      )) {
+        return null;
+      }
       final payload = parsed.payload;
       if (payload is! List) {
         resolveJsPending(parsed.callId, '');
@@ -346,6 +367,12 @@ extension JsNetworkExtensions on JsExtensions {
 
     runtime.onMessage('webViewGetOverrideUrl', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
+      if (_rejectNonInteractiveValidation(
+        parsed.callId,
+        '批量校驗不執行 WebView 載入或互動驗證',
+      )) {
+        return null;
+      }
       final payload = parsed.payload;
       if (payload is! List) {
         resolveJsPending(parsed.callId, '');
@@ -377,6 +404,12 @@ extension JsNetworkExtensions on JsExtensions {
     // ─── java.startBrowserAwait(url, title) ──────────────────────
     runtime.onMessage('startBrowserAwait', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
+      if (_rejectNonInteractiveValidation(
+        parsed.callId,
+        '批量校驗不執行互動驗證，已將此來源列入校驗失敗',
+      )) {
+        return null;
+      }
       final payload = parsed.payload;
       if (payload is! List || payload.isEmpty) {
         resolveJsPending(parsed.callId, {'body': '', 'url': '', 'code': 500});
@@ -411,6 +444,12 @@ extension JsNetworkExtensions on JsExtensions {
     // ─── java.getVerificationCode(imageUrl) ──────────────────────
     runtime.onMessage('getVerificationCode', (dynamic args) {
       final parsed = JsExtensionsBase.parseAsyncCallArgs(args);
+      if (_rejectNonInteractiveValidation(
+        parsed.callId,
+        '批量校驗不輸入驗證碼，已將此來源列入校驗失敗',
+      )) {
+        return null;
+      }
       final imageUrl = parsed.payload.toString();
       SourceVerificationService()
           .getVerificationResult(

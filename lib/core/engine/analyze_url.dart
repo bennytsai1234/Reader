@@ -9,6 +9,7 @@ import 'package:inkpage_reader/core/services/http_client.dart';
 import 'package:inkpage_reader/core/services/rate_limiter.dart';
 import 'package:inkpage_reader/core/services/encoding_detect.dart';
 import 'package:inkpage_reader/core/services/cookie_store.dart';
+import 'package:inkpage_reader/core/services/source_validation_context.dart';
 import 'package:inkpage_reader/core/engine/web_book/headless_webview_service.dart';
 import 'package:inkpage_reader/core/network/str_response.dart';
 
@@ -465,6 +466,11 @@ class AnalyzeUrl {
 
       // 如果開啟了 WebView 抓取模式
       if (useWebView) {
+        if (SourceValidationContext.isNonInteractive) {
+          throw const SourceInteractionBlockedException(
+            '批量校驗不執行 WebView 載入或互動驗證',
+          );
+        }
         final finalBody = await HeadlessWebViewService().getRenderedHtml(
           url: url,
           headers: headerMap,

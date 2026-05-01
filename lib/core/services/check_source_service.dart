@@ -16,6 +16,7 @@ import 'package:inkpage_reader/core/models/chapter.dart';
 import 'package:inkpage_reader/core/services/app_log_service.dart';
 import 'package:inkpage_reader/core/services/book_source_service.dart';
 import 'package:inkpage_reader/core/services/event_bus.dart';
+import 'package:inkpage_reader/core/services/source_validation_context.dart';
 
 class SourceCheckEntry {
   final String sourceUrl;
@@ -330,6 +331,12 @@ class CheckSourceService extends ChangeNotifier {
   Future<SourceCheckReport> check(List<String> urls) async {
     if (_isChecking) return _lastReport;
 
+    return SourceValidationContext.runNonInteractive(
+      () => _checkNonInteractive(urls),
+    );
+  }
+
+  Future<SourceCheckReport> _checkNonInteractive(List<String> urls) async {
     final normalizedUrls = LinkedHashSet<String>.from(
       urls.map((url) => url.trim()).where((url) => url.isNotEmpty),
     ).toList(growable: false);
@@ -1172,6 +1179,11 @@ class CheckSourceService extends ChangeNotifier {
       error: error,
     );
 
+    if (error is SourceInteractionBlockedException ||
+        _looksLikeInteractiveVerificationBlock(normalized)) {
+      return _interactiveVerificationIssue(stage: stage, message: message);
+    }
+
     if (error is LoginCheckException ||
         normalized.contains('需要登入後閱讀') ||
         normalized.contains('需要登录后阅读') ||
@@ -1732,6 +1744,27 @@ _SourceCheckIssue _loginRequiredIssue({
   );
 }
 
+const SourceRuntimeHealth _interactiveVerificationHealth = SourceRuntimeHealth(
+  category: SourceHealthCategory.upstreamUnstable,
+  label: quarantineSourceGroupTag,
+  description: '批量校驗跳過人工驗證，來源先隔離但不視為永久失效',
+  allowsSearch: false,
+  allowsReading: false,
+  cleanupCandidate: false,
+  quarantined: true,
+);
+
+_SourceCheckIssue _interactiveVerificationIssue({
+  required String stage,
+  required String message,
+}) {
+  return _SourceCheckIssue(
+    stage: stage,
+    message: message,
+    health: _interactiveVerificationHealth,
+  );
+}
+
 _SourceCheckIssue _lockedChapterIssue(
   _SourceCheckMode mode,
   BookChapter chapter,
@@ -1792,6 +1825,16 @@ bool _looksLikeLockedChapterMarker(BookChapter chapter) {
     '购买',
   ];
   return titleMarkers.any(normalized.contains);
+}
+
+bool _looksLikeInteractiveVerificationBlock(String normalized) {
+  return normalized.contains('批量校驗不執行') ||
+      normalized.contains('非互動校驗') ||
+      normalized.contains('互動驗證') ||
+      normalized.contains('人工驗證') ||
+      normalized.contains('驗證碼') ||
+      normalized.contains('验证码') ||
+      normalized.contains('sourceinteractionblocked');
 }
 
 List<int> _buildContentProbeIndexes(List<BookChapter> chapters, int maxProbe) {
