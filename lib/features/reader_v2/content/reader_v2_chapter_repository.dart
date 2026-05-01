@@ -224,9 +224,9 @@ class ReaderV2ChapterRepository {
       );
     }
     final enabledRules =
-        replaceDao == null
+        replaceDao == null || !book.getUseReplaceRule()
             ? const <ReplaceRule>[]
-            : await replaceDao!.getEnabled();
+            : await replaceDao!.getEnabledForBook(book.name, book.origin);
     return _contentTransformer.process(
       book: book,
       chapter: chapter,

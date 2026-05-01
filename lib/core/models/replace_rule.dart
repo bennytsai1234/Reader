@@ -1,4 +1,3 @@
-
 /// ReplaceRule - 替換淨化規則模型
 /// (原 Android data/entities/ReplaceRule.kt)
 class ReplaceRule {
@@ -53,6 +52,38 @@ class ReplaceRule {
     return timeoutMillisecond <= 0 ? 3000 : timeoutMillisecond;
   }
 
+  bool matchesScope({required String bookName, required String bookOrigin}) {
+    final includeScope = scope?.trim();
+    final includeMatched =
+        includeScope == null ||
+        includeScope.isEmpty ||
+        _containsNonEmpty(includeScope, bookName) ||
+        _containsNonEmpty(includeScope, bookOrigin);
+    if (!includeMatched) return false;
+
+    final exclude = excludeScope?.trim();
+    if (exclude == null || exclude.isEmpty) return true;
+    return !_containsNonEmpty(exclude, bookName) &&
+        !_containsNonEmpty(exclude, bookOrigin);
+  }
+
+  bool appliesToContent({
+    required String bookName,
+    required String bookOrigin,
+  }) {
+    return isEnabled &&
+        scopeContent &&
+        pattern.isNotEmpty &&
+        matchesScope(bookName: bookName, bookOrigin: bookOrigin);
+  }
+
+  bool appliesToTitle({required String bookName, required String bookOrigin}) {
+    return isEnabled &&
+        scopeTitle &&
+        pattern.isNotEmpty &&
+        matchesScope(bookName: bookName, bookOrigin: bookOrigin);
+  }
+
   String getDisplayNameGroup() {
     return (group == null || group!.isEmpty) ? name : '$name ($group)';
   }
@@ -91,19 +122,19 @@ class ReplaceRule {
 
   factory ReplaceRule.fromJson(Map<String, dynamic> json) {
     return ReplaceRule(
-      id: json['id'] ?? 0,
-      name: json['name'] ?? '',
-      group: json['group'],
-      pattern: json['pattern'] ?? '',
-      replacement: json['replacement'] ?? '',
-      scope: json['scope'],
-      scopeTitle: json['scopeTitle'] == 1 || json['scopeTitle'] == true,
-      scopeContent: json['scopeContent'] == 1 || json['scopeContent'] == true,
-      excludeScope: json['excludeScope'],
-      isEnabled: json['isEnabled'] == 1 || json['isEnabled'] == true,
-      isRegex: json['isRegex'] == 1 || json['isRegex'] == true,
-      timeoutMillisecond: json['timeoutMillisecond'] ?? 3000,
-      order: json['order'] ?? 0,
+      id: _readInt(json['id'], fallback: 0),
+      name: _readString(json['name'] ?? json['replaceSummary']),
+      group: _readNullableString(json['group']),
+      pattern: _readString(json['pattern'] ?? json['regex']),
+      replacement: _readString(json['replacement']),
+      scope: _readNullableString(json['scope'] ?? json['useTo']),
+      scopeTitle: _readBool(json['scopeTitle'], fallback: false),
+      scopeContent: _readBool(json['scopeContent'], fallback: true),
+      excludeScope: _readNullableString(json['excludeScope']),
+      isEnabled: _readBool(json['isEnabled'] ?? json['enable'], fallback: true),
+      isRegex: _readBool(json['isRegex'], fallback: true),
+      timeoutMillisecond: _readInt(json['timeoutMillisecond'], fallback: 3000),
+      order: _readInt(json['order'] ?? json['serialNumber'], fallback: 0),
     );
   }
 
@@ -124,5 +155,47 @@ class ReplaceRule {
       'order': order,
     };
   }
-}
 
+  static bool _containsNonEmpty(String scopeText, String value) {
+    final trimmed = value.trim();
+    return trimmed.isNotEmpty && scopeText.contains(trimmed);
+  }
+
+  static String _readString(dynamic value) {
+    if (value == null) return '';
+    return value.toString();
+  }
+
+  static String? _readNullableString(dynamic value) {
+    if (value == null) return null;
+    return value.toString();
+  }
+
+  static int _readInt(dynamic value, {required int fallback}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  static bool _readBool(dynamic value, {required bool fallback}) {
+    if (value == null) return fallback;
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      switch (value.trim().toLowerCase()) {
+        case '1':
+        case 'true':
+        case 'yes':
+        case 'on':
+          return true;
+        case '0':
+        case 'false':
+        case 'no':
+        case 'off':
+          return false;
+      }
+    }
+    return fallback;
+  }
+}

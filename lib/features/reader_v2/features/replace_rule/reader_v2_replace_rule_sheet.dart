@@ -38,7 +38,10 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
   void initState() {
     super.initState();
     _useReplaceRule = widget.book.getUseReplaceRule();
-    _enabledRulesFuture = widget.replaceDao.getEnabled();
+    _enabledRulesFuture = widget.replaceDao.getEnabledForBook(
+      widget.book.name,
+      widget.book.origin,
+    );
   }
 
   @override
@@ -74,8 +77,8 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             final rules = snapshot.data ?? const <ReplaceRule>[];
             final subtitle =
                 snapshot.connectionState == ConnectionState.waiting
-                    ? '讀取啟用規則中'
-                    : '目前啟用 ${rules.length} 條規則';
+                    ? '讀取本書可套用規則中'
+                    : '本書可套用 ${rules.length} 條規則';
             return ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.fact_check_rounded),
@@ -107,8 +110,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             );
             if (!mounted) return;
             setState(() {
-              _enabledRulesFuture = widget.replaceDao.getEnabled();
+              _enabledRulesFuture = widget.replaceDao.getEnabledForBook(
+                widget.book.name,
+                widget.book.origin,
+              );
             });
+            await widget.onReload();
           },
         ),
         ListTile(
@@ -125,8 +132,12 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
             );
             if (!mounted) return;
             setState(() {
-              _enabledRulesFuture = widget.replaceDao.getEnabled();
+              _enabledRulesFuture = widget.replaceDao.getEnabledForBook(
+                widget.book.name,
+                widget.book.origin,
+              );
             });
+            await widget.onReload();
           },
         ),
         const SizedBox(height: 8),
@@ -140,7 +151,7 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
           minLines: 3,
           maxLines: 5,
           decoration: const InputDecoration(
-            hintText: '輸入一段文本，測試目前啟用規則',
+            hintText: '輸入一段文本，測試本書正文實際套用規則',
             border: OutlineInputBorder(),
           ),
         ),
@@ -149,19 +160,20 @@ class _ReaderV2ReplaceRuleSheetState extends State<ReaderV2ReplaceRuleSheet> {
           children: [
             FilledButton(
               onPressed: () async {
-                final enabledRules = await widget.replaceDao.getEnabled();
                 var text = _testController.text;
-                for (final rule in enabledRules) {
-                  try {
-                    if (rule.isRegex) {
-                      text = text.replaceAll(
-                        RegExp(rule.pattern),
-                        rule.replacement,
+                if (_useReplaceRule) {
+                  final enabledRules = await widget.replaceDao
+                      .getEnabledContentForBook(
+                        widget.book.name,
+                        widget.book.origin,
                       );
-                    } else {
-                      text = text.replaceAll(rule.pattern, rule.replacement);
+                  for (final rule in enabledRules) {
+                    try {
+                      text = rule.apply(text);
+                    } catch (_) {
+                      // 單條規則失敗時保持測試流程不中斷，和文章處理一致。
                     }
-                  } catch (_) {}
+                  }
                 }
                 if (!mounted) return;
                 setState(() {

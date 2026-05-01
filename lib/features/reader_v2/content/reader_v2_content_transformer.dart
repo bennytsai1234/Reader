@@ -63,7 +63,10 @@ class ReaderV2ContentTransformer {
           ..sort((a, b) => a.order.compareTo(b.order));
 
     final titleRules = rules
-        .where((rule) => rule.scopeTitle)
+        .where(
+          (rule) =>
+              rule.appliesToTitle(bookName: bookName, bookOrigin: bookOrigin),
+        )
         .toList(growable: false);
     final contentResult = _processContent(
       bookName: bookName,
@@ -71,6 +74,7 @@ class ReaderV2ContentTransformer {
       chapterTitle: chapterTitle,
       rawContent: rawContent,
       rules: rules,
+      titleRules: titleRules,
       useReplaceRules: useReplaceRules,
       reSegmentEnabled: reSegmentEnabled,
     );
@@ -96,6 +100,7 @@ class ReaderV2ContentTransformer {
     required String chapterTitle,
     required String rawContent,
     required List<ReplaceRule> rules,
+    required List<ReplaceRule> titleRules,
     required bool useReplaceRules,
     required bool reSegmentEnabled,
   }) {
@@ -119,6 +124,27 @@ class ReaderV2ContentTransformer {
     if (duplicateTitleMatch != null) {
       content = content.substring(duplicateTitleMatch.end);
       sameTitleRemoved = true;
+    } else if (useReplaceRules && titleRules.isNotEmpty) {
+      final displayTitle = _processTitle(
+        chapterTitle: chapterTitle,
+        rules: titleRules,
+        useReplaceRules: true,
+      );
+      if (displayTitle.trim().isNotEmpty && displayTitle != chapterTitle) {
+        final displayTitleRegex = RegExp.escape(
+          displayTitle,
+        ).replaceAll(AppPattern.spaceRegex, r'\s*');
+        final displayDuplicateTitlePattern = RegExp(
+          '^(\\s|\\p{P}|$nameRegex)*$displayTitleRegex(\\s)*',
+          unicode: true,
+        );
+        final displayDuplicateTitleMatch = displayDuplicateTitlePattern
+            .firstMatch(content);
+        if (displayDuplicateTitleMatch != null) {
+          content = content.substring(displayDuplicateTitleMatch.end);
+          sameTitleRemoved = true;
+        }
+      }
     }
 
     if (reSegmentEnabled) {
@@ -131,41 +157,16 @@ class ReaderV2ContentTransformer {
     if (useReplaceRules) {
       content = content.split('\n').map((line) => line.trim()).join('\n');
       for (final rule in rules) {
-        if (!rule.scopeContent || rule.pattern.isEmpty) continue;
-        if (rule.scope?.isNotEmpty == true) {
-          if (!rule.scope!.contains(bookName) &&
-              !rule.scope!.contains(bookOrigin)) {
-            continue;
-          }
-        }
-        if (rule.excludeScope?.isNotEmpty == true) {
-          if (rule.excludeScope!.contains(bookName) ||
-              rule.excludeScope!.contains(bookOrigin)) {
-            continue;
-          }
+        if (!rule.appliesToContent(
+          bookName: bookName,
+          bookOrigin: bookOrigin,
+        )) {
+          continue;
         }
 
         try {
           final previous = content;
-          if (rule.isRegex) {
-            final reg = RegExp(rule.pattern, multiLine: true, dotAll: true);
-            content = content.replaceAllMapped(reg, (match) {
-              return rule.replacement.replaceAllMapped(
-                RegExp(r'\\\$|\$(\d+)'),
-                (groupMatch) {
-                  final hit = groupMatch.group(0)!;
-                  if (hit == r'\$') return r'$';
-                  final idx = int.tryParse(groupMatch.group(1)!) ?? 0;
-                  if (idx == 0) return match.group(0) ?? '';
-                  return (idx > 0 && idx <= match.groupCount)
-                      ? (match.group(idx) ?? '')
-                      : hit;
-                },
-              );
-            });
-          } else {
-            content = content.replaceAll(rule.pattern, rule.replacement);
-          }
+          content = rule.apply(content);
           if (content != previous) {
             effectiveRules.add(rule);
           }
@@ -200,16 +201,9 @@ class ReaderV2ContentTransformer {
       for (final rule in rules) {
         if (rule.pattern.isEmpty) continue;
         try {
-          if (rule.isRegex) {
-            displayTitle = displayTitle.replaceAll(
-              RegExp(rule.pattern),
-              rule.replacement,
-            );
-          } else {
-            displayTitle = displayTitle.replaceAll(
-              rule.pattern,
-              rule.replacement,
-            );
+          final next = rule.apply(displayTitle);
+          if (next.trim().isNotEmpty) {
+            displayTitle = next;
           }
         } catch (_) {}
       }
