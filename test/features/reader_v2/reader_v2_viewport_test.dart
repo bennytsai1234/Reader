@@ -319,12 +319,17 @@ void main() {
     await _pumpViewport(tester);
 
     final center = tester.getCenter(find.byType(ScrollReaderV2Viewport));
+    await tester.tapAt(center);
+    await tester.pump();
+
+    expect(tapCalls, 1);
+
     final tapGesture = await tester.startGesture(center);
     await tapGesture.moveBy(const Offset(4, 3));
     await tapGesture.up();
     await tester.pump();
 
-    expect(tapCalls, 1);
+    expect(tapCalls, 2);
 
     final firstTile = find.byType(ReaderV2TileLayer).first;
     final startTop = tester.getTopLeft(firstTile).dy;
@@ -339,11 +344,77 @@ void main() {
     await dragGesture.up();
     await _pumpViewportCommand(tester);
 
-    expect(tapCalls, 1);
+    expect(tapCalls, 2);
     expect(tester.takeException(), isNull);
 
     runtime.dispose();
   });
+
+  testWidgets(
+    'scroll viewport tap holds animated position without tap action',
+    (tester) async {
+      final runtime = _runtime(
+        initialMode: ReaderV2Mode.scroll,
+        chapterCount: 1,
+        paragraphsPerChapter: 80,
+      );
+      final controller = ReaderV2ViewportController();
+      await runtime.jumpToLocation(
+        const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+        immediateSave: false,
+      );
+      var tapCalls = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 260,
+            height: 360,
+            child: ScrollReaderV2Viewport(
+              runtime: runtime,
+              backgroundColor: Colors.white,
+              textColor: Colors.black,
+              style: _style(),
+              onTapUp: (_) => tapCalls += 1,
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await _pumpViewport(tester);
+
+      final firstTile = find.byType(ReaderV2TileLayer).first;
+      final startTop = tester.getTopLeft(firstTile).dy;
+      await tester.fling(
+        find.byType(ScrollReaderV2Viewport),
+        const Offset(0, -260),
+        3000,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 48));
+
+      final movingTop = tester.getTopLeft(firstTile).dy;
+      expect(movingTop, lessThan(startTop));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(ScrollReaderV2Viewport)),
+      );
+      await tester.pump(const Duration(milliseconds: 120));
+
+      final heldTop = tester.getTopLeft(firstTile).dy;
+      expect(heldTop, closeTo(movingTop, 0.001));
+
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(tapCalls, 0);
+      expect(tester.getTopLeft(firstTile).dy, closeTo(heldTop, 0.001));
+      expect(tester.takeException(), isNull);
+
+      runtime.dispose();
+    },
+  );
 
   testWidgets('scroll viewport rubber-bands when dragged beyond book start', (
     tester,
@@ -896,12 +967,17 @@ void main() {
     await _pumpViewport(tester);
 
     final center = tester.getCenter(find.byType(SlideReaderV2Viewport));
+    await tester.tapAt(center);
+    await tester.pump();
+
+    expect(tapCalls, 1);
+
     final tapGesture = await tester.startGesture(center);
     await tapGesture.moveBy(const Offset(4, 3));
     await tapGesture.up();
     await tester.pump();
 
-    expect(tapCalls, 1);
+    expect(tapCalls, 2);
 
     final currentTile = find.byType(ReaderV2TileLayer).first;
     expect(tester.getTopLeft(currentTile).dx, closeTo(0, 0.001));
@@ -917,7 +993,61 @@ void main() {
     await dragGesture.up();
     await _pumpViewportCommand(tester);
 
-    expect(tapCalls, 1);
+    expect(tapCalls, 2);
+    expect(tester.takeException(), isNull);
+
+    runtime.dispose();
+  });
+
+  testWidgets('slide viewport suppresses tap while page animation is active', (
+    tester,
+  ) async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.slide,
+      chapterCount: 1,
+      paragraphsPerChapter: 80,
+    );
+    final layout = await runtime.debugResolver.ensureLayout(0);
+    expect(layout.pages.length, greaterThan(1));
+    final controller = ReaderV2ViewportController();
+    await runtime.jumpToLocation(
+      const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+      immediateSave: false,
+    );
+    var tapCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 260,
+          height: 360,
+          child: SlideReaderV2Viewport(
+            runtime: runtime,
+            backgroundColor: Colors.white,
+            textColor: Colors.black,
+            style: _style(),
+            onTapUp: (_) => tapCalls += 1,
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+    await _pumpViewport(tester);
+
+    final animation = controller.moveToNextPage!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 48));
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(SlideReaderV2Viewport)),
+    );
+    await gesture.up();
+    await tester.pump();
+
+    expect(tapCalls, 0);
+
+    await _pumpViewportCommand(tester);
+    expect(await animation, isTrue);
     expect(tester.takeException(), isNull);
 
     runtime.dispose();

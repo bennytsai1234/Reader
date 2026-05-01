@@ -13,6 +13,7 @@ import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_runtime.dart
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_state.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_chapter_page_cache_manager.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_infinite_segment_strip.dart';
+import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_pointer_tap_layer.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_position_tracker.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_viewport_controller.dart';
 import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_visible_page_calculator.dart';
@@ -758,6 +759,33 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
     _dragMovedReadingY = false;
   }
 
+  bool _holdCurrentScrollPositionIfAnimating() {
+    final scrollAnimating = _scrollAnimation.isAnimating;
+    final overscrollAnimating = _overscrollAnimation.isAnimating;
+    if (!scrollAnimating && !overscrollAnimating) return false;
+
+    if (scrollAnimating) {
+      final currentTarget = _scrollAnimation.value;
+      _scrollAnimation.stop();
+      _applyReadingTarget(
+        currentTarget,
+        scheduleShift: false,
+        captureVisibleLocation: false,
+      );
+      _lastAnimationValue = _readingY;
+    }
+    if (overscrollAnimating) {
+      _overscrollAnimation.stop();
+    }
+    _isDragging = false;
+    _dragMovedReadingY = false;
+    _animationTickCount = 0;
+    _scheduleVisibleLocationCapture();
+    _scheduleWindowShiftForAnchor();
+    unawaited(_handleScrollSettled());
+    return true;
+  }
+
   void _handleDragUpdate(DragUpdateDetails details) {
     _overscrollAnimation.stop();
     final fingerDeltaY = details.delta.dy;
@@ -1104,30 +1132,33 @@ class _ScrollReaderV2ViewportState extends State<ScrollReaderV2Viewport>
 
   Widget _buildCanvas() {
     final viewportHeight = _viewportHeight();
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return ReaderV2PointerTapLayer(
       onTapUp: widget.onTapUp,
-      onVerticalDragStart: _handleDragStart,
-      onVerticalDragUpdate: _handleDragUpdate,
-      onVerticalDragEnd: _handleDragEnd,
-      onVerticalDragCancel: _handleDragCancel,
-      child: ColoredBox(
-        color: widget.backgroundColor,
-        child: ClipRect(
-          child: ValueListenableBuilder<double>(
-            valueListenable: _scrollOffset,
-            builder: (context, readingY, _) {
-              return AnimatedBuilder(
-                animation: _overscrollAnimation,
-                builder: (context, _) {
-                  return _buildVisiblePageStack(
-                    readingY: readingY,
-                    viewportHeight: viewportHeight,
-                    overscrollY: _overscrollY,
-                  );
-                },
-              );
-            },
+      onPointerDownTapPolicy: (_) => _holdCurrentScrollPositionIfAnimating(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragStart: _handleDragStart,
+        onVerticalDragUpdate: _handleDragUpdate,
+        onVerticalDragEnd: _handleDragEnd,
+        onVerticalDragCancel: _handleDragCancel,
+        child: ColoredBox(
+          color: widget.backgroundColor,
+          child: ClipRect(
+            child: ValueListenableBuilder<double>(
+              valueListenable: _scrollOffset,
+              builder: (context, readingY, _) {
+                return AnimatedBuilder(
+                  animation: _overscrollAnimation,
+                  builder: (context, _) {
+                    return _buildVisiblePageStack(
+                      readingY: readingY,
+                      viewportHeight: viewportHeight,
+                      overscrollY: _overscrollY,
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ),
       ),

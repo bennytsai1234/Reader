@@ -13,6 +13,7 @@ import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_location.dar
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_page_window.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_state.dart';
+import 'package:inkpage_reader/features/reader_v2/viewport/reader_v2_pointer_tap_layer.dart';
 
 class SlideReaderV2Viewport extends StatefulWidget {
   const SlideReaderV2Viewport({
@@ -372,6 +373,13 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
     _pendingDirection = 0;
     _warmedDragDirection = 0;
     _rawDragDx = _dragDx;
+  }
+
+  bool _isSlideMotionActive() {
+    return _dragActive ||
+        _pageTurnInProgress ||
+        _queueingBusyDrag ||
+        _slideController.isAnimating;
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
@@ -825,74 +833,77 @@ class _SlideReaderV2ViewportState extends State<SlideReaderV2Viewport>
                 ? _buildEdgePlaceholder(message: '已經是最後一頁')
                 : _buildTile(nextPlacement!);
 
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        return ReaderV2PointerTapLayer(
           onTapUp: widget.onTapUp,
-          onHorizontalDragDown:
-              (details) => _dragDownGlobalPosition = details.globalPosition,
-          onHorizontalDragStart: _handleDragStart,
-          onHorizontalDragUpdate: _handleDragUpdate,
-          onHorizontalDragEnd: (details) => _handleDragEnd(details, width),
-          onHorizontalDragCancel: _handleDragCancel,
-          child: ColoredBox(
-            color: widget.backgroundColor,
-            child: ClipRect(
-              child: ValueListenableBuilder<double>(
-                valueListenable: _dragOffset,
-                builder: (context, dragDx, _) {
-                  return Stack(
-                    children: [
-                      Transform.translate(
-                        offset: Offset(
-                          _screenXFor(
-                            pageSlot: -1,
-                            width: width,
-                            dragDx: dragDx,
-                            placement: prevPlacement,
+          onPointerDownTapPolicy: (_) => _isSlideMotionActive(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragDown:
+                (details) => _dragDownGlobalPosition = details.globalPosition,
+            onHorizontalDragStart: _handleDragStart,
+            onHorizontalDragUpdate: _handleDragUpdate,
+            onHorizontalDragEnd: (details) => _handleDragEnd(details, width),
+            onHorizontalDragCancel: _handleDragCancel,
+            child: ColoredBox(
+              color: widget.backgroundColor,
+              child: ClipRect(
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _dragOffset,
+                  builder: (context, dragDx, _) {
+                    return Stack(
+                      children: [
+                        Transform.translate(
+                          offset: Offset(
+                            _screenXFor(
+                              pageSlot: -1,
+                              width: width,
+                              dragDx: dragDx,
+                              placement: prevPlacement,
+                            ),
+                            0,
                           ),
-                          0,
-                        ),
-                        child: SizedBox(
-                          width: width,
-                          height: height,
-                          child: prev,
-                        ),
-                      ),
-                      Transform.translate(
-                        offset: Offset(
-                          _screenXFor(
-                            pageSlot: 0,
+                          child: SizedBox(
                             width: width,
-                            dragDx: dragDx,
-                            placement: currentPlacement,
+                            height: height,
+                            child: prev,
                           ),
-                          0,
                         ),
-                        child: SizedBox(
-                          width: width,
-                          height: height,
-                          child: current,
-                        ),
-                      ),
-                      Transform.translate(
-                        offset: Offset(
-                          _screenXFor(
-                            pageSlot: 1,
+                        Transform.translate(
+                          offset: Offset(
+                            _screenXFor(
+                              pageSlot: 0,
+                              width: width,
+                              dragDx: dragDx,
+                              placement: currentPlacement,
+                            ),
+                            0,
+                          ),
+                          child: SizedBox(
                             width: width,
-                            dragDx: dragDx,
-                            placement: nextPlacement,
+                            height: height,
+                            child: current,
                           ),
-                          0,
                         ),
-                        child: SizedBox(
-                          width: width,
-                          height: height,
-                          child: next,
+                        Transform.translate(
+                          offset: Offset(
+                            _screenXFor(
+                              pageSlot: 1,
+                              width: width,
+                              dragDx: dragDx,
+                              placement: nextPlacement,
+                            ),
+                            0,
+                          ),
+                          child: SizedBox(
+                            width: width,
+                            height: height,
+                            child: next,
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),
