@@ -42,7 +42,6 @@ class ReaderV2AutoPageController extends ChangeNotifier {
     if (isRunning) return;
     _timer = _timerFactory(_interval, (_) => unawaited(stepAsync()));
     notifyListeners();
-    unawaited(stepAsync());
   }
 
   Future<bool> stepAsync() async {

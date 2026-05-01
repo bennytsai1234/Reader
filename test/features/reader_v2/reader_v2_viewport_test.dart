@@ -1357,7 +1357,7 @@ void main() {
     },
   );
 
-  test('auto page starts with an immediate page step', () async {
+  test('auto page starts timer and waits for the scheduled tick', () async {
     final runtime = _runtime(
       initialMode: ReaderV2Mode.slide,
       chapterCount: 2,
@@ -1367,7 +1367,7 @@ void main() {
       const ReaderV2Location(chapterIndex: 0, charOffset: 0),
       immediateSave: false,
     );
-    final fakeTimer = _FakeTimer();
+    late _FakeTimer fakeTimer;
     var pageCommands = 0;
     final viewportController =
         ReaderV2ViewportController()
@@ -1378,7 +1378,7 @@ void main() {
     final autoPage = ReaderV2AutoPageController(
       runtime: runtime,
       viewportController: viewportController,
-      timerFactory: (_, _) => fakeTimer,
+      timerFactory: (_, onTick) => fakeTimer = _FakeTimer(onTick),
     );
 
     autoPage.start();
@@ -1386,6 +1386,11 @@ void main() {
 
     expect(autoPage.isRunning, isTrue);
     expect(fakeTimer.isActive, isTrue);
+    expect(pageCommands, 0);
+
+    fakeTimer.tickNow();
+    await Future<void>.delayed(Duration.zero);
+
     expect(pageCommands, 1);
 
     autoPage.dispose();
@@ -1801,17 +1806,27 @@ class _FakeTtsEngine extends ReaderV2TtsEngine {
 }
 
 class _FakeTimer implements Timer {
+  _FakeTimer(this._onTick);
+
+  final void Function(Timer timer) _onTick;
   bool _active = true;
+  int _tick = 0;
 
   @override
   bool get isActive => _active;
 
   @override
-  int get tick => 0;
+  int get tick => _tick;
 
   @override
   void cancel() {
     _active = false;
+  }
+
+  void tickNow() {
+    if (!_active) return;
+    _tick += 1;
+    _onTick(this);
   }
 }
 
