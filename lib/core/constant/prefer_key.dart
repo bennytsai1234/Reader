@@ -183,8 +183,6 @@ class PreferKey {
   static const String bgImageN = 'backgroundImageNight';
   static const String bgImageNBlurring = 'backgroundImageNightBlurring';
 
-  static const String showReadTitleAddition = 'showReadTitleAddition';
-  static const String readBarStyleFollowPage = 'readBarStyleFollowPage';
   static const String contentSelectSpeakMod = 'contentReadAloudMod';
 
   // Reader settings
@@ -196,6 +194,7 @@ class PreferKey {
   static const String readerThemeIndex = 'reader_theme_index';
   static const String readerDayThemeIndex = 'reader_day_theme_index';
   static const String readerNightThemeIndex = 'reader_night_theme_index';
+  static const String readerMenuThemeIndex = 'reader_menu_theme_index';
   static const String readerPageTurnMode = 'reader_page_turn_mode';
   static const String readerChineseConvert = 'reader_chinese_convert_v2';
   static const String readerTtsRate = 'reader_tts_rate';

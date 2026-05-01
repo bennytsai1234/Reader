@@ -90,46 +90,15 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
           children: [
             const SheetSection(title: '閱讀主題'),
             const SizedBox(height: 4),
-            SizedBox(
-              height: 64,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                itemCount: AppTheme.readingThemes.length,
-                itemBuilder: (context, index) {
-                  final theme = AppTheme.readingThemes[index];
-                  final selected = settings.themeIndex == index;
-                  return GestureDetector(
-                    onTap: () => settings.setTheme(index),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 52,
-                      margin: const EdgeInsets.only(right: 14),
-                      decoration: BoxDecoration(
-                        color: theme.backgroundColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color:
-                              selected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.grey.withValues(alpha: 0.2),
-                          width: selected ? 3 : 1,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Aa',
-                          style: TextStyle(
-                            color: theme.textColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+            _ReaderThemeSelector(
+              selectedIndex: settings.themeIndex,
+              onSelected: settings.setTheme,
+            ),
+            const SheetSection(title: '選單樣式'),
+            const SizedBox(height: 4),
+            _ReaderThemeSelector(
+              selectedIndex: settings.menuThemeIndex,
+              onSelected: settings.setMenuTheme,
             ),
             const SheetSection(title: '排版精修'),
             ReaderV2SettingComponents.buildSliderRow(
@@ -249,21 +218,69 @@ class _ReaderInterfaceSheetState extends State<_ReaderInterfaceSheet> {
                 ),
               ],
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('顯示常駐底部資訊'),
-              value: settings.showReadTitleAddition,
-              onChanged: settings.setShowReadTitleAddition,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('選單配色跟隨閱讀頁'),
-              value: settings.readBarStyleFollowPage,
-              onChanged: settings.setReadBarStyleFollowPage,
-            ),
           ],
         );
       },
+    );
+  }
+}
+
+class _ReaderThemeSelector extends StatelessWidget {
+  const _ReaderThemeSelector({
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 64,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
+        itemCount: AppTheme.readingThemes.length,
+        itemBuilder: (context, index) {
+          final theme = AppTheme.readingThemes[index];
+          final selected = selectedIndex == index;
+          return Semantics(
+            label: theme.name,
+            selected: selected,
+            button: true,
+            child: GestureDetector(
+              onTap: () => onSelected(index),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 52,
+                margin: const EdgeInsets.only(right: 14),
+                decoration: BoxDecoration(
+                  color: theme.backgroundColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color:
+                        selected
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey.withValues(alpha: 0.2),
+                    width: selected ? 3 : 1,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    'Aa',
+                    style: TextStyle(
+                      color: theme.textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

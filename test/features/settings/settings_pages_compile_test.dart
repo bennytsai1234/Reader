@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:inkpage_reader/features/about/about_page.dart';
@@ -11,5 +12,12 @@ void main() {
     expect(() => const OtherSettingsPage(), returnsNormally);
     expect(() => const SettingsPage(), returnsNormally);
     expect(() => const TtsSettingsPage(), returnsNormally);
+  });
+
+  testWidgets('Settings page hides Reading Settings entry', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
+
+    expect(find.text('閱讀設定'), findsNothing);
+    expect(find.text('朗讀與語音'), findsOneWidget);
   });
 }

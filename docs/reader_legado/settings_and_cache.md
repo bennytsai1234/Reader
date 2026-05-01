@@ -15,7 +15,7 @@
 ## Reader 上下游依賴
 
 - 直接上游依賴：`lib/core/config`、`lib/core/constant`、`lib/core/database`、`lib/core/models`、`lib/core/services/tts_service.dart`、`lib/core/services/book_source_service.dart`、`lib/core/services/network_service.dart`、`lib/features/reader_v2/features/settings`
-- 直接下游影響：`lib/features/welcome`、`lib/features/reader_v2`、`lib/features/book_detail`、`lib/features/browser`，以及從設定頁聚合出去的下載、備份、隱私與閱讀設定流程
+- 直接下游影響：`lib/features/welcome`、`lib/features/reader_v2`、`lib/features/book_detail`、`lib/features/browser`，以及從設定頁聚合出去的下載、備份、隱私流程；閱讀排版與閱讀器內顯示設定以 `reader_v2` 內建面板為主入口
 
 ## Legado 對照
 

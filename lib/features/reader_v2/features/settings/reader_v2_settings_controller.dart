@@ -27,15 +27,15 @@ class ReaderV2SettingsController extends ChangeNotifier {
   int themeIndex = 0;
   int lastDayThemeIndex = 0;
   int lastNightThemeIndex = 1;
+  int menuThemeIndex = 0;
   int chineseConvert = 0;
   int pageTurnMode = PageAnim.slide;
   bool showAddToShelfAlert = true;
-  bool showReadTitleAddition = true;
-  bool readBarStyleFollowPage = false;
   List<int> clickActions = ReaderV2PrefsSnapshot.defaults().clickActions;
   int _contentSettingsGeneration = 0;
 
   int get contentSettingsGeneration => _contentSettingsGeneration;
+  bool get showReadTitleAddition => true;
 
   Future<void> loadSettings() async {
     final snapshot = await _prefsRepository.load();
@@ -44,17 +44,17 @@ class ReaderV2SettingsController extends ChangeNotifier {
     paragraphSpacing = snapshot.paragraphSpacing;
     letterSpacing = snapshot.letterSpacing;
     textIndent = snapshot.textIndent;
-    themeIndex = snapshot.themeIndex;
+    themeIndex = _normalizeThemeIndex(snapshot.themeIndex);
     pageTurnMode = snapshot.pageTurnMode;
     AppConfig.readerPageAnim = pageTurnMode;
     chineseConvert = snapshot.chineseConvert;
     showAddToShelfAlert = snapshot.showAddToShelfAlert;
-    showReadTitleAddition = snapshot.showReadTitleAddition;
-    readBarStyleFollowPage = snapshot.readBarStyleFollowPage;
+    menuThemeIndex = snapshot.menuThemeIndex;
     clickActions = List<int>.from(snapshot.clickActions);
     lastDayThemeIndex = snapshot.lastDayThemeIndex;
     lastNightThemeIndex = snapshot.lastNightThemeIndex;
     _normalizeDayNightThemeIndexes();
+    menuThemeIndex = _normalizeThemeIndex(menuThemeIndex);
 
     notifyListeners();
   }
@@ -86,6 +86,14 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   ReadingTheme get currentTheme {
+    return _themeAt(themeIndex);
+  }
+
+  ReadingTheme get currentMenuTheme {
+    return _themeAt(menuThemeIndex);
+  }
+
+  ReadingTheme _themeAt(int index) {
     if (AppTheme.readingThemes.isEmpty) {
       return ReadingTheme(
         name: 'fallback',
@@ -93,9 +101,7 @@ class ReaderV2SettingsController extends ChangeNotifier {
         textColor: const Color(0xFF1A1A1A),
       );
     }
-    final index =
-        themeIndex.clamp(0, AppTheme.readingThemes.length - 1).toInt();
-    return AppTheme.readingThemes[index];
+    return AppTheme.readingThemes[_normalizeThemeIndex(index)];
   }
 
   void setFontSize(double value) {
@@ -136,21 +142,15 @@ class ReaderV2SettingsController extends ChangeNotifier {
   }
 
   void setTheme(int value) {
-    themeIndex = value;
-    unawaited(_prefsRepository.saveThemeIndex(value));
-    _rememberDayNightThemeIndex(value);
+    themeIndex = _normalizeThemeIndex(value);
+    unawaited(_prefsRepository.saveThemeIndex(themeIndex));
+    _rememberDayNightThemeIndex(themeIndex);
     notifyListeners();
   }
 
-  void setShowReadTitleAddition(bool value) {
-    showReadTitleAddition = value;
-    unawaited(_prefsRepository.saveShowReadTitleAddition(value));
-    notifyListeners();
-  }
-
-  void setReadBarStyleFollowPage(bool value) {
-    readBarStyleFollowPage = value;
-    unawaited(_prefsRepository.saveReadBarStyleFollowPage(value));
+  void setMenuTheme(int value) {
+    menuThemeIndex = _normalizeThemeIndex(value);
+    unawaited(_prefsRepository.saveMenuThemeIndex(menuThemeIndex));
     notifyListeners();
   }
 
@@ -210,10 +210,14 @@ class ReaderV2SettingsController extends ChangeNotifier {
 
   bool _isThemeDark(int index) {
     if (AppTheme.readingThemes.isEmpty) return index != 0;
-    final safeIndex = index.clamp(0, AppTheme.readingThemes.length - 1).toInt();
-    return AppTheme.readingThemes[safeIndex].backgroundColor
+    return AppTheme.readingThemes[_normalizeThemeIndex(index)].backgroundColor
             .computeLuminance() <
         0.5;
+  }
+
+  int _normalizeThemeIndex(int index) {
+    if (AppTheme.readingThemes.isEmpty) return index;
+    return index.clamp(0, AppTheme.readingThemes.length - 1).toInt();
   }
 
   int _fallbackDayThemeIndex() {

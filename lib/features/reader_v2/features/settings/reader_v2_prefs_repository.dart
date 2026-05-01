@@ -12,11 +12,10 @@ class ReaderV2PrefsSnapshot {
   final int themeIndex;
   final int lastDayThemeIndex;
   final int lastNightThemeIndex;
+  final int menuThemeIndex;
   final int pageTurnMode;
   final int chineseConvert;
   final bool showAddToShelfAlert;
-  final bool showReadTitleAddition;
-  final bool readBarStyleFollowPage;
   final List<int> clickActions;
 
   const ReaderV2PrefsSnapshot({
@@ -28,11 +27,10 @@ class ReaderV2PrefsSnapshot {
     required this.themeIndex,
     required this.lastDayThemeIndex,
     required this.lastNightThemeIndex,
+    required this.menuThemeIndex,
     required this.pageTurnMode,
     required this.chineseConvert,
     required this.showAddToShelfAlert,
-    required this.showReadTitleAddition,
-    required this.readBarStyleFollowPage,
     required this.clickActions,
   });
 
@@ -46,11 +44,10 @@ class ReaderV2PrefsSnapshot {
       themeIndex: 0,
       lastDayThemeIndex: 0,
       lastNightThemeIndex: 1,
+      menuThemeIndex: 0,
       pageTurnMode: PageAnim.slide,
       chineseConvert: 0,
       showAddToShelfAlert: true,
-      showReadTitleAddition: true,
-      readBarStyleFollowPage: false,
       clickActions: ReaderV2TapAction.defaultGrid(),
     );
   }
@@ -64,11 +61,10 @@ class ReaderV2PrefsSnapshot {
     int? themeIndex,
     int? lastDayThemeIndex,
     int? lastNightThemeIndex,
+    int? menuThemeIndex,
     int? pageTurnMode,
     int? chineseConvert,
     bool? showAddToShelfAlert,
-    bool? showReadTitleAddition,
-    bool? readBarStyleFollowPage,
     List<int>? clickActions,
   }) {
     return ReaderV2PrefsSnapshot(
@@ -80,13 +76,10 @@ class ReaderV2PrefsSnapshot {
       themeIndex: themeIndex ?? this.themeIndex,
       lastDayThemeIndex: lastDayThemeIndex ?? this.lastDayThemeIndex,
       lastNightThemeIndex: lastNightThemeIndex ?? this.lastNightThemeIndex,
+      menuThemeIndex: menuThemeIndex ?? this.menuThemeIndex,
       pageTurnMode: pageTurnMode ?? this.pageTurnMode,
       chineseConvert: chineseConvert ?? this.chineseConvert,
       showAddToShelfAlert: showAddToShelfAlert ?? this.showAddToShelfAlert,
-      showReadTitleAddition:
-          showReadTitleAddition ?? this.showReadTitleAddition,
-      readBarStyleFollowPage:
-          readBarStyleFollowPage ?? this.readBarStyleFollowPage,
       clickActions: clickActions ?? List<int>.from(this.clickActions),
     );
   }
@@ -98,6 +91,8 @@ class ReaderV2PrefsRepository {
   Future<ReaderV2PrefsSnapshot> load() async {
     final prefs = await SharedPreferences.getInstance();
     final defaults = ReaderV2PrefsSnapshot.defaults();
+    final themeIndex =
+        prefs.getInt(PreferKey.readerThemeIndex) ?? defaults.themeIndex;
     return ReaderV2PrefsSnapshot(
       fontSize: prefs.getDouble(PreferKey.readerFontSize) ?? defaults.fontSize,
       lineHeight:
@@ -110,14 +105,15 @@ class ReaderV2PrefsRepository {
           defaults.letterSpacing,
       textIndent:
           prefs.getInt(PreferKey.readerTextIndent) ?? defaults.textIndent,
-      themeIndex:
-          prefs.getInt(PreferKey.readerThemeIndex) ?? defaults.themeIndex,
+      themeIndex: themeIndex,
       lastDayThemeIndex:
           prefs.getInt(PreferKey.readerDayThemeIndex) ??
           defaults.lastDayThemeIndex,
       lastNightThemeIndex:
           prefs.getInt(PreferKey.readerNightThemeIndex) ??
           defaults.lastNightThemeIndex,
+      menuThemeIndex:
+          prefs.getInt(PreferKey.readerMenuThemeIndex) ?? themeIndex,
       pageTurnMode:
           prefs.getInt(PreferKey.readerPageTurnMode) ?? defaults.pageTurnMode,
       chineseConvert:
@@ -126,12 +122,6 @@ class ReaderV2PrefsRepository {
       showAddToShelfAlert:
           prefs.getBool(PreferKey.showAddToShelfAlert) ??
           defaults.showAddToShelfAlert,
-      showReadTitleAddition:
-          prefs.getBool(PreferKey.showReadTitleAddition) ??
-          defaults.showReadTitleAddition,
-      readBarStyleFollowPage:
-          prefs.getBool(PreferKey.readBarStyleFollowPage) ??
-          defaults.readBarStyleFollowPage,
       clickActions: _parseClickActions(
         prefs.getString(PreferKey.readerClickActions),
       ),
@@ -170,6 +160,10 @@ class ReaderV2PrefsRepository {
     return _setInt(PreferKey.readerNightThemeIndex, value);
   }
 
+  Future<void> saveMenuThemeIndex(int value) {
+    return _setInt(PreferKey.readerMenuThemeIndex, value);
+  }
+
   Future<void> savePageTurnMode(int value) {
     return _setInt(PreferKey.readerPageTurnMode, value);
   }
@@ -180,14 +174,6 @@ class ReaderV2PrefsRepository {
 
   Future<void> saveShowAddToShelfAlert(bool value) {
     return _setBool(PreferKey.showAddToShelfAlert, value);
-  }
-
-  Future<void> saveShowReadTitleAddition(bool value) {
-    return _setBool(PreferKey.showReadTitleAddition, value);
-  }
-
-  Future<void> saveReadBarStyleFollowPage(bool value) {
-    return _setBool(PreferKey.readBarStyleFollowPage, value);
   }
 
   Future<void> saveClickActions(List<int> actions) {

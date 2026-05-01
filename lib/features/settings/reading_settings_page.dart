@@ -157,28 +157,6 @@ class _ReadingSettingsPageState extends State<ReadingSettingsPage> {
                   ),
 
                   const Divider(),
-                  _buildSectionTitle('顯示'),
-                  SwitchListTile(
-                    title: const Text('顯示常駐底部資訊'),
-                    value: prefs.showReadTitleAddition,
-                    onChanged: (value) {
-                      _updatePrefs(
-                        prefs.copyWith(showReadTitleAddition: value),
-                      );
-                      _prefsRepository.saveShowReadTitleAddition(value);
-                    },
-                  ),
-                  SwitchListTile(
-                    title: const Text('選單配色跟隨閱讀頁'),
-                    value: prefs.readBarStyleFollowPage,
-                    onChanged: (value) {
-                      _updatePrefs(
-                        prefs.copyWith(readBarStyleFollowPage: value),
-                      );
-                      _prefsRepository.saveReadBarStyleFollowPage(value);
-                    },
-                  ),
-                  const Divider(),
                   _buildSectionTitle('內容'),
                   ListTile(
                     title: const Text('繁簡轉換'),

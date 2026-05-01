@@ -102,6 +102,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
     final menu = _host.menu;
     final runtime = _host.runtime;
     final theme = settings.currentTheme;
+    final menuTheme = settings.currentMenuTheme;
     final isDarkBackground = theme.backgroundColor.computeLuminance() < 0.5;
     final page = _currentPage(runtime);
     final chapterIndex = _currentChapterIndex(runtime);
@@ -138,8 +139,9 @@ class _ReaderV2PageState extends State<ReaderV2Page>
         ),
         backgroundColor: theme.backgroundColor,
         textColor: theme.textColor,
+        menuBackgroundColor: menuTheme.backgroundColor,
+        menuTextColor: menuTheme.textColor,
         controlsVisible: menu.controlsVisible,
-        readBarStyleFollowPage: settings.readBarStyleFollowPage,
         showReadTitleAddition: settings.showReadTitleAddition,
         hasVisibleContent: page != null,
         isLoading:

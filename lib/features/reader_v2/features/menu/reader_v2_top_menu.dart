@@ -5,9 +5,8 @@ class ReaderV2TopMenu extends StatelessWidget {
   const ReaderV2TopMenu({
     super.key,
     required this.controlsVisible,
-    required this.readBarStyleFollowPage,
-    required this.pageBackgroundColor,
-    required this.pageTextColor,
+    required this.menuBackgroundColor,
+    required this.menuTextColor,
     required this.bookName,
     required this.chapterTitle,
     required this.chapterUrl,
@@ -18,9 +17,8 @@ class ReaderV2TopMenu extends StatelessWidget {
   });
 
   final bool controlsVisible;
-  final bool readBarStyleFollowPage;
-  final Color pageBackgroundColor;
-  final Color pageTextColor;
+  final Color menuBackgroundColor;
+  final Color menuTextColor;
   final String bookName;
   final String chapterTitle;
   final String chapterUrl;
@@ -33,9 +31,8 @@ class ReaderV2TopMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.resolve(
       context: context,
-      followPageStyle: readBarStyleFollowPage,
-      pageBackgroundColor: pageBackgroundColor,
-      pageTextColor: pageTextColor,
+      backgroundColor: menuBackgroundColor,
+      textColor: menuTextColor,
     );
     return Positioned(
       top: 0,

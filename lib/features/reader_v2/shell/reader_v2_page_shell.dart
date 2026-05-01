@@ -15,8 +15,9 @@ class ReaderV2PageShell extends StatelessWidget {
     required this.drawer,
     required this.backgroundColor,
     required this.textColor,
+    required this.menuBackgroundColor,
+    required this.menuTextColor,
     required this.controlsVisible,
-    required this.readBarStyleFollowPage,
     required this.showReadTitleAddition,
     required this.hasVisibleContent,
     required this.isLoading,
@@ -56,8 +57,9 @@ class ReaderV2PageShell extends StatelessWidget {
   final ReaderV2ChaptersDrawer drawer;
   final Color backgroundColor;
   final Color textColor;
+  final Color menuBackgroundColor;
+  final Color menuTextColor;
   final bool controlsVisible;
-  final bool readBarStyleFollowPage;
   final bool showReadTitleAddition;
   final bool hasVisibleContent;
   final bool isLoading;
@@ -145,9 +147,8 @@ class ReaderV2PageShell extends StatelessWidget {
                 ),
               ReaderV2TopMenu(
                 controlsVisible: controlsVisible,
-                readBarStyleFollowPage: readBarStyleFollowPage,
-                pageBackgroundColor: backgroundColor,
-                pageTextColor: textColor,
+                menuBackgroundColor: menuBackgroundColor,
+                menuTextColor: menuTextColor,
                 bookName: book.name,
                 chapterTitle: chapterTitle,
                 chapterUrl: chapterUrl,
@@ -158,9 +159,8 @@ class ReaderV2PageShell extends StatelessWidget {
               ),
               ReaderV2BottomMenu(
                 controlsVisible: controlsVisible,
-                readBarStyleFollowPage: readBarStyleFollowPage,
-                pageBackgroundColor: backgroundColor,
-                pageTextColor: textColor,
+                menuBackgroundColor: menuBackgroundColor,
+                menuTextColor: menuTextColor,
                 navigation: navigation,
                 isAutoPaging: isAutoPaging,
                 dayNightIcon: dayNightIcon,

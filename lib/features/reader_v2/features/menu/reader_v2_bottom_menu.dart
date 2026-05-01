@@ -30,9 +30,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
   const ReaderV2BottomMenu({
     super.key,
     required this.controlsVisible,
-    required this.readBarStyleFollowPage,
-    required this.pageBackgroundColor,
-    required this.pageTextColor,
+    required this.menuBackgroundColor,
+    required this.menuTextColor,
     required this.navigation,
     required this.isAutoPaging,
     required this.dayNightIcon,
@@ -55,9 +54,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
   });
 
   final bool controlsVisible;
-  final bool readBarStyleFollowPage;
-  final Color pageBackgroundColor;
-  final Color pageTextColor;
+  final Color menuBackgroundColor;
+  final Color menuTextColor;
   final ReaderV2ChapterNavigationState navigation;
   final bool isAutoPaging;
   final IconData dayNightIcon;
@@ -82,9 +80,8 @@ class ReaderV2BottomMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuStyle = ReaderV2MenuStyle.resolve(
       context: context,
-      followPageStyle: readBarStyleFollowPage,
-      pageBackgroundColor: pageBackgroundColor,
-      pageTextColor: pageTextColor,
+      backgroundColor: menuBackgroundColor,
+      textColor: menuTextColor,
     );
     return Positioned(
       bottom: 0,

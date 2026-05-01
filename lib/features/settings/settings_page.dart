@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:inkpage_reader/features/source_manager/source_manager_page.dart';
 import 'package:inkpage_reader/features/read_record/read_record_page.dart';
 import 'package:inkpage_reader/features/cache_manager/download_manager_page.dart';
-import 'reading_settings_page.dart';
 import 'tts_settings_page.dart';
 import 'backup_settings_page.dart';
 import 'package:inkpage_reader/features/about/about_page.dart';
@@ -31,19 +30,6 @@ class SettingsPage extends StatelessWidget {
 
           const Divider(),
           _buildCategoryHeader(context, '個人化設定'),
-          _buildListTile(
-            context,
-            icon: Icons.chrome_reader_mode_outlined,
-            title: '閱讀設定',
-            summary: '打點區、排版、繁簡轉換',
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ReadingSettingsPage(),
-                  ),
-                ),
-          ),
           _buildListTile(
             context,
             icon: Icons.volume_up_outlined,

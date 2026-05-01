@@ -76,7 +76,6 @@ Future<void> _pumpReaderPage(
   final chapters = _chapters(book.bookUrl);
   SharedPreferences.setMockInitialValues(<String, Object>{
     PreferKey.readerPageTurnMode: pageTurnMode,
-    PreferKey.showReadTitleAddition: false,
   });
   getIt.registerLazySingleton<BookDao>(() => _FakeBookDao());
   getIt.registerLazySingleton<ChapterDao>(() => _FakeChapterDao(chapters));
