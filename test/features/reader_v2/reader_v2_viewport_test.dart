@@ -1548,6 +1548,75 @@ void main() {
     },
   );
 
+  test('tts trims start offset so highlight matches spoken text', () async {
+    final runtime = _runtime(
+      initialMode: ReaderV2Mode.scroll,
+      chapterCount: 1,
+      paragraphsPerChapter: 4,
+    );
+    final content = await runtime.loadContentAt(0);
+    final bodyStart = content.displayText.indexOf('這是');
+    await runtime.jumpToLocation(
+      ReaderV2Location(chapterIndex: 0, charOffset: content.title.length),
+      immediateSave: false,
+    );
+    final engine = _FakeTtsEngine();
+    final tts = ReaderV2TtsController(runtime: runtime, tts: engine);
+
+    await tts.startFromVisibleLocation();
+    expect(engine.currentSpokenText.startsWith('這是'), isTrue);
+    expect(tts.speechStartLocation?.charOffset, bodyStart);
+
+    engine.emitProgress(0, 2);
+    expect(tts.currentHighlight?.highlightStart, bodyStart);
+    expect(tts.currentHighlight?.highlightEnd, bodyStart + 2);
+
+    tts.dispose();
+    runtime.dispose();
+  });
+
+  test(
+    'tts completion continues with next chapter and clears at book end',
+    () async {
+      final runtime = _runtime(
+        initialMode: ReaderV2Mode.scroll,
+        chapterCount: 2,
+        paragraphsPerChapter: 4,
+      );
+      await runtime.jumpToLocation(
+        const ReaderV2Location(chapterIndex: 0, charOffset: 0),
+        immediateSave: false,
+      );
+      final engine = _FakeTtsEngine();
+      final tts = ReaderV2TtsController(runtime: runtime, tts: engine);
+
+      await tts.startFromVisibleLocation();
+      expect(engine.speakCount, 1);
+      expect(tts.speechStartLocation?.chapterIndex, 0);
+
+      engine.emitComplete();
+      await _flushMicrotasks();
+
+      expect(engine.speakCount, 2);
+      expect(tts.speechStartLocation?.chapterIndex, 1);
+      expect(tts.speechStartLocation?.charOffset, 0);
+      expect(engine.currentSpokenText.startsWith('第2章'), isTrue);
+
+      engine.emitProgress(0, 2);
+      expect(tts.currentHighlight?.chapterIndex, 1);
+
+      engine.emitComplete();
+      await _flushMicrotasks();
+
+      expect(engine.speakCount, 2);
+      expect(tts.speechStartLocation, isNull);
+      expect(tts.currentHighlight, isNull);
+
+      tts.dispose();
+      runtime.dispose();
+    },
+  );
+
   test('tts highlight overlay repaints only affected tiles', () {
     final tile = ReaderV2PageCacheFactory.fromRenderPage(
       ReaderV2RenderPage(
@@ -1623,6 +1692,11 @@ Future<void> _pumpViewportLongCommand(WidgetTester tester) async {
   for (var i = 0; i < 220; i++) {
     await tester.pump(const Duration(milliseconds: 16));
   }
+}
+
+Future<void> _flushMicrotasks() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
 }
 
 double _visiblePageContentExtent(ReaderV2PageCache page) {
@@ -1763,6 +1837,7 @@ class _FakeSourceDao extends Fake implements BookSourceDao {
 }
 
 class _FakeTtsEngine extends ReaderV2TtsEngine {
+  final StreamController<String> _events = StreamController<String>.broadcast();
   bool _isPlaying = false;
   double _rate = 1.0;
   double _pitch = 1.0;
@@ -1795,6 +1870,9 @@ class _FakeTtsEngine extends ReaderV2TtsEngine {
 
   @override
   int get currentWordEnd => _currentWordEnd;
+
+  @override
+  Stream<String> get events => _events.stream;
 
   @override
   Future<void> speak(String text) async {
@@ -1852,6 +1930,15 @@ class _FakeTtsEngine extends ReaderV2TtsEngine {
     _currentWordStart = start;
     _currentWordEnd = end;
     notifyListeners();
+  }
+
+  void emitComplete() {
+    _isPlaying = false;
+    _currentSpokenText = '';
+    _currentWordStart = -1;
+    _currentWordEnd = -1;
+    notifyListeners();
+    _events.add('onComplete');
   }
 }
 
