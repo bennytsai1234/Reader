@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:inkpage_reader/core/database/dao/book_dao.dart';
@@ -15,6 +17,7 @@ import 'package:inkpage_reader/features/reader_v2/render/reader_v2_render_page.d
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_chapter_view.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_location.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_performance_metrics.dart';
+import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_preload_scheduler.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_progress_controller.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_resolver.dart';
 import 'package:inkpage_reader/features/reader_v2/runtime/reader_v2_runtime.dart';
@@ -46,6 +49,56 @@ void main() {
       resolver.clearCachedLayouts();
       await resolver.ensureLayout(0);
       expect(engine.layoutCount, 3);
+    });
+  });
+
+  group('ReaderV2PreloadScheduler', () {
+    test('promotes an already queued priority layout preload', () async {
+      final repository = _ControlledContentRepository(chapterCount: 4);
+      final scheduler = ReaderV2PreloadScheduler(
+        resolver: ReaderV2Resolver(
+          repository: repository,
+          layoutEngine: ReaderV2LayoutEngine(),
+          layoutSpec: _spec(),
+        ),
+      );
+
+      final active = scheduler.scheduleLayout(0);
+      final queuedPriority = scheduler.scheduleLayout(2);
+      final queuedNormal = scheduler.scheduleLayout(3);
+      final promoted = scheduler.scheduleLayout(2, priority: true);
+
+      try {
+        expect(
+          await repository
+              .waitForStartCount(1)
+              .timeout(const Duration(seconds: 1)),
+          0,
+        );
+
+        repository.completeLoad(0);
+        final secondStarted = await repository
+            .waitForStartCount(2)
+            .timeout(const Duration(seconds: 1));
+        expect(secondStarted, 2);
+
+        repository.completeLoad(2);
+        final thirdStarted = await repository
+            .waitForStartCount(3)
+            .timeout(const Duration(seconds: 1));
+        expect(thirdStarted, 3);
+
+        repository.completeLoad(3);
+        await Future.wait(<Future<void>>[
+          active,
+          queuedPriority,
+          queuedNormal,
+          promoted,
+        ]).timeout(const Duration(seconds: 1));
+      } finally {
+        repository.completeAllLoads();
+        scheduler.dispose();
+      }
     });
   });
 
@@ -500,6 +553,116 @@ ReaderV2LayoutSpec _spec({double fontSize = 18}) {
       textIndent: 2,
     ),
   );
+}
+
+class _ControlledContentRepository extends ReaderV2ChapterRepository {
+  _ControlledContentRepository({required int chapterCount})
+    : _storedChapters = _chapters(
+        'test://book',
+        count: chapterCount,
+        paragraphsPerChapter: 2,
+      ),
+      super(
+        book: _book(),
+        initialChapters: _chapters(
+          'test://book',
+          count: chapterCount,
+          paragraphsPerChapter: 2,
+        ),
+        bookDao: _FakeBookDao(),
+        chapterDao: _FakeChapterDao(
+          _chapters(
+            'test://book',
+            count: chapterCount,
+            paragraphsPerChapter: 2,
+          ),
+        ),
+        sourceDao: _FakeSourceDao(),
+        contentDao: null,
+      );
+
+  final List<BookChapter> _storedChapters;
+  final List<int> startedLoads = <int>[];
+  final Map<int, Completer<void>> _pendingLoads = <int, Completer<void>>{};
+  final Map<int, ReaderV2Content> _cached = <int, ReaderV2Content>{};
+  final List<Completer<void>> _startWaiters = <Completer<void>>[];
+
+  @override
+  int get chapterCount => _storedChapters.length;
+
+  @override
+  List<BookChapter> get chapters =>
+      List<BookChapter>.unmodifiable(_storedChapters);
+
+  @override
+  Future<List<BookChapter>> ensureChapters() async => chapters;
+
+  @override
+  BookChapter? chapterAt(int chapterIndex) {
+    if (chapterIndex < 0 || chapterIndex >= _storedChapters.length) {
+      return null;
+    }
+    return _storedChapters[chapterIndex];
+  }
+
+  @override
+  String titleFor(int chapterIndex) => chapterAt(chapterIndex)?.title ?? '';
+
+  @override
+  ReaderV2Content? cachedContent(int chapterIndex) => _cached[chapterIndex];
+
+  @override
+  Future<ReaderV2Content> loadContent(int chapterIndex) async {
+    final cached = _cached[chapterIndex];
+    if (cached != null) return cached;
+    startedLoads.add(chapterIndex);
+    _notifyStartWaiters();
+    final blocker = _pendingLoads.putIfAbsent(
+      chapterIndex,
+      () => Completer<void>(),
+    );
+    await blocker.future;
+    final chapter = chapterAt(chapterIndex)!;
+    final content = ReaderV2Content.fromRaw(
+      chapterIndex: chapterIndex,
+      title: chapter.title,
+      rawText: chapter.content ?? '',
+    );
+    _cached[chapterIndex] = content;
+    return content;
+  }
+
+  Future<int> waitForStartCount(int count) async {
+    while (startedLoads.length < count) {
+      final waiter = Completer<void>();
+      _startWaiters.add(waiter);
+      await waiter.future;
+    }
+    return startedLoads[count - 1];
+  }
+
+  void completeLoad(int chapterIndex) {
+    final blocker = _pendingLoads.putIfAbsent(
+      chapterIndex,
+      () => Completer<void>(),
+    );
+    if (!blocker.isCompleted) blocker.complete();
+  }
+
+  void completeAllLoads() {
+    for (final blocker in _pendingLoads.values) {
+      if (!blocker.isCompleted) blocker.complete();
+    }
+    _notifyStartWaiters();
+  }
+
+  void _notifyStartWaiters() {
+    final waiters = _startWaiters.toList(growable: false);
+    _startWaiters.clear();
+    for (final waiter in waiters) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+  }
 }
 
 class _CountingLayoutEngine extends ReaderV2LayoutEngine {

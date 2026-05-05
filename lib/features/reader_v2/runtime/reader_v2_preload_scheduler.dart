@@ -181,8 +181,11 @@ class ReaderV2PreloadScheduler {
     }
     final key = _taskKey(_ReaderV2PreloadKind.content, safeIndex, 0);
     final future = _registerWaiter(key);
-    if (!_queuedContentKeys.contains(key) &&
-        !_activeContentKeys.contains(key)) {
+    if (_queuedContentKeys.contains(key)) {
+      if (priority) {
+        _promoteQueuedTask(_contentQueue, key);
+      }
+    } else if (!_activeContentKeys.contains(key)) {
       _enqueue(
         _ReaderV2PreloadTask(
           kind: _ReaderV2PreloadKind.content,
@@ -205,7 +208,11 @@ class ReaderV2PreloadScheduler {
     }
     final key = _taskKey(_ReaderV2PreloadKind.layout, safeIndex, _generation);
     final future = _registerWaiter(key);
-    if (!_queuedLayoutKeys.contains(key) && !_activeLayoutKeys.contains(key)) {
+    if (_queuedLayoutKeys.contains(key)) {
+      if (priority) {
+        _promoteQueuedTask(_layoutQueue, key);
+      }
+    } else if (!_activeLayoutKeys.contains(key)) {
       _enqueue(
         _ReaderV2PreloadTask(
           kind: _ReaderV2PreloadKind.layout,
@@ -259,6 +266,24 @@ class ReaderV2PreloadScheduler {
     } else {
       queue.addLast(task);
     }
+  }
+
+  void _promoteQueuedTask(Queue<_ReaderV2PreloadTask> queue, String key) {
+    _ReaderV2PreloadTask? promoted;
+    final retained = <_ReaderV2PreloadTask>[];
+    while (queue.isNotEmpty) {
+      final task = queue.removeFirst();
+      if (promoted == null &&
+          _taskKey(task.kind, task.chapterIndex, task.generation) == key) {
+        promoted = task;
+      } else {
+        retained.add(task);
+      }
+    }
+    if (promoted != null) {
+      queue.addFirst(promoted);
+    }
+    queue.addAll(retained);
   }
 
   void _pumpContent() {
