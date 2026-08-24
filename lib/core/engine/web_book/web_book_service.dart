@@ -270,6 +270,25 @@ class WebBook {
         if (seen.add(c.url)) deduped.add(c);
       }
 
+      // 相鄰同名去重：部分畸形書源會把同一章整條列兩次（標題與內容相同，只有
+      // URL 略有差異，因而躲過上面的 url 去重），造成「第一章、第一章、第二章、
+      // 第二章…」這類相鄰重複。此處合併與前一章標題完全相同的相鄰項。
+      // 「只收相鄰」是安全關鍵：不同卷各自的「第一章」等正常重複並不相鄰，不會
+      // 被誤刪；且相鄰同名幾乎必為同一章內容，故不需（也無法在此階段廉價地）
+      // 逐章抓正文比對。此為相容 legado 之外、針對畸形書源的額外處理。
+      if (deduped.length > 1) {
+        final collapsed = <BookChapter>[deduped.first];
+        for (var i = 1; i < deduped.length; i++) {
+          if (deduped[i].title == collapsed.last.title) continue;
+          collapsed.add(deduped[i]);
+        }
+        if (collapsed.length != deduped.length) {
+          deduped
+            ..clear()
+            ..addAll(collapsed);
+        }
+      }
+
       // formatJs (對標 Android BookChapterList.formatJs)
       final formatJs = source.ruleToc?.formatJs;
       if (formatJs != null && formatJs.isNotEmpty) {

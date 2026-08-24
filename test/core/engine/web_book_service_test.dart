@@ -164,6 +164,103 @@ void main() {
     },
   );
 
+  test('getChapterListAwait 合併相鄰同名重複章節', () async {
+    requestHandler = (request) async {
+      if (request.uri.path == '/book/dup') {
+        request.response.write('''
+<html>
+  <body>
+    <ul class="toc">
+      <li><a href="/chapter/1.html">第一章</a></li>
+      <li><a href="/chapter/1-dup.html">第一章</a></li>
+      <li><a href="/chapter/2.html">第二章</a></li>
+      <li><a href="/chapter/2-dup.html">第二章</a></li>
+      <li><a href="/chapter/3.html">第三章</a></li>
+      <li><a href="/chapter/3-dup.html">第三章</a></li>
+    </ul>
+  </body>
+</html>
+''');
+        await request.response.close();
+        return;
+      }
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+    };
+
+    final source = BookSource.fromJson({
+      'bookSourceUrl': baseUrl,
+      'bookSourceName': '測試書源',
+      'ruleToc': {
+        'chapterList': 'ul.toc@li',
+        'chapterName': 'a@text',
+        'chapterUrl': 'a@href',
+      },
+    });
+    final book = Book(
+      bookUrl: '$baseUrl/book/dup',
+      tocUrl: '$baseUrl/book/dup',
+      origin: baseUrl,
+      originName: '測試書源',
+    );
+
+    final chapters = await WebBook.getChapterListAwait(source, book);
+
+    expect(chapters.map((chapter) => chapter.title).toList(), <String>[
+      '第一章',
+      '第二章',
+      '第三章',
+    ]);
+    expect(chapters.map((chapter) => chapter.index).toList(), <int>[0, 1, 2]);
+    expect(chapters.map((chapter) => chapter.url).toSet(), hasLength(3));
+  });
+
+  test('getChapterListAwait 不合併不相鄰的同名章節', () async {
+    requestHandler = (request) async {
+      if (request.uri.path == '/book/vol') {
+        request.response.write('''
+<html>
+  <body>
+    <ul class="toc">
+      <li><a href="/vol1/1.html">第一章</a></li>
+      <li><a href="/vol1/2.html">第二章</a></li>
+      <li><a href="/vol2/1.html">第一章</a></li>
+    </ul>
+  </body>
+</html>
+''');
+        await request.response.close();
+        return;
+      }
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+    };
+
+    final source = BookSource.fromJson({
+      'bookSourceUrl': baseUrl,
+      'bookSourceName': '測試書源',
+      'ruleToc': {
+        'chapterList': 'ul.toc@li',
+        'chapterName': 'a@text',
+        'chapterUrl': 'a@href',
+      },
+    });
+    final book = Book(
+      bookUrl: '$baseUrl/book/vol',
+      tocUrl: '$baseUrl/book/vol',
+      origin: baseUrl,
+      originName: '測試書源',
+    );
+
+    final chapters = await WebBook.getChapterListAwait(source, book);
+
+    expect(chapters.map((chapter) => chapter.title).toList(), <String>[
+      '第一章',
+      '第二章',
+      '第一章',
+    ]);
+  });
+
   test('getChapterListAwait respects reverseToc display preference', () async {
     requestHandler = (request) async {
       if (request.uri.path == '/book/3') {
