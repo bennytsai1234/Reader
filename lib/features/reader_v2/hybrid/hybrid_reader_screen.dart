@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert' show jsonEncode;
 import 'dart:io' as io;
 import 'dart:math' as math;
-import 'dart:ui' as ui show FrameTiming, Paragraph;
+import 'dart:ui' as ui show FrameTiming, Paragraph, TextBox;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
@@ -139,8 +139,8 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   bool _capturing = false;
 
   /// restore 進行中旗標：此期間投放的 block 於建置「之前」即 pin 進
-  /// ParagraphCache（見 [_admitOrSubmit]），防止初始視窗建置量超過快取
-  /// 容量時 LRU 把首屏段落逐出。
+  /// ParagraphCache（見 [_admitOrSubmitGroup]），防止初始視窗建置量超過
+  /// 快取容量時 LRU 把首屏段落逐出。
   bool _restorePinning = false;
   bool _dragging = false;
   bool _sawUserScroll = false;
@@ -409,25 +409,32 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     final block = blocks.blocks[hit.key.blockIndex];
     var lineTop = 0.0;
     var charOffset = block.charRange.start;
-    final paragraph = _paragraphCache.acquire(hit.key, _epoch);
-    if (paragraph != null) {
-      final line = _lineAt(paragraph, hit.offsetInBlock);
+    // hit.key 的 Paragraph 可能與同一連續排版 group 內的其他 block 共用；
+    // hit.offsetInBlock 是「這個 block 自己 Y 窗」內的座標，要先平移回
+    // 共用 Paragraph 的座標系（+entry.localTop）才能查行／查字元。
+    final entry = _paragraphCache.acquireEntry(hit.key, _epoch);
+    if (entry != null) {
+      final paragraph = entry.paragraph;
+      final line = _lineAt(paragraph, hit.offsetInBlock + entry.localTop);
       if (line != null) {
-        lineTop = line.top;
-        final indent = _indentCharsFor(block);
+        final group = blocks.groupContaining(hit.key);
+        final indent = _indentCharsFor(group.first);
+        final groupTextLength = indent + _groupTextLength(group);
         final position = paragraph.getPositionForOffset(
           Offset(0, line.top + 0.1),
         );
-        lineTop =
-            _textBoxTopForOffset(
-              paragraph,
-              position.offset,
-              block.text.length + indent,
-            ) ??
-            line.top;
+        final boxTop = _textBoxTopForOffset(
+          paragraph,
+          position.offset,
+          groupTextLength,
+        );
+        // 換算回這個 block 自己的 Y 窗座標，才能跟 hit.blockTop 相加。
+        lineTop = (boxTop ?? line.top) - entry.localTop;
+        final groupStart = group.first.charRange.start;
+        final groupEnd = group.last.charRange.end;
         charOffset =
-            (block.charRange.start + math.max(0, position.offset - indent))
-                .clamp(block.charRange.start, block.charRange.end)
+            (groupStart + math.max(0, position.offset - indent))
+                .clamp(groupStart, groupEnd)
                 .toInt();
       }
     }
@@ -581,34 +588,70 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   double? _offsetForAnchor(HybridAnchor anchor, ChapterBlocks blocks) {
-    final top = _documentIndex.topOf(anchor.blockKey);
+    final resolved = _visualPositionForChar(blocks, anchor.charOffsetInChapter);
+    final key = resolved?.key ?? anchor.blockKey;
+    final top = _documentIndex.topOf(key);
     if (top == null) return null;
-    final lineTop =
-        _lineTopForChar(blocks, anchor.blockKey, anchor.charOffsetInChapter) ??
-        0.0;
+    final lineTop = resolved?.localTop ?? 0.0;
     final anchorLine = AnchorManager.anchorOffsetInViewport(
       _viewportSize.height,
     );
     return top + lineTop - anchorLine + anchor.visualOffsetPx;
   }
 
-  double? _lineTopForChar(
+  /// 把「章節絕對 charOffset」換算成視覺上真正落點的
+  /// `(BlockKey, 這個 block 自己 Y 窗內的 local top)`。
+  ///
+  /// 純文字模型的 `blockForCharOffset` 只看 charRange；當人工效能切點落
+  /// 在一行中間時，那一整行仍完整畫在前一個切塊的 Y 窗裡（見
+  /// [LayoutPump._groupSplitYs]），此時字元的視覺歸屬與 charRange 歸屬
+  /// 不同。DocumentIndex 的座標以視覺歸屬為準，兩者不一致時必須以此為準
+  /// 才能讓 restore／TTS／ensureCharRangeVisible 卷到正確的世界座標。
+  ({BlockKey key, double localTop})? _visualPositionForChar(
     ChapterBlocks blocks,
-    BlockKey key,
     int charOffsetInChapter,
   ) {
-    if (key.blockIndex >= blocks.blocks.length) return null;
-    final block = blocks.blocks[key.blockIndex];
-    final paragraph = _paragraphCache.acquire(key, _epoch);
-    if (paragraph == null) return 0.0;
-    final indent = _indentCharsFor(block);
-    final local =
-        (charOffsetInChapter - block.charRange.start)
-            .clamp(0, block.text.length)
-            .toInt() +
-        indent;
-    return _textBoxTopForOffset(paragraph, local, block.text.length + indent) ??
+    final rawBlock = blocks.blockForCharOffset(charOffsetInChapter);
+    final group = blocks.groupContaining(rawBlock.key);
+    if (group.isEmpty) return null;
+    final head = group.first;
+    final rawEntry = _paragraphCache.acquireEntry(rawBlock.key, _epoch);
+    if (rawEntry == null) return null;
+    final indent = _indentCharsFor(head);
+    final groupTextLength = indent + _groupTextLength(group);
+    final groupLocalOffset =
+        indent +
+        (charOffsetInChapter - head.charRange.start)
+            .clamp(0, groupTextLength - indent)
+            .toInt();
+    final paragraphY =
+        _textBoxTopForOffset(
+          rawEntry.paragraph,
+          groupLocalOffset,
+          groupTextLength,
+        ) ??
         0.0;
+    var owningKey = rawBlock.key;
+    var owningLocalTop = rawEntry.localTop;
+    for (final member in group) {
+      final memberEntry = _paragraphCache.acquireEntry(member.key, _epoch);
+      if (memberEntry == null) continue;
+      if (memberEntry.localTop <= paragraphY + 0.001) {
+        owningKey = member.key;
+        owningLocalTop = memberEntry.localTop;
+      } else {
+        break;
+      }
+    }
+    return (key: owningKey, localTop: paragraphY - owningLocalTop);
+  }
+
+  int _groupTextLength(List<ChapterBlock> group) {
+    var total = 0;
+    for (final block in group) {
+      total += block.text.length;
+    }
+    return total;
   }
 
   void _applyScrollOffset(double target) {
@@ -680,11 +723,21 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
           );
         }
       case ChapterEventKind.evicted:
-        _blocks.remove(event.chapterId);
       case ChapterEventKind.invalidated:
+        // maxBlockChars 由 LayoutCostModel 即時校準推導，同一章重新載入時
+        // 可能切出不同的 block 邊界；evicted 與 invalidated 因此都必須清掉
+        // 舊 metrics／Paragraph，否則同一個 BlockKey 換到新切法後可能重用
+        // 舊切法量到的高度／文字（見任務規劃文件 Background）。DocumentIndex
+        // 與 AdmissionController 也要同步清該章已放行的座標與記住的舊章節
+        // 形狀，否則新 segmentation 缺席的舊高 blockIndex 會永遠殘留，錯誤
+        // 貢獻文檔幾何。
         _blocks.remove(event.chapterId);
         _measurementStore.invalidateChapter(event.chapterId);
         _paragraphCache.invalidateChapter(event.chapterId);
+        _admission.invalidateChapter(event.chapterId);
+        if (_documentIndex.invalidateChapter(event.chapterId)) {
+          _scheduleRebuild();
+        }
         _enqueued.removeWhere((key) => key.chapterIndex == event.chapterId);
     }
   }
@@ -720,111 +773,143 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
   }
 
   void _enqueueChapterTasks(ChapterBlocks blocks, {BlockKey? anchorKey}) {
-    final list = blocks.blocks;
-    if (list.isEmpty) return;
+    final groups = blocks.paragraphGroups();
+    if (groups.isEmpty) return;
     final centerKey = _documentIndex.centerKey;
-    List<ChapterBlock> forward;
-    List<ChapterBlock> backward;
+    List<List<ChapterBlock>> forward;
+    List<List<ChapterBlock>> backward;
     if (blocks.chapterIndex == centerKey.chapterIndex) {
-      final center = centerKey.blockIndex.clamp(0, list.length - 1).toInt();
-      forward = list.sublist(center);
-      backward = list.sublist(0, center).reversed.toList(growable: false);
+      // center 可能落在某個 group 中間；該 group 不可切半送 forward/
+      // backward 兩側（會破壞「group 只用一個 ui.Paragraph 連續排版」的
+      // 前提），因此整個含 center 的 group 一律算進 forward。
+      var centerGroupIndex = groups.indexWhere(
+        (group) => group.first.key <= centerKey && centerKey <= group.last.key,
+      );
+      if (centerGroupIndex < 0) centerGroupIndex = 0;
+      forward = groups.sublist(centerGroupIndex);
+      backward = groups
+          .sublist(0, centerGroupIndex)
+          .reversed
+          .toList(growable: false);
     } else if (blocks.chapterIndex > centerKey.chapterIndex) {
-      forward = list;
-      backward = const <ChapterBlock>[];
+      forward = groups;
+      backward = const <List<ChapterBlock>>[];
     } else {
-      forward = const <ChapterBlock>[];
-      backward = list.reversed.toList(growable: false);
+      forward = const <List<ChapterBlock>>[];
+      backward = groups.reversed.toList(growable: false);
     }
     var forwardBlocked = false;
     var backwardBlocked = false;
     final rounds = math.max(forward.length, backward.length);
     for (var i = 0; i < rounds; i += 1) {
       if (i < forward.length) {
-        forwardBlocked = _admitOrSubmit(
+        forwardBlocked = _admitOrSubmitGroup(
           blocks,
           forward[i],
           blocked: forwardBlocked,
-          anchor: anchorKey != null && forward[i].key == anchorKey,
+          anchorKey: anchorKey,
         );
       }
       if (i < backward.length) {
-        backwardBlocked = _admitOrSubmit(
+        backwardBlocked = _admitOrSubmitGroup(
           blocks,
           backward[i],
           blocked: backwardBlocked,
-          anchor: anchorKey != null && backward[i].key == anchorKey,
+          anchorKey: anchorKey,
         );
       }
     }
   }
 
-  /// 就緒（有 metrics + paragraph）且同側尚未斷檔 → 直接 admit；
-  /// 否則送 pump。回傳「此側是否已斷檔」（斷檔後不得再 direct-admit，
-  /// 否則 DocumentIndex 會出現中間洞，補齊時可見內容會位移，違反 I3）。
-  bool _admitOrSubmit(
+  /// group 內每個 block 就緒（有 metrics + paragraph）且同側尚未斷檔 →
+  /// 整組直接 admit；否則整組送 pump（連續排版必須整組一起重建，不能
+  /// 只補其中一塊，否則會在切點退回獨立 Paragraph 的硬換行）。回傳
+  /// 「此側是否已斷檔」（斷檔後不得再 direct-admit，否則 DocumentIndex
+  /// 會出現中間洞，補齊時可見內容會位移，違反 I3）。
+  bool _admitOrSubmitGroup(
     ChapterBlocks blocks,
-    ChapterBlock block, {
+    List<ChapterBlock> group, {
     required bool blocked,
-    bool anchor = false,
+    BlockKey? anchorKey,
   }) {
-    final key = block.key;
     // pin 必須發生在建置之前：pumpPending 單一批次就可能建掉整個初始
     // 視窗，put 之後才 pin 救不回批次途中已被 LRU 逐出的條目。
     if (_restorePinning) {
-      _paragraphCache.pinKeys(<BlockKey>[key], _epoch);
+      _paragraphCache.pinKeys(<BlockKey>[for (final b in group) b.key], _epoch);
     }
-    final metrics = _measurementStore.get(_namespace, key);
-    // fresh = 存在且烘色一致；換色後這裡回 false → 重投任務以新色重建。
-    final hasParagraph = _paragraphCache.containsFresh(
-      key,
-      _epoch,
-      widget.textColor,
+    final anchor = anchorKey != null && group.any((b) => b.key == anchorKey);
+    final notYetAdmitted = group
+        .where((b) => _documentIndex.metricsFor(b.key) == null)
+        .toList(growable: false);
+    if (notYetAdmitted.isEmpty) {
+      // 整組已 admit，只可能缺 paragraph（被 LRU 逐出）；缺就整組重建，
+      // 不影響既有座標與斷檔狀態。
+      final missingParagraph = group.any(
+        (b) => !_paragraphCache.containsFresh(b.key, _epoch, widget.textColor),
+      );
+      if (missingParagraph) _submitGroupTask(blocks, group, anchor: anchor);
+      return blocked;
+    }
+    final allReady = notYetAdmitted.every(
+      (b) =>
+          _measurementStore.get(_namespace, b.key) != null &&
+          _paragraphCache.containsFresh(b.key, _epoch, widget.textColor),
     );
-    final admitted = _documentIndex.metricsFor(key) != null;
-    if (admitted) {
-      if (!hasParagraph) _submitTask(blocks, block, anchor: anchor);
+    if (allReady && !blocked) {
+      for (final b in notYetAdmitted) {
+        final metrics = _measurementStore.get(_namespace, b.key)!;
+        _admission.offer(
+          BlockReady(key: b.key, epoch: _epoch, metrics: metrics),
+        );
+      }
       return blocked;
     }
-    if (metrics != null && hasParagraph && !blocked) {
-      _admission.offer(BlockReady(key: key, epoch: _epoch, metrics: metrics));
-      return blocked;
-    }
-    _submitTask(blocks, block, anchor: anchor);
+    _submitGroupTask(blocks, group, anchor: anchor);
     return true;
   }
 
-  void _submitTask(
+  void _submitGroupTask(
     ChapterBlocks blocks,
-    ChapterBlock block, {
+    List<ChapterBlock> group, {
     bool anchor = false,
   }) {
-    final key = block.key;
-    if (!_enqueued.add(key)) return;
+    final head = group.first;
+    final headKey = head.key;
+    if (!_enqueued.add(headKey)) return;
+    for (final b in group.skip(1)) {
+      _enqueued.add(b.key);
+    }
+    final last = group.last;
     final spec = widget.runtime.state.layoutSpec;
     _pump.submit(
       LayoutTask(
-        block: block,
+        block: head,
+        continuationBlocks:
+            group.length > 1
+                ? group.sublist(1)
+                : const <ChapterBlock>[],
         epoch: _epoch,
         fingerprint: _fingerprint,
         textStyle: HybridBlockTextStyle.fromLayoutStyle(
           spec.style,
-          isTitle: block.isTitle,
+          isTitle: head.isTitle,
           // em-grid 鎖寬後滿列天生切齊右緣，justify 只剩把避頭尾列殘差
           // 攤進字距、破壞直行格線的副作用，內文預設 start 對齊；
           // AppConfig 開關僅供真機對照。
-          justify: AppConfig.readerV2ContentJustify && !block.isTitle,
+          justify: AppConfig.readerV2ContentJustify && !head.isTitle,
         ),
         contentWidth: spec.contentWidth,
         cellWidth: spec.cellWidth,
         textColor: widget.textColor,
-        priority: _priorityFor(key, anchor: anchor),
+        priority: _priorityFor(headKey, anchor: anchor),
         direction:
-            key < _documentIndex.centerKey
+            headKey < _documentIndex.centerKey
                 ? HybridScrollDirection.backward
                 : HybridScrollDirection.forward,
-        indentChars: _indentCharsFor(block),
-        trailingSpacing: _trailingSpacingFor(blocks, block),
+        indentChars: _indentCharsFor(head),
+        // 只有 group 真正的最後一塊（邏輯段落真正結尾）計入間距；
+        // group 內部的效能切點恆為 0（見 _trailingSpacingFor）。
+        trailingSpacing: _trailingSpacingFor(blocks, last),
       ),
     );
   }
@@ -1246,12 +1331,17 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
               (range.isEmpty && block.charRange.containsOffset(range.start));
         })
         .toList(growable: false);
+    // 逐 block 讀 ready 狀態，但缺件時整個 group 一起送 pump——只補其中
+    // 一塊會退回獨立 Paragraph，重新產生已修正的硬換行問題。
+    final seenGroupHeads = <BlockKey>{};
     for (final block in targets) {
       if (_paragraphCache.contains(block.key, _epoch) &&
           _measurementStore.get(_namespace, block.key) != null) {
         continue;
       }
-      _submitTask(blocks, block, anchor: true);
+      final group = blocks.groupContaining(block.key);
+      if (group.isEmpty || !seenGroupHeads.add(group.first.key)) continue;
+      _submitGroupTask(blocks, group, anchor: true);
     }
     var guard = 0;
     bool allReady() => targets.every(
@@ -1265,6 +1355,40 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
     }
   }
 
+  /// [block] 內、與 [range] 相交的字元對應的 boxes；y 座標已從共用
+  /// Paragraph 的座標系換算回「這個 block 自己 Y 窗」座標（減去
+  /// entry.localTop），呼叫端不需要知道 block 是否與同 group 其他 block
+  /// 共用 ui.Paragraph。回傳 null 表示 Paragraph 尚未就緒。
+  List<ui.TextBox>? _blockLocalBoxesForRange(
+    ChapterBlocks blocks,
+    ChapterBlock block,
+    HybridTextRange range,
+  ) {
+    final entry = _paragraphCache.acquireEntry(block.key, _epoch);
+    if (entry == null) return null;
+    final group = blocks.groupContaining(block.key);
+    if (group.isEmpty) return null;
+    final indent = _indentCharsFor(group.first);
+    final groupStart = group.first.charRange.start;
+    final localStart =
+        math.max(range.start, block.charRange.start) - groupStart + indent;
+    final localEnd =
+        math.min(range.end, block.charRange.end) - groupStart + indent;
+    if (localEnd <= localStart) return const <ui.TextBox>[];
+    final boxes = entry.paragraph.getBoxesForRange(localStart, localEnd);
+    if (boxes.isEmpty) return boxes;
+    return <ui.TextBox>[
+      for (final box in boxes)
+        ui.TextBox.fromLTRBD(
+          box.left,
+          box.top - entry.localTop,
+          box.right,
+          box.bottom - entry.localTop,
+          box.direction,
+        ),
+    ];
+  }
+
   Rect? _worldRectForRange(ChapterBlocks blocks, int start, int end) {
     double? top;
     double? bottom;
@@ -1276,30 +1400,12 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       }
       final blockTop = _documentIndex.topOf(block.key);
       if (blockTop == null) continue;
-      final paragraph = _paragraphCache.acquire(block.key, _epoch);
       double localTop = 0;
-      double localBottom =
-          _documentIndex.metricsFor(block.key)?.height ??
-          paragraph?.height ??
-          0;
-      if (paragraph != null) {
-        final indent = _indentCharsFor(block);
-        final localStart =
-            math.max(range.start, block.charRange.start) -
-            block.charRange.start +
-            indent;
-        final localEnd =
-            math.min(range.end, block.charRange.end) -
-            block.charRange.start +
-            indent;
-        if (localEnd > localStart) {
-          final boxes = paragraph.getBoxesForRange(localStart, localEnd);
-          if (boxes.isNotEmpty) {
-            localTop = boxes.first.top;
-            localBottom =
-                boxes.map((box) => box.bottom).reduce(math.max).toDouble();
-          }
-        }
+      double localBottom = _documentIndex.metricsFor(block.key)?.height ?? 0;
+      final boxes = _blockLocalBoxesForRange(blocks, block, range);
+      if (boxes != null && boxes.isNotEmpty) {
+        localTop = boxes.first.top;
+        localBottom = boxes.map((box) => box.bottom).reduce(math.max).toDouble();
       }
       final rangeTop = blockTop + localTop;
       final rangeBottom = blockTop + localBottom;
@@ -1327,23 +1433,13 @@ class _HybridReaderScreenState extends State<HybridReaderScreen>
       if (!block.charRange.intersects(range)) continue;
       final top = _documentIndex.topOf(block.key);
       if (top == null) continue;
-      final paragraph = _paragraphCache.acquire(block.key, _epoch);
-      if (paragraph == null) continue;
-      final indent = _indentCharsFor(block);
-      final localStart =
-          math.max(range.start, block.charRange.start) -
-          block.charRange.start +
-          indent;
-      final localEnd =
-          math.min(range.end, block.charRange.end) -
-          block.charRange.start +
-          indent;
-      if (localEnd <= localStart) continue;
+      final boxes = _blockLocalBoxesForRange(blocks, block, range);
+      if (boxes == null || boxes.isEmpty) continue;
       final clipped = HybridTextRange(
         math.max(range.start, block.charRange.start),
         math.min(range.end, block.charRange.end),
       );
-      for (final box in paragraph.getBoxesForRange(localStart, localEnd)) {
+      for (final box in boxes) {
         final screenTop = top + box.top - offset;
         final screenBottom = top + box.bottom - offset;
         if (!seenLines.add((

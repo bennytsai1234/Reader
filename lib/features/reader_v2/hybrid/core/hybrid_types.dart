@@ -368,6 +368,51 @@ final class ChapterBlocks {
     final block = blocks.firstWhere((item) => item.key == key);
     return block.charRange.start;
   }
+
+  /// [key] 所屬的連續排版 group：與其相鄰、`isContinuation` 串成一串「且」
+  /// `sourceParagraphIndex` 相同的效能切塊，全部共用同一個邏輯段落。單靠
+  /// `isContinuation` 不足以保證這點——`sourceParagraphIndex` 必須逐一核對
+  /// ，才不會把兩個獨立語意段落的效能切塊誤併進同一個 `ui.Paragraph`。
+  /// 標題與未被切塊的一般段落固定回傳單一元素的 list。呼叫端必須把整個
+  /// group 一起送進同一個 `ui.Paragraph`，才不會在人工切點多出硬換行。
+  List<ChapterBlock> groupContaining(BlockKey key) {
+    final index = blocks.indexWhere((block) => block.key == key);
+    if (index < 0) return const <ChapterBlock>[];
+    final sourceParagraphIndex = blocks[index].sourceParagraphIndex;
+    var start = index;
+    while (start > 0 &&
+        blocks[start].isContinuation &&
+        blocks[start - 1].sourceParagraphIndex == sourceParagraphIndex) {
+      start -= 1;
+    }
+    var end = index;
+    while (end + 1 < blocks.length &&
+        blocks[end + 1].isContinuation &&
+        blocks[end + 1].sourceParagraphIndex == sourceParagraphIndex) {
+      end += 1;
+    }
+    return blocks.sublist(start, end + 1);
+  }
+
+  /// 依 `isContinuation` 且同一 `sourceParagraphIndex` 把 [blocks] 切成連續
+  /// 排版 group 的列表，由上而下保序；每個 group 內部順序即排版順序。見
+  /// [groupContaining] 對 `sourceParagraphIndex` 核對必要性的說明。
+  List<List<ChapterBlock>> paragraphGroups() {
+    final groups = <List<ChapterBlock>>[];
+    var i = 0;
+    while (i < blocks.length) {
+      final sourceParagraphIndex = blocks[i].sourceParagraphIndex;
+      var j = i + 1;
+      while (j < blocks.length &&
+          blocks[j].isContinuation &&
+          blocks[j].sourceParagraphIndex == sourceParagraphIndex) {
+        j += 1;
+      }
+      groups.add(blocks.sublist(i, j));
+      i = j;
+    }
+    return groups;
+  }
 }
 
 final class HybridAnchor {
@@ -490,6 +535,7 @@ final class HybridBlockTextStyle {
 final class LayoutTask {
   const LayoutTask({
     required this.block,
+    this.continuationBlocks = const <ChapterBlock>[],
     required this.epoch,
     required this.fingerprint,
     required this.textStyle,
@@ -505,6 +551,30 @@ final class LayoutTask {
        assert(cellWidth == null || cellWidth > 0);
 
   final ChapterBlock block;
+
+  /// 與 [block] 同一個連續排版 group、緊接其後的效能切塊（若有）。
+  /// LayoutPump 把 [block] 與這些切塊的文字接成一個 `ui.Paragraph` 連續
+  /// 排版，事後才依各切塊自己的 charRange 切回各自的 [BlockMetrics]——
+  /// 人工切點因此不會產生獨立於文字內容之外的硬換行。
+  final List<ChapterBlock> continuationBlocks;
+
+  /// [block] 加上 [continuationBlocks]，依排版順序排列的完整 group。
+  List<ChapterBlock> get groupBlocks =>
+      continuationBlocks.isEmpty
+          ? <ChapterBlock>[block]
+          : <ChapterBlock>[block, ...continuationBlocks];
+
+  /// group 內所有切塊文字接成的完整邏輯段落文字；即使 [block] 只是效能
+  /// 切塊的一部分，排版永遠以此為準，不會在切點斷字。
+  String get combinedText {
+    if (continuationBlocks.isEmpty) return block.text;
+    final buffer = StringBuffer(block.text);
+    for (final continuation in continuationBlocks) {
+      buffer.write(continuation.text);
+    }
+    return buffer.toString();
+  }
+
   final LayoutEpoch epoch;
   final StyleFingerprint fingerprint;
   final HybridBlockTextStyle textStyle;

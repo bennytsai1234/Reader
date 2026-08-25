@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:night_reader/features/reader_v2/hybrid/core/hybrid_contracts.dart';
@@ -13,6 +14,14 @@ import 'layout_cost_model.dart';
 final class LayoutPump implements HybridLayoutPump {
   /// 避免短末行因少數字元而被拉得過鬆；單位為 logical pixels。
   static const double lastLineLetterSpacingCap = 2.0;
+
+  /// group 內多個效能切點同落在同一實體行時，切點之間的 own height 合法
+  /// 為 0（該行整行畫在別的切塊視窗裡，見 [_groupSplitYs]）。`BlockMetrics`
+  /// 要求 height > 0（sliver extent／admission 需要每個 block 佔據可辨識的
+  /// 座標），因此改用遠低於既有幾何測試容差（0.01px）的極小正值頂住，不能
+  /// 像過去那樣頂到 1.0px——多個零高度切點疊加會讓整組總高度多出好幾個
+  /// 人工像素，使切法之後的世界座標系統性偏移於連續排版。
+  static const double _minBlockHeight = 1e-6;
 
   static final Map<String, double> _cellWidthCache = <String, double>{};
 
@@ -131,28 +140,34 @@ final class LayoutPump implements HybridLayoutPump {
       final started = Stopwatch()..start();
       final layoutPasses = _costModel.layoutPassesFor(task);
       final paragraph = _buildParagraph(task);
-      final contentHeight = paragraph.height <= 0 ? 1.0 : paragraph.height;
-      final metrics = BlockMetrics(
-        height: contentHeight + task.trailingSpacing,
-        // numberOfLines 是 O(1) getter；computeLineMetrics 會配置整串
-        // LineMetrics，不可進 ballistic 切片。
-        lineCount: paragraph.numberOfLines,
-      );
-      _paragraphCache.put(
-        task.key,
+      final groupBlocks = task.groupBlocks;
+      // group 內每個效能切塊各自的 Y 窗邊界；單一 block 時等同
+      // [0, paragraph.height]。切塊本身從不新增排版單位之外的間距，只有
+      // group 真正的最後一塊才計入 trailingSpacing（呼叫端已依此設值）。
+      final splitYs = _groupSplitYs(task, paragraph);
+      final metricsList = _metricsFromSplitYs(task, paragraph, splitYs);
+      final keys = <BlockKey>[for (final block in groupBlocks) block.key];
+      final localTops = splitYs.sublist(0, groupBlocks.length);
+      _paragraphCache.putGroup(
+        keys,
+        localTops,
         task.epoch,
         paragraph,
         bakedColor: task.textColor,
       );
-      _measurementStore.put(_namespace, task.key, metrics);
+      for (var i = 0; i < keys.length; i += 1) {
+        _measurementStore.put(_namespace, keys[i], metricsList[i]);
+      }
       _costModel.record(
-        charCount: task.block.text.length,
+        charCount: task.combinedText.length,
         elapsed: started.elapsed,
         layoutPasses: layoutPasses,
       );
-      _completed.add(
-        BlockReady(key: task.key, epoch: task.epoch, metrics: metrics),
-      );
+      for (var i = 0; i < keys.length; i += 1) {
+        _completed.add(
+          BlockReady(key: keys[i], epoch: task.epoch, metrics: metricsList[i]),
+        );
+      }
       completed += 1;
       if (stopwatch.elapsedMicroseconds >= budgetMicros) break;
     }
@@ -252,7 +267,7 @@ final class LayoutPump implements HybridLayoutPump {
     }
     final lineRanges = _lineRanges(
       paragraph,
-      _indentFor(task).length + task.block.text.length,
+      _indentFor(task).length + task.combinedText.length,
       lines.length,
     );
     if (lineRanges.length <= lastLineIndex) {
@@ -267,7 +282,7 @@ final class LayoutPump implements HybridLayoutPump {
       paragraph,
       lines,
       lineRanges,
-      '${_indentFor(task)}${task.block.text}',
+      '${_indentFor(task)}${task.combinedText}',
       lastLineIndex,
       task,
     );
@@ -280,9 +295,9 @@ final class LayoutPump implements HybridLayoutPump {
     }
 
     final indent = _indentFor(task);
-    final textLength = indent.length + task.block.text.length;
+    final textLength = indent.length + task.combinedText.length;
     final lastLine = lineRanges[lastLineIndex];
-    final renderedText = '$indent${task.block.text}';
+    final renderedText = '$indent${task.combinedText}';
     final lastLineBoxes = _boxesForTextClusters(
       paragraph,
       renderedText,
@@ -332,6 +347,86 @@ final class LayoutPump implements HybridLayoutPump {
       extraEnd: end,
       textAlignOverride: task.textStyle.textAlign,
     );
+  }
+
+  /// group 內每個效能切塊各自的 Y 窗邊界，長度為
+  /// `task.groupBlocks.length + 1`：`ys[i]`/`ys[i+1]` 是第 i 個切塊在
+  /// [paragraph] 座標系裡的頂／底。邊界一律落在切塊第一個字元所在行的
+  /// 行頂——同一實體行只會整行畫在其中一個切塊的視窗裡，不會被垂直
+  /// 切一半。單一 block（非 group）時直接回傳 `[0, paragraph.height]`。
+  List<double> _groupSplitYs(LayoutTask task, ui.Paragraph paragraph) {
+    final blocks = task.groupBlocks;
+    final ys = <double>[0.0];
+    if (blocks.length > 1) {
+      final indentLength = _indentFor(task).length;
+      final groupStart = blocks.first.charRange.start;
+      final totalTextLength = indentLength + task.combinedText.length;
+      for (var i = 1; i < blocks.length; i += 1) {
+        final localOffset = indentLength + (blocks[i].charRange.start - groupStart);
+        final top =
+            _lineTopForOffset(paragraph, localOffset, totalTextLength) ??
+            ys.last;
+        ys.add(math.max(ys.last, top));
+      }
+    }
+    ys.add(math.max(ys.last, paragraph.height));
+    return ys;
+  }
+
+  /// 依 [splitYs] 把整個 group 的高度／行數分回每個切塊自己的
+  /// [BlockMetrics]；只有 group 真正的最後一塊計入 `task.trailingSpacing`
+  /// （呼叫端已依「是否為邏輯段落真正結尾」決定這個值，切塊之間恆為 0）。
+  List<BlockMetrics> _metricsFromSplitYs(
+    LayoutTask task,
+    ui.Paragraph paragraph,
+    List<double> splitYs,
+  ) {
+    final blocks = task.groupBlocks;
+    List<double>? lineTops;
+    final result = <BlockMetrics>[];
+    for (var i = 0; i < blocks.length; i += 1) {
+      final top = splitYs[i];
+      final bottom = splitYs[i + 1];
+      final isLast = i == blocks.length - 1;
+      final ownHeight = math.max(0.0, bottom - top);
+      final height = isLast ? ownHeight + task.trailingSpacing : ownHeight;
+      final int lineCount;
+      if (blocks.length == 1) {
+        // numberOfLines 是 O(1) getter；computeLineMetrics 會配置整串
+        // LineMetrics，單一 block 時不需要，避免多一次配置進 ballistic 切片。
+        lineCount = paragraph.numberOfLines;
+      } else {
+        lineTops ??= [
+          for (final line in paragraph.computeLineMetrics())
+            line.baseline - line.ascent,
+        ];
+        lineCount =
+            lineTops.where((t) => t >= top - 0.01 && t < bottom - 0.01).length;
+      }
+      result.add(
+        BlockMetrics(
+          height: height <= 0 ? _minBlockHeight : height,
+          lineCount: lineCount,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// 與 [_HybridReaderScreenState._textBoxTopForOffset] 同款幾何：以
+  /// `getBoxesForRange` 取單一字元的 box top 作為所在行的行頂，供 group
+  /// 內切點的視覺邊界與呼叫端（capture／restore／TTS）共用同一套座標。
+  double? _lineTopForOffset(
+    ui.Paragraph paragraph,
+    int offset,
+    int textLength,
+  ) {
+    if (textLength <= 0) return 0.0;
+    final safeOffset = offset.clamp(0, textLength).toInt();
+    final start = safeOffset >= textLength ? textLength - 1 : safeOffset;
+    final boxes = paragraph.getBoxesForRange(start, start + 1);
+    if (boxes.isEmpty) return null;
+    return boxes.first.top;
   }
 
   double _averageJustifyExpansion(
@@ -414,7 +509,7 @@ final class LayoutPump implements HybridLayoutPump {
       height: task.textStyle.lineHeight,
     );
     final indentLength = _indentFor(task).length;
-    final body = task.block.text;
+    final body = task.combinedText;
     final textLength = indentLength + body.length;
     final builder = ui.ParagraphBuilder(paragraphStyle)
       ..pushStyle(_textStyle(task));

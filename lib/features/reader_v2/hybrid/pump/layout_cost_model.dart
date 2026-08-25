@@ -29,7 +29,7 @@ final class LayoutCostModel {
         task.textStyle.textAlign != ui.TextAlign.justify) {
       return false;
     }
-    final text = task.block.text;
+    final text = task.combinedText;
     if (text.contains('\n')) return true;
     final indentLength = task.indentChars <= 0 ? 0 : task.indentChars.clamp(0, 8);
     final spacing =
@@ -40,7 +40,8 @@ final class LayoutCostModel {
   }
 
   Duration predict(LayoutTask task) {
-    final millis = task.block.text.length * _msPerChar * layoutPassesFor(task);
+    final millis =
+        task.combinedText.length * _msPerChar * layoutPassesFor(task);
     return Duration(microseconds: (millis * 1000).round());
   }
 

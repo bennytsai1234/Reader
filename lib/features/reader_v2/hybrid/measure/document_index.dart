@@ -129,6 +129,28 @@ final class DocumentIndex implements HybridDocumentIndex {
     _revision.bump();
   }
 
+  /// 章節 evicted／invalidated 後移除該章目前已放行的 key/height（如有）。
+  /// `maxBlockChars` 由效能校準即時推導，同一章重新載入時 segmentation
+  /// 可能改變；殘留的舊 BlockKey→height 若不清掉，新 segmentation 缺席的
+  /// 高 blockIndex 永遠不會被重新 admit／覆寫，會一直錯誤貢獻文檔幾何。
+  /// 回傳是否真的移除了任何 key，供呼叫端決定要不要強制 sliver 重建
+  /// （index→key 映射位移，需要比單純幾何替換更重的
+  /// [resetGeneration] 訊號）。
+  bool invalidateChapter(int chapterIndex) {
+    final staleKeys =
+        _metrics.keys
+            .where((key) => key.chapterIndex == chapterIndex)
+            .toList(growable: false);
+    if (staleKeys.isEmpty) return false;
+    for (final key in staleKeys) {
+      _metrics.remove(key);
+    }
+    _rebuildAll();
+    _resetGeneration += 1;
+    _revision.bump();
+    return true;
+  }
+
   BlockMetrics? metricsFor(BlockKey key) => _metrics[key];
 
   @override

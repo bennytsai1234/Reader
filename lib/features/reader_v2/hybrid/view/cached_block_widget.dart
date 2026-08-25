@@ -168,13 +168,19 @@ final class RenderCachedBlock extends RenderBox {
     _cancelParagraphWait();
     final canvas = context.canvas;
 
+    // 同一個連續排版 group 的多個 block 共用一個 ui.Paragraph；本 block
+    // 只是那個 Paragraph 裡 [entry.localTop, entry.localTop + size.height)
+    // 這一段的視窗，往上平移 localTop 再貼齊 clip 邊界即可，group 內其他
+    // block 的內容自然落在 clip 之外不會被畫出。
+    final paragraphOffset = offset - Offset(0, entry.localTop);
+
     // Paragraph 的實際像素永遠限制在 DocumentIndex 配給這個 block 的
     // extent 內。即使快取重建期間幾何短暫失配，也不能把文字畫進下一塊。
     canvas.save();
     canvas.clipRect(offset & size);
     if (entry.bakedColor == _textColor) {
       // 熱路徑：色已烘進 Paragraph，直繪零離屏。
-      canvas.drawParagraph(entry.paragraph, offset);
+      canvas.drawParagraph(entry.paragraph, paragraphOffset);
       canvas.restore();
       return;
     }
@@ -184,7 +190,7 @@ final class RenderCachedBlock extends RenderBox {
       offset & size,
       Paint()..colorFilter = ColorFilter.mode(_textColor, BlendMode.srcIn),
     );
-    canvas.drawParagraph(entry.paragraph, offset);
+    canvas.drawParagraph(entry.paragraph, paragraphOffset);
     canvas.restore();
     canvas.restore();
   }

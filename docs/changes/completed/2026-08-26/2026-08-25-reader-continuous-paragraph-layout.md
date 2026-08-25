@@ -80,6 +80,61 @@ ReaderV2ContentTransformer
 
 ## Evidence
 
-由 relay／worker 填入：實際修改檔案、根因層級、驗收命令與完整輸出、未覆蓋風險，以及是否改變 reader 模組邊界或外部契約。
+### 實際修改與根因層級
+
+- 根因確認在 Hybrid 的排版單位層：`maxBlockChars` 是效能校準結果，不是語意段落邊界；原流程以每個效能 block 各建一個 `ui.Paragraph`，因此人工切點會產生額外硬換行與不同的 block 幾何。
+- `ChapterBlocks.groupContaining`／`paragraphGroups` 現在以 `isContinuation` 且相同的 `sourceParagraphIndex` 組合效能切塊；標題與真正不同的來源段落仍維持獨立 layout group。
+- `LayoutTask` 新增 group 的 continuation blocks 與合併文字。`LayoutPump` 對整個 group 只建一次 `ui.Paragraph`，再依實際 line-top 邊界分回各 block 的 `BlockMetrics`、`localTop` 與 `BlockReady`；成本模型也以完整 group 文字計算成本。落在同一視覺行的多個切點使用低於既有幾何容差的 `1e-6` 正值承接 `BlockMetrics.height`，不再用人工 `1.0` px 累積世界座標偏移。
+- `ParagraphCache` 以參照計數讓同一 group 的 block entries 共用 Paragraph，`RenderCachedBlock` 與 screen 端的 anchor／TTS／range geometry 查詢會在 block local window 與共用 Paragraph 座標間轉換；保留 lazy loading、pump、admission 與 LRU 的 block 工作單位。
+- 章節 `evicted`／`invalidated` 事件現在同步清理 `_blocks`、`MeasurementStore`、`ParagraphCache`、`AdmissionController` 與 `DocumentIndex` 的舊章節 keys/heights；`DocumentIndex.resetGeneration` 觸發既有 sliver 重建機制，避免 segmentation 改變後重用舊座標。
+- 新增／擴充測試涵蓋三種手動 segmentation、句中與 surrogate pair 鄰近切點、逐行 UTF-16 range、line count、總高度、charOffset 世界 Y、不同來源段落分組、章節失效後重新 admit，以及同一視覺行多切點的零高度 slice。
+
+### 驗收結果
+
+驗收均在 repository root 執行。環境中的 `/mnt/c/flutter/bin/flutter` launcher 具有 CRLF shebang，會在 Bash 直接失敗；以下改用同一工作環境中可執行的 `/home/benny/flutter/bin/flutter` 入口，未修改專案程式或測試來繞過問題。
+
+```text
+$ /home/benny/flutter/bin/flutter analyze
+No issues found! (ran in 3.0s)
+
+$ /home/benny/flutter/bin/flutter test test/features/reader_v2/hybrid
+00:47 +85: All tests passed!
+
+$ /home/benny/flutter/bin/flutter test test/features/reader_v2
+02:00 +182: All tests passed!
+
+$ /home/benny/flutter/bin/flutter test
+18:38 +983: All tests passed!
+```
+
+`git diff --check` 亦通過。未修改 `ReaderV2Location` JSON schema、viewport controller 七個閉包語意、TTS／bookmark／progress 的公開資料形狀或 reader 模組對外邊界；沒有新增依賴、整章 Paragraph、舊分頁引擎路徑或拖曳期間 layout 例外弱化。
+
+### 未覆蓋風險
+
+極端單一邏輯段落達數十萬字、使 Flutter `ui.Paragraph` 無法在既有 pump budget 下安全處理的情況仍未覆蓋；本次沒有引入新的文字 shaping／line-breaking engine，也沒有以整章 Paragraph 逃避。一般邏輯段落仍是一個 layout group，效能 block 仍是工作與視口映射單位。
 
 ## Completion record
+
+### Final status
+
+Accepted. Package-scoped acceptance、ReaderV2 acceptance、full repository tests、analyzer 與 diff check 均通過。
+
+### Relay acceptance
+
+第二輪已處理 relay 退回的三項具體缺口：
+
+1. 章節失效時清除 `DocumentIndex` 與 `AdmissionController` 的舊 segmentation 狀態，並以重載後改變 segmentation 的測試證明舊 block extent 不會殘留。
+2. group 組合加入 `sourceParagraphIndex` 核對，並以真正不同來源段落的測試證明標題／段落縮排與 spacing 不會被跨段落合併。
+3. 同一視覺行多切點改用極小正值承接必要的正高度契約，並以總高度與後續 world Y 測試證明不累積人工整像素偏移。
+
+上述處理沒有改變既有公開 viewport／location 契約；沒有需要提升至更高 planning tier 的邊界或 ownership 變更。
+
+## Relay review (resolved)
+
+以下保留退回時的三項驗收對照；均已由上方實作與測試證據解決。
+
+1. `lib/features/reader_v2/hybrid/hybrid_reader_screen.dart:725-735` 與 `lib/features/reader_v2/hybrid/measure/document_index.dart:80-85` — `evicted`／`invalidated` 路徑清掉 `_blocks`、`MeasurementStore` 與 `ParagraphCache`，但沒有讓 `DocumentIndex` 丟棄該章已放行的 keys/heights，也沒有同步清理 admission 的舊章節形狀；重新載入時若 `maxBlockChars` 改變，舊 block extent 會殘留。必須補上章節失效後的索引／admission 重建或等價失效處理，並以改變 segmentation 後的淘汰／重載測試證明不會重用舊座標；不得改變既有公開 viewport／location 契約。
+2. `lib/features/reader_v2/hybrid/core/hybrid_types.dart:376-403` — `groupContaining`／`paragraphGroups` 目前只檢查 `isContinuation`，沒有在程式上確認相鄰 block 的 `sourceParagraphIndex` 相同；這保留了跨獨立語義段落共用 Paragraph 的路徑。group 必須只涵蓋同一 source paragraph 的效能切塊，並補測真正不同 source paragraph 的縮排／paragraph spacing 與獨立排版。
+3. `lib/features/reader_v2/hybrid/pump/layout_pump.dart:366-401` — 當多個合法 block cut 落在同一 visual line 時，`splitYs` 會產生相同邊界；目前將 zero-height slice 強制成 `1.0`，使切法的 BlockMetrics 總高度與連續 Paragraph 多出人工像素，並使後續 world Y 偏移。必須補上同一行多切點的幾何驗收，修正為不累積虛假高度／line count 的 layout mapping。
+
+以上三項已完成；除此之外沒有引入超出 package 範圍的修改。

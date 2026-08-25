@@ -111,6 +111,17 @@ final class AdmissionController extends ChangeNotifier {
     _flushPending();
   }
 
+  /// 章節 evicted／invalidated 後清掉 admission 端記住的舊章節形狀（block
+  /// 數）與尚未 admit 的殘留 pending metrics。不清的話，重新載入前若
+  /// `_nextForwardKey`/`_nextBackwardKey` 沿用舊 block 數走訪，會算出新
+  /// segmentation 下已不存在（或指向不同文字）的 BlockKey；重新載入後
+  /// [registerChapter] 會覆寫新的 block 數，但殘留的舊 pending 條目不會
+  /// 自動清除。
+  void invalidateChapter(int chapterIndex) {
+    _chapterBlockCounts.remove(chapterIndex);
+    _pending.removeWhere((key, _) => key.chapterIndex == chapterIndex);
+  }
+
   void attach(Stream<BlockReady> completed) {
     _subscription?.cancel();
     _subscription = completed.listen(offer);
