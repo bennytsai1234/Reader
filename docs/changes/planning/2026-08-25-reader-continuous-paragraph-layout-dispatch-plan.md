@@ -11,7 +11,7 @@ REPORTING_LEVEL: technical
 
 ## Objective
 
-讓 Hybrid 閱讀器保留 block 的 lazy loading／排程用途，但消除 block 邊界對文字排版造成的硬換行。相同邏輯段落無論如何切 block，都必須得到相同的換行、總高度、字元幾何與 anchor 座標，且不破壞真正段落邊界與既有 viewport 契約。
+讓 Hybrid 閱讀器保留 block 的 lazy loading／排程／admission 用途，但把 `ui.Paragraph` 的排版單位改成邏輯段落或其他穩定 layout unit，消除 block 邊界對文字排版造成的硬換行。相同邏輯段落無論如何切 block，都必須得到相同的換行、總高度、字元幾何與 anchor 座標，且不破壞真正段落邊界與既有 viewport 契約；不得引入跨獨立 Paragraph 的 continuation 偽抽象，也不得退化為整章一個 Paragraph。
 
 ## Task Packages
 
