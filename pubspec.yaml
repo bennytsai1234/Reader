@@ -1,7 +1,7 @@
 name: night_reader
 description: "夜讀 - Night Reader, a Flutter novel reader app"
 publish_to: 'none'
-version: 0.2.146+160
+version: 0.2.147+161
 homepage: https://github.com/bennytsai1234/night-reader
 repository: https://github.com/bennytsai1234/night-reader
 issue_tracker: https://github.com/bennytsai1234/night-reader/issues
@@ -12,119 +12,5 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # === State Management ===
   provider: ^6.1.5+1
   event_bus: ^2.0.1
-
-  # === Network ===
-  dio: ^5.11.0
-  dio_cookie_manager: ^3.5.0
-  cookie_jar: ^4.0.9
-  convert: ^3.1.2
-
-  # === Database ===
-  drift: ^2.34.3
-  path: ^1.9.1
-  path_provider: ^2.1.6
-
-  # === Media / TTS ===
-  # Upstream 4.2.5 runtime + Night Reader AGP 9 built-in Kotlin build patch.
-  flutter_tts:
-    path: third_party/flutter_tts
-  audio_service: ^0.18.19
-
-  # === HTML Parsing (replaces Android Jsoup) ===
-  html: ^0.15.6
-  html_unescape: ^2.0.0
-
-  # === JSON Path ===
-  json_path: ^0.9.0
-
-  # === XPath ===
-  xpath_selector: ^3.0.2
-  xpath_selector_html_parser: ^3.0.1
-
-  # === JavaScript Engine (replaces Android Rhino) ===
-  # Upstream 0.8.7 runtime + Night Reader AGP 9 built-in Kotlin build patch.
-  flutter_js:
-    path: third_party/flutter_js
-
-  # === Crypto (replaces Android hutool-crypto) ===
-  crypto: ^3.0.7
-  pointycastle: ^4.0.0
-
-  # === Image Loading ===
-  cached_network_image: ^3.4.1
-
-  # === Image Picker ===
-  image_picker: ^1.2.3
-
-  # === Deep Link & Sharing ===
-  app_links: ^7.2.1
-  receive_sharing_intent: ^1.9.0
-
-  # === Background Tasks ===
-
-  workmanager: ^0.10.7
-  pool: ^1.5.2
-
-  # === Local File Support ===
-  # Upstream 11.0.3 + Night Reader Win32 6 / AGP 9 compatibility patch.
-  file_picker:
-    path: third_party/file_picker
-
-  # === URL Launcher ===
-  url_launcher: ^6.3.2
-
-
-  # === Share ===
-  share_plus: ^13.3.0
-
-  # === WebView (for WebView book sources) ===
-  webview_flutter: ^4.14.1
-
-  # === Local Storage (key-value) ===
-  shared_preferences: ^2.5.5
-  package_info_plus: ^10.2.1
-
-  # === UUID ===
-  uuid: ^4.6.0
-
-  # === Intl (date formatting, etc.) ===
-  intl: ^0.20.3
-  fast_gbk: ^1.0.0
-  archive: ^4.0.9
-  webview_flutter_wkwebview: ^3.26.0
-  webview_flutter_android: ^4.14.0
-  flutter_native_splash: ^2.4.8
-  synchronized: ^3.4.1+1
-  get_it: ^9.2.1
-  logger: ^2.7.0
-  permission_handler: ^13.0.1
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^6.0.0
-
-  build_runner: ^2.16.0
-  drift_dev: ^2.34.5
-  flutter_launcher_icons: ^0.14.4
-
-# Adaptive launcher icon：深棕 #1A1612 底板 + 品牌圖前景，消除桌面/開啟動畫白板。
-flutter_launcher_icons:
-  android: "ic_launcher"
-  ios: false
-  image_path: "assets/app-icon.png"
-  min_sdk_android: 24
-  adaptive_icon_background: "#1A1612"
-  adaptive_icon_foreground: "assets/app_icon/ic_foreground.png"
-
-flutter:
-  uses-material-design: true
-
-  assets:
-    - assets/ui/app_icon.webp
-    - assets/default_sources/
-    - assets/opencc/
