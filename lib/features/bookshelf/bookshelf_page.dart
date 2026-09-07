@@ -6,9 +6,12 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/services/bookshelf_exchange_service.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
 import 'package:night_reader/features/bookshelf/bookshelf_provider.dart';
+import 'package:night_reader/features/bookshelf/bookshelf_read_progress.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
 import 'package:night_reader/features/reader_v2/session/reader_v2_open_target.dart';
 import 'package:night_reader/shared/navigation/book_open_route.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/core/services/app_file_selection_service.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
@@ -133,7 +136,9 @@ class _BookshelfPageState extends State<BookshelfPage> {
                               child: Row(
                                 children: [
                                   Icon(
-                                    Icons.view_quilt_outlined,
+                                    provider.isGridView
+                                        ? Icons.view_list_outlined
+                                        : Icons.grid_view_outlined,
                                     size: 20,
                                     color: Theme.of(context).iconTheme.color,
                                   ),
@@ -252,7 +257,22 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   provider.isLoading && provider.books.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : provider.books.isEmpty
-                      ? const Center(child: Text('書架空空如也，去搜尋看看吧'))
+                      ? AppStateView(
+                        icon: Icons.auto_stories_outlined,
+                        title: '書架還是空的',
+                        description: '搜尋並加入一本書，之後就能從這裡繼續閱讀。',
+                        primaryAction: AppStateAction(
+                          label: '搜尋書籍',
+                          icon: Icons.search,
+                          onPressed:
+                              () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const SearchPage(),
+                                ),
+                              ),
+                        ),
+                      )
                       : RefreshIndicator(
                         onRefresh: () => provider.refreshBookshelf(),
                         child:
@@ -387,7 +407,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
     BuildContext context,
     BookshelfProvider provider,
   ) async {
-    final selected = await showModalBottomSheet<BookshelfSortMode>(
+    final selected = await AppBottomSheet.showCustom<BookshelfSortMode>(
       context: context,
       builder:
           (ctx) => SafeArea(
@@ -612,7 +632,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
               AspectRatio(
                 aspectRatio: 0.72,
                 child: Hero(
-                  tag: 'book_cover_${book.bookUrl}',
+                  tag: BookCoverWidget.heroTag(book.bookUrl),
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border.all(
@@ -666,13 +686,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: FractionallySizedBox(
-                    widthFactor:
-                        book.totalChapterNum > 0
-                            ? (book.chapterIndex / book.totalChapterNum).clamp(
-                              0.0,
-                              1.0,
-                            )
-                            : 0.0,
+                    widthFactor: bookshelfReadProgress(book),
                     child: Container(
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
@@ -746,7 +760,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
         child: Row(
           children: [
             Hero(
-              tag: 'book_cover_${book.bookUrl}',
+              tag: BookCoverWidget.heroTag(book.bookUrl),
               child: BookCoverWidget(
                 bookName: book.name,
                 coverUrl: book.getDisplayCover(),
@@ -778,14 +792,14 @@ class _BookshelfPageState extends State<BookshelfPage> {
                   ),
                   const Spacer(),
                   Text(
-                    '讀至: ${book.durChapterTitle}',
+                    '讀至：${book.durChapterTitle}',
                     style: TextStyle(fontSize: 11, color: colors.secondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '最新: ${book.latestChapterTitle}',
+                    '最新：${book.latestChapterTitle}',
                     style: TextStyle(fontSize: 10, color: colors.tertiary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -800,11 +814,7 @@ class _BookshelfPageState extends State<BookshelfPage> {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
-                        widthFactor:
-                            book.totalChapterNum > 0
-                                ? (book.chapterIndex / book.totalChapterNum)
-                                    .clamp(0.0, 1.0)
-                                : 0.0,
+                        widthFactor: bookshelfReadProgress(book),
                         child: Container(
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,

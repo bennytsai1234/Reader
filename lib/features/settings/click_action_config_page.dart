@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/settings/reader_v2_prefs_repository.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class ClickActionConfigPage extends StatefulWidget {
   const ClickActionConfigPage({super.key});
@@ -244,7 +245,7 @@ class _ClickActionConfigPageState extends State<ClickActionConfigPage> {
   }
 
   void _showActionSelector(BuildContext context, int index) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       builder:
           (ctx) => SafeArea(

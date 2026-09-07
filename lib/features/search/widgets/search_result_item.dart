@@ -4,7 +4,6 @@ import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
 import '../search_provider.dart';
 import '../../book_detail/book_detail_page.dart';
 
@@ -30,6 +29,11 @@ class _SearchResultItemState extends State<SearchResultItem> {
     final book = widget.result.book;
     final sourceCount = widget.result.sources.length;
     final theme = Theme.of(context);
+    final metadata = formatSearchResultMetadata(
+      author: book.author,
+      kind: book.kind,
+      wordCount: book.wordCount,
+    );
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
@@ -113,17 +117,17 @@ class _SearchResultItemState extends State<SearchResultItem> {
         children: [
           const SizedBox(height: AppSpacing.xs),
           Text(
-            '${book.author ?? '未知'} · ${book.kind ?? '未知'} · ${book.wordCount ?? ''}',
+            metadata,
             style: AppTextStyles.bodySm.copyWith(height: 1.35),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            '最新: ${book.latestChapterTitle ?? '暫無'}',
+            '最新：${_valueOrFallback(book.latestChapterTitle, '暫無')}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.bodySm.copyWith(
               height: 1.35,
-              color: context.warning,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -140,7 +144,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
                         Row(
                           children: [
                             Text(
-                              '來源 ($sourceCount):',
+                              '來源（$sourceCount）：',
                               style: AppTextStyles.labelSm.copyWith(
                                 height: 1.35,
                                 color: theme.colorScheme.onSurfaceVariant,
@@ -189,7 +193,7 @@ class _SearchResultItemState extends State<SearchResultItem> {
                       children: [
                         Expanded(
                           child: Text(
-                            '來源: ${widget.result.sources.join(', ')}',
+                            '來源：${widget.result.sources.join('、')}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.labelSm.copyWith(
@@ -220,4 +224,22 @@ class _SearchResultItemState extends State<SearchResultItem> {
       },
     );
   }
+}
+
+String formatSearchResultMetadata({
+  String? author,
+  String? kind,
+  String? wordCount,
+}) {
+  final values = <String>[
+    if ((author ?? '').trim().isNotEmpty) author!.trim(),
+    if ((kind ?? '').trim().isNotEmpty) kind!.trim(),
+    if ((wordCount ?? '').trim().isNotEmpty) wordCount!.trim(),
+  ];
+  return values.isEmpty ? '資訊未提供' : values.join(' · ');
+}
+
+String _valueOrFallback(String? value, String fallback) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? fallback : trimmed;
 }

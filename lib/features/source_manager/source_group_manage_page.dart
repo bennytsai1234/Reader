@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'source_manager_provider.dart';
 
 class SourceGroupManagePage extends StatelessWidget {
@@ -31,28 +32,15 @@ class SourceGroupManagePage extends StatelessWidget {
           final mutationEnabled = !provider.isMutationBusy;
 
           if (groups.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.folder_outlined,
-                      size: 52,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('尚未建立自訂分組'),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed:
-                          mutationEnabled ? () => _showEditDialog(context) : null,
-                      icon: const Icon(Icons.add),
-                      label: const Text('新增分組'),
-                    ),
-                  ],
-                ),
+            return AppStateView(
+              icon: Icons.folder_outlined,
+              title: '尚未建立自訂分組',
+              description: '建立分組後，可依分組管理、篩選與分享書源。',
+              primaryAction: AppStateAction(
+                label: '新增分組',
+                icon: Icons.add,
+                onPressed:
+                    mutationEnabled ? () => _showEditDialog(context) : null,
               ),
             );
           }

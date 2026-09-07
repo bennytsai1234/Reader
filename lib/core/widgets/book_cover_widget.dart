@@ -25,6 +25,8 @@ class BookCoverWidget extends StatelessWidget {
     this.borderRadius,
   });
 
+  static String heroTag(String bookUrl) => 'book_cover_$bookUrl';
+
   @override
   Widget build(BuildContext context) {
     final effectiveBorderRadius = borderRadius ?? AppRadius.cardXs;

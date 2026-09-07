@@ -20,7 +20,7 @@ class ReaderV2ReplaceRuleEditorSheet extends StatefulWidget {
     ReplaceRule? rule,
     required Future<void> Function(ReplaceRule rule) onSave,
   }) {
-    return showModalBottomSheet<void>(
+    return AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
       builder:

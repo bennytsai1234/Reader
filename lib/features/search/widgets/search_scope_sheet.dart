@@ -4,6 +4,7 @@ import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/core/database/dao/book_source_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/book_source.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import '../models/search_scope.dart';
 
 /// SearchScopeSheet - 搜尋範圍選擇底部彈窗
@@ -32,11 +33,10 @@ class SearchScopeSheet extends StatefulWidget {
     required List<String> groups,
     required ValueChanged<SearchScope> onScopeChanged,
   }) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(borderRadius: AppRadius.topSheetLg),
       builder:
           (_) => SearchScopeSheet(
             currentScope: currentScope,

@@ -5,6 +5,7 @@ import 'package:night_reader/core/models/download_task.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 
 /// DownloadManagerPage - 全域背景下載管理頁面
 class DownloadManagerPage extends StatelessWidget {
@@ -47,7 +48,11 @@ class DownloadManagerPage extends StatelessWidget {
       ),
       body:
           tasks.isEmpty
-              ? _buildEmptyState(context)
+              ? const AppStateView(
+                icon: Icons.download_done_rounded,
+                title: '暫無背景下載任務',
+                description: '從書籍詳情加入下載後，進度會顯示在這裡。',
+              )
               : Column(
                 children: [
                   _buildQueueSummary(context, service, tasks),
@@ -79,32 +84,6 @@ class DownloadManagerPage extends StatelessWidget {
                   ),
                 ],
               ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.download_done_rounded,
-            size: 64,
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.1),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            '暫無背景下載任務',
-            style: TextStyle(
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.4),
-            ),
-          ),
-        ],
-      ),
     );
   }
 

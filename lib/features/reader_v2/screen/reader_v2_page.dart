@@ -366,7 +366,7 @@ class _ReaderV2PageState extends State<ReaderV2Page>
   Future<void> _showChangeSource() async {
     if (widget.book.isLocal) return;
     SourceSwitchResolution? switchedResolution;
-    await showModalBottomSheet<void>(
+    await AppBottomSheet.showCustom<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

@@ -9,6 +9,7 @@ import 'package:night_reader/core/models/book.dart';
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/chapter.dart';
 import 'package:night_reader/features/book_detail/book_detail_page.dart';
+import 'package:night_reader/core/widgets/book_cover_widget.dart';
 
 class _FakeBookDao extends Fake implements BookDao {
   _FakeBookDao(this.book);
@@ -35,8 +36,12 @@ class _FakeChapterDao extends Fake implements ChapterDao {
 }
 
 class _FakeSourceDao extends Fake implements BookSourceDao {
+  _FakeSourceDao([this.source]);
+
+  final BookSource? source;
+
   @override
-  Future<BookSource?> getByUrl(String url) async => null;
+  Future<BookSource?> getByUrl(String url) async => source;
 }
 
 void main() {
@@ -74,6 +79,9 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: BookDetailPage(book: book)));
     await tester.pumpAndSettle();
+
+    final coverHero = tester.widget<Hero>(find.byType(Hero));
+    expect(coverHero.tag, BookCoverWidget.heroTag(book.bookUrl));
 
     await tester.tap(find.byTooltip('移出書架'));
     await tester.pumpAndSettle();
@@ -146,5 +154,35 @@ void main() {
     expect(find.text('目錄 (共 2 章)'), findsOneWidget);
     expect(find.text('第一章'), findsOneWidget);
     expect(find.text('第二章'), findsOneWidget);
+  });
+
+  testWidgets('來源異常時只保留一個換源入口，且未入架時無書架圖示重複', (tester) async {
+    final book = Book(
+      bookUrl: 'https://example.com/book-degraded',
+      name: '來源異常書',
+      author: '作者',
+      origin: 'https://degraded.example',
+      originName: '異常書源',
+    );
+    GetIt.instance.registerLazySingleton<BookDao>(() => _FakeBookDao(book));
+    GetIt.instance.registerLazySingleton<ChapterDao>(() => _FakeChapterDao());
+    GetIt.instance.registerLazySingleton<BookSourceDao>(
+      () => _FakeSourceDao(
+        BookSource(
+          bookSourceUrl: 'https://degraded.example',
+          bookSourceName: '異常書源',
+          bookSourceGroup: '需要登入',
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(MaterialApp(home: BookDetailPage(book: book)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('來源需要登入後才能使用'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '換源'), findsOneWidget);
+    expect(find.byTooltip('移出書架'), findsNothing);
+    expect(find.byTooltip('加入書架'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '加入書架'), findsOneWidget);
   });
 }

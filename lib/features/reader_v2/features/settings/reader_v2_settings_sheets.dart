@@ -14,7 +14,7 @@ class ReaderV2SettingsSheets {
     BuildContext context,
     ReaderV2SettingsController settings,
   ) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       builder: (_) => _ReaderInterfaceSheet(settings: settings),
@@ -26,7 +26,7 @@ class ReaderV2SettingsSheets {
     ReaderV2SettingsController settings, {
     VoidCallback? onChangeSource,
   }) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       builder:

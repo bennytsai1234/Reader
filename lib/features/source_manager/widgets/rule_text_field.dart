@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 class RuleTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -104,7 +105,7 @@ class RuleTextField extends StatelessWidget {
               {'label': '取連結屬性 @href', 'value': '@href'},
             ];
 
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {

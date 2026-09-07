@@ -7,6 +7,7 @@ import 'package:night_reader/features/reader_v2/screen/reader_v2_controller_host
 import 'package:night_reader/features/reader_v2/features/menu/reader_v2_tap_action.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_sheet.dart';
 import 'package:night_reader/features/reader_v2/features/tts/reader_v2_tts_highlight.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 typedef ReaderV2NoticeSink = void Function(String message);
 
@@ -203,7 +204,7 @@ class ReaderV2PageCoordinator {
       _showNotice('替換規則資料庫不可用');
       return;
     }
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       builder:

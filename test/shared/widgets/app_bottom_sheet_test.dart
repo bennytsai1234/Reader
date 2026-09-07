@@ -1,8 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 
 void main() {
+  testWidgets('custom sheet route 套用共用圓角並保留自訂內容', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => AppBottomSheet.showCustom<void>(
+              context: context,
+              builder: (_) => const Text('自訂內容'),
+            ),
+            child: const Text('開啟'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('開啟'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('自訂內容'), findsOneWidget);
+    final bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+    expect(
+      bottomSheet.shape,
+      const RoundedRectangleBorder(borderRadius: AppRadius.topSheetLg),
+    );
+    expect(bottomSheet.clipBehavior, Clip.antiAlias);
+  });
+
   testWidgets('header scales without overflow and close action is labelled', (
     tester,
   ) async {

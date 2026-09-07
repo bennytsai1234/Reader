@@ -18,6 +18,7 @@ import 'package:night_reader/shared/navigation/book_open_route.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/context_ext.dart';
+import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
 import 'widgets/book_info_header.dart';
 import 'widgets/book_info_intro.dart';
 import 'widgets/book_info_toc_bar.dart';
@@ -93,15 +94,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                                   Expanded(
                                     child: Text(provider.sourceIssueMessage!),
                                   ),
-                                  if (!currentBook.isLocal)
-                                    TextButton(
-                                      onPressed:
-                                          () => _showChangeSourceDialog(
-                                            context,
-                                            provider,
-                                          ),
-                                      child: const Text('換源'),
-                                    ),
                                 ],
                               ),
                             ),
@@ -249,18 +241,15 @@ class _BookDetailPageState extends State<BookDetailPage> {
     return AppBar(
       title: const Text('書籍詳情'),
       actions: [
-        IconButton(
-          icon: Icon(
-            provider.isInBookshelf
-                ? Icons.library_add_check
-                : Icons.library_add,
+        if (provider.isInBookshelf)
+          IconButton(
+            icon: const Icon(Icons.library_add_check),
+            onPressed:
+                actionsEnabled
+                    ? () => _handleBookshelfToggle(context, provider)
+                    : null,
+            tooltip: '移出書架',
           ),
-          onPressed:
-              actionsEnabled
-                  ? () => _handleBookshelfToggle(context, provider)
-                  : null,
-          tooltip: provider.isInBookshelf ? '移出書架' : '加入書架',
-        ),
         PopupMenuButton<String>(
           enabled: actionsEnabled,
           onSelected: (v) => _handleMenuSelection(context, provider, v),
@@ -453,7 +442,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   }
 
   void _showDownloadSheet(BuildContext context, BookDetailProvider provider) {
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       showDragHandle: true,
       builder:
@@ -615,7 +604,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     });
   }
 
-  void _showPhotoView(BuildContext context, String url) {
+  void _showPhotoView(BuildContext context, String url, String heroTag) {
     final isLocal = url.startsWith('local://') || url.startsWith('file://');
     Navigator.push(
       context,
@@ -626,7 +615,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               appBar: AppBar(backgroundColor: Colors.transparent),
               body: Center(
                 child: Hero(
-                  tag: 'book_cover',
+                  tag: heroTag,
                   child:
                       isLocal
                           ? Image.file(
@@ -723,7 +712,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
 
   void _showChangeSourceDialog(BuildContext context, BookDetailProvider p) {
     if (p.book.isLocal) return;
-    showModalBottomSheet(
+    AppBottomSheet.showCustom(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => ChangeSourceSheet(book: p.book, detailProvider: p),
@@ -882,7 +871,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   }
 
   void _showChangeCoverSheet(BuildContext context, BookDetailProvider p) =>
-      showModalBottomSheet(
+      AppBottomSheet.showCustom(
         context: context,
         isScrollControlled: true,
         builder:

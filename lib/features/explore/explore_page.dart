@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'package:night_reader/core/models/source/explore_kind.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/features/source_manager/source_editor_page.dart';
@@ -136,69 +137,64 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
     }
 
     if (provider.sourceLoadError != null) {
-      return _buildEmptyState(
-        theme: theme,
+      return AppStateView(
         icon: Icons.error_outline,
-        message: provider.sourceLoadError!,
-        actions: [
-          TextButton.icon(
-            onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('重試'),
-          ),
-        ],
+        title: '發現書源載入失敗',
+        description: provider.sourceLoadError!,
+        tone: AppStateTone.error,
+        primaryAction: AppStateAction(
+          label: '重試',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
       );
     }
 
     if (provider.isEmpty &&
         provider.searchQuery.isEmpty &&
         provider.selectedGroup == null) {
-      return _buildEmptyState(
-        theme: theme,
+      return AppStateView(
         icon: Icons.travel_explore_outlined,
-        message: '目前沒有可用的發現書源',
-        actions: [
-          TextButton.icon(
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SourceManagerPage()),
-                ),
-            icon: const Icon(Icons.source_outlined),
-            label: const Text('管理書源'),
-          ),
-          TextButton.icon(
-            onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('重新整理'),
-          ),
-        ],
+        title: '目前沒有可用的發現書源',
+        description: '到書源管理啟用支援發現功能的書源。',
+        primaryAction: AppStateAction(
+          label: '管理書源',
+          icon: Icons.source_outlined,
+          onPressed:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SourceManagerPage()),
+              ),
+        ),
+        secondaryAction: AppStateAction(
+          label: '重新整理',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
       );
     }
 
     if (provider.isEmpty) {
-      return _buildEmptyState(
-        theme: theme,
+      return AppStateView(
         icon: Icons.search_off,
-        message: '找不到符合條件的書源',
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              if (provider.selectedGroup != null) {
-                provider.setGroupFilter(null);
-              } else {
-                provider.setSearchQuery('');
-              }
-            },
-            icon: const Icon(Icons.clear),
-            label: const Text('清除條件'),
-          ),
-          TextButton.icon(
-            onPressed: provider.refresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('重新整理'),
-          ),
-        ],
+        title: '找不到符合條件的書源',
+        description: '清除搜尋或分組條件後再試一次。',
+        primaryAction: AppStateAction(
+          label: '清除條件',
+          icon: Icons.clear,
+          onPressed: () {
+            if (provider.selectedGroup != null) {
+              provider.setGroupFilter(null);
+            } else {
+              provider.setSearchQuery('');
+            }
+          },
+        ),
+        secondaryAction: AppStateAction(
+          label: '重新整理',
+          icon: Icons.refresh,
+          onPressed: provider.refresh,
+        ),
       );
     }
 
@@ -216,48 +212,6 @@ class _ExplorePageContentState extends State<_ExplorePageContent> {
         final isExpanded = provider.expandedIndex == index;
         return _buildSourceItem(provider, source, index, isExpanded, theme);
       },
-    );
-  }
-
-  Widget _buildEmptyState({
-    required ThemeData theme,
-    required IconData icon,
-    required String message,
-    required List<Widget> actions,
-  }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 280),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: AppSpacing.xxl,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                message,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  height: 1.4,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: AppSpacing.xs,
-                runSpacing: AppSpacing.xs,
-                children: actions,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 

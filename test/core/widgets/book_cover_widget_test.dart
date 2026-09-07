@@ -5,6 +5,13 @@ import 'package:night_reader/shared/theme/app_theme.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 
 void main() {
+  test('Hero tag 由書籍 URL 穩定產生', () {
+    expect(
+      BookCoverWidget.heroTag('https://example.com/book/1'),
+      'book_cover_https://example.com/book/1',
+    );
+  });
+
   for (final mode in <ThemeMode>[ThemeMode.light, ThemeMode.dark]) {
     testWidgets('text cover is localized and semantic in $mode', (
       tester,

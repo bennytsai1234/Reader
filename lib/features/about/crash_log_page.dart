@@ -4,6 +4,7 @@ import 'package:night_reader/core/services/app_log_service.dart';
 import 'package:night_reader/core/services/crash_handler.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 
 class CrashLogPage extends StatefulWidget {
   const CrashLogPage({
@@ -97,62 +98,23 @@ class _CrashLogPageState extends State<CrashLogPage> {
           ),
         );
       case _CrashLogStatus.error:
-        return Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  '崩潰日誌載入失敗',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                SelectableText(
-                  _loadError.toString(),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                FilledButton.icon(
-                  onPressed: _loadLogs,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('重試'),
-                ),
-              ],
-            ),
+        return AppStateView(
+          icon: Icons.error_outline,
+          title: '崩潰日誌載入失敗',
+          description: _loadError.toString(),
+          tone: AppStateTone.error,
+          primaryAction: AppStateAction(
+            label: '重試',
+            icon: Icons.refresh,
+            onPressed: _loadLogs,
           ),
         );
       case _CrashLogStatus.loaded:
         if (!_hasLogs) {
-          return Center(
-            child: Semantics(
-              label: '目前沒有崩潰日誌',
-              child: ExcludeSemantics(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.article_outlined,
-                      size: 56,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    const Text('目前沒有崩潰日誌'),
-                  ],
-                ),
-              ),
-            ),
+          return const AppStateView(
+            icon: Icons.article_outlined,
+            title: '目前沒有崩潰日誌',
+            description: '發生崩潰時，日誌會記錄在這裡供你複製回報。',
           );
         }
         return SingleChildScrollView(

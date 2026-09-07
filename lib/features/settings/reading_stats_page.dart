@@ -5,6 +5,7 @@ import 'package:night_reader/core/models/read_record.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/shared/theme/app_text_styles.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 
 class ReadingStatsPage extends StatefulWidget {
   const ReadingStatsPage({super.key});
@@ -36,25 +37,30 @@ class _ReadingStatsPageState extends State<ReadingStatsPage> {
           }
 
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: FilledButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _records = _readRecordDao.getAllShow();
-                    });
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('重新載入'),
-                ),
+            return AppStateView(
+              icon: Icons.error_outline,
+              title: '閱讀統計載入失敗',
+              description: snapshot.error.toString(),
+              tone: AppStateTone.error,
+              primaryAction: AppStateAction(
+                label: '重新載入',
+                icon: Icons.refresh,
+                onPressed: () {
+                  setState(() {
+                    _records = _readRecordDao.getAllShow();
+                  });
+                },
               ),
             );
           }
 
           final records = snapshot.data ?? const <ReadRecord>[];
           if (records.isEmpty) {
-            return const Center(child: Text('尚無閱讀紀錄'));
+            return const AppStateView(
+              icon: Icons.history_rounded,
+              title: '尚無閱讀紀錄',
+              description: '開始閱讀一本書之後，這裡會顯示你的累積閱讀時間。',
+            );
           }
 
           return ListTileTheme(

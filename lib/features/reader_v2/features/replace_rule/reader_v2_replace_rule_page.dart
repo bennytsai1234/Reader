@@ -3,6 +3,7 @@ import 'package:night_reader/core/database/dao/replace_rule_dao.dart';
 import 'package:night_reader/core/di/injection.dart';
 import 'package:night_reader/core/models/replace_rule.dart';
 import 'package:night_reader/features/reader_v2/features/replace_rule/reader_v2_replace_rule_editor_sheet.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 
 class ReaderV2ReplaceRulePage extends StatefulWidget {
   const ReaderV2ReplaceRulePage({super.key});
@@ -100,9 +101,28 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
           _loading
               ? const Center(child: CircularProgressIndicator())
               : _loadError != null
-              ? _buildLoadError(context)
+              ? AppStateView(
+                icon: Icons.error_outline,
+                title: '替換規則載入失敗',
+                description: '無法讀取現有規則，請稍後再試。',
+                tone: AppStateTone.error,
+                primaryAction: AppStateAction(
+                  label: '重試',
+                  icon: Icons.refresh,
+                  onPressed: _loadRules,
+                ),
+              )
               : _rules.isEmpty
-              ? _buildEmptyState(context)
+              ? AppStateView(
+                icon: Icons.rule_rounded,
+                title: '還沒有替換規則',
+                description: '新增規則後，可在閱讀時自動整理標題或正文。',
+                primaryAction: AppStateAction(
+                  label: '新增規則',
+                  icon: Icons.add,
+                  onPressed: _openEditor,
+                ),
+              )
               : ListView.separated(
                 itemCount: _rules.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
@@ -161,58 +181,6 @@ class _ReaderV2ReplaceRulePageState extends State<ReaderV2ReplaceRulePage> {
                   );
                 },
               ),
-    );
-  }
-
-  Widget _buildLoadError(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 12),
-            const Text('替換規則載入失敗'),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _loadRules,
-              icon: const Icon(Icons.refresh),
-              label: const Text('重試'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.rule_rounded,
-              size: 48,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 12),
-            const Text('還沒有替換規則'),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () => _openEditor(),
-              icon: const Icon(Icons.add),
-              label: const Text('新增規則'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

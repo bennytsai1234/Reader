@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:night_reader/core/models/search_book.dart';
 import 'package:night_reader/shared/theme/app_tokens.dart';
 import 'package:night_reader/core/widgets/book_cover_widget.dart';
-import 'package:night_reader/shared/theme/context_ext.dart';
 import '../../book_detail/book_detail_page.dart';
 
 /// ExploreBookItem - 探索結果書籍項目
@@ -87,7 +86,7 @@ class ExploreBookItem extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   if (book.author != null && book.author!.isNotEmpty)
                     Text(
-                      '作者: ${book.author}',
+                      '作者：${book.author}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         height: 1.4,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -99,10 +98,10 @@ class ExploreBookItem extends StatelessWidget {
                       book.latestChapterTitle!.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      '最新: ${book.latestChapterTitle}',
+                      '最新：${book.latestChapterTitle}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         height: 1.4,
-                        color: context.warning,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

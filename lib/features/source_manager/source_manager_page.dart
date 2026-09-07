@@ -14,6 +14,7 @@ import 'package:night_reader/core/models/book_source.dart';
 import 'package:night_reader/core/models/book_source_part.dart';
 import 'package:night_reader/features/search/search_page.dart';
 import 'package:night_reader/shared/widgets/app_bottom_sheet.dart';
+import 'package:night_reader/shared/widgets/app_state_view.dart';
 import 'widgets/import_preview_dialog.dart';
 import 'widgets/source_item_tile.dart';
 import 'widgets/source_batch_toolbar.dart';
@@ -268,82 +269,50 @@ class _SourceManagerPageContentState extends State<_SourceManagerPageContent> {
   Widget _buildMainContent(SourceManagerProvider p) {
     if (p.isLoading) return const Center(child: CircularProgressIndicator());
     if (p.loadErrorMessage != null && p.totalSourceCount == 0) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(p.loadErrorMessage!),
-            const SizedBox(height: AppSpacing.sm),
-            OutlinedButton(onPressed: p.loadSources, child: const Text('重試')),
-          ],
+      return AppStateView(
+        icon: Icons.error_outline,
+        title: '書源載入失敗',
+        description: p.loadErrorMessage,
+        tone: AppStateTone.error,
+        primaryAction: AppStateAction(
+          label: '重試',
+          icon: Icons.refresh,
+          onPressed: p.loadSources,
         ),
       );
     }
     final list = p.sources;
     if (list.isEmpty) {
       if (p.totalSourceCount == 0) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xxl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.source_outlined,
-                  size: 52,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text('尚未加入書源', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  '匯入書源後，即可搜尋與探索內容。',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                FilledButton.icon(
-                  onPressed:
-                      _isImporting
-                          ? null
-                          : () => _showImportDialog(context, true),
-                  icon: const Icon(Icons.link),
-                  label: const Text('從網址匯入'),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                OutlinedButton.icon(
-                  onPressed:
-                      _isImporting ? null : () => _importFromFile(context),
-                  icon: const Icon(Icons.file_open_outlined),
-                  label: const Text('從檔案匯入'),
-                ),
-              ],
-            ),
+        return AppStateView(
+          icon: Icons.source_outlined,
+          title: '尚未加入書源',
+          description: '匯入書源後，即可搜尋與探索內容。',
+          primaryAction: AppStateAction(
+            label: '從網址匯入',
+            icon: Icons.link,
+            onPressed:
+                _isImporting ? null : () => _showImportDialog(context, true),
+          ),
+          secondaryAction: AppStateAction(
+            label: '從檔案匯入',
+            icon: Icons.file_open_outlined,
+            onPressed: _isImporting ? null : () => _importFromFile(context),
           ),
         );
       }
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('找不到符合條件的書源'),
-            const SizedBox(height: AppSpacing.sm),
-            TextButton(
-              onPressed: () {
-                _searchController.clear();
-                p.setSearchQuery('');
-                p.setFilterGroup('全部');
-              },
-              child: const Text('清除搜尋與篩選'),
-            ),
-          ],
+      return AppStateView(
+        icon: Icons.search_off,
+        title: '找不到符合條件的書源',
+        description: '清除搜尋與篩選條件後再試一次。',
+        primaryAction: AppStateAction(
+          label: '清除搜尋與篩選',
+          icon: Icons.clear,
+          onPressed: () {
+            _searchController.clear();
+            p.setSearchQuery('');
+            p.setFilterGroup('全部');
+          },
         ),
       );
     }
