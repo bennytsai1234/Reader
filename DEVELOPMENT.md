@@ -1,222 +1,134 @@
-# 夜讀 Night Reader — 開發者說明文件
+# 夜讀 Night Reader — 開發指南
 
-本文件包含 `夜讀` 閱讀器專案的技術架構、開發環境設定、測試與發布流程。
+本文件說明目前可重現的本機工具鏈、驗證方式、生成流程與除錯入口。產品能力見 [README.md](README.md)，執行架構見 [docs/architecture.md](docs/architecture.md)。
 
----
+## 工具鏈
 
-## 專案定位
+- Flutter `3.47.0`，release 基準由 `.github/workflows/android-release.yml` 固定；本機版本至少要能滿足 `pubspec.yaml` 的 Dart 約束。
+- Dart SDK `^3.13.0`，約束位於 `pubspec.yaml`。
+- Java `17`，release workflow 使用 Temurin 17。
+- Android SDK、Platform Tools，以及需要裝置行為驗證時可用的 Android 裝置或 AVD。
 
-- **專案名稱**：`night_reader`
-- **App 顯示名稱**：`夜讀`（Night Reader）
-- **技術棧**：Flutter、Dart、Provider、Drift、Dio、WebView
-- **產品方向**：小說閱讀器
-- **主要支援場景**：Android 小說閱讀與書源管理
-- **維護政策**：feature freeze（功能凍結）。以維護、修 bug、效能調校、重構、既有功能內部改進為主；不新增產品線功能。
+## 安裝與基本驗證
 
----
-
-## 技術架構
-
-### UI 與狀態管理
-
-- Flutter Material App
-- `provider` 作為主要狀態管理；Provider 基類 `core/base/base_provider.dart`
-- 部分模組透過 `event_bus`（`core/engine/app_event_bus.dart`）做事件溝通
-
-### 資料與持久化
-
-- `drift` + SQLite（`core/database`，20 個 DAO，生成檔 `.g.dart`）
-- `shared_preferences` 儲存使用者偏好（key 集中於 `core/constant/prefer_key.dart`）
-- 全域配置鏡像 `core/config/app_config.dart`，與 `SettingsProvider` 雙向同步
-- 本機檔案系統用於封面、章節內容、快取與備份（路徑於 `core/storage/app_storage_paths.dart`）
-
-### 網路與解析
-
-- `dio`、`cookie_jar`、`dio_cookie_manager`（`core/network` 攔截器 + `core/services/network_service.dart`、`http_client.dart`）
-- HTML / CSS / XPath / JSONPath / Regex / JavaScript 規則解析（`core/engine`）
-- `flutter_js` 用於 JS 規則相容（`core/engine/js`，因 FFI 無法跨 isolate）
-- `webview_flutter` 處理需要互動登入或驗證的書源流程（`core/engine/web_book/headless_webview_service.dart`）
-
-### 閱讀器與媒體
-
-- 自製 Reader V2，八層架構（`features/reader_v2`：shell / application / runtime / content / layout / render / viewport / features）
-- `flutter_tts`、`audio_service`、`just_audio` 提供朗讀相關能力（`core/services/tts_service.dart`）
-
----
-
-## 專案結構
-
-```text
-.
-├── lib/
-│   ├── main.dart                # 應用進入點（DI、crash handler、Workmanager、SplashPage）
-│   ├── app_providers.dart       # 全域 Provider 註冊
-│   ├── shared/                  # 跨 feature 共用 UI（theme、widgets、navigation）
-│   ├── core/
-│   │   ├── base/                # Provider 基類
-│   │   ├── config/              # 全域配置鏡像
-│   │   ├── constant/            # 常數/列舉/Preference key
-│   │   ├── database/            # Drift 主庫、tables、20 個 DAO
-│   │   ├── di/                  # GetIt 依賴注入
-│   │   ├── engine/              # 規則引擎（AnalyzeRule/AnalyzeUrl/JS/WebBook/EventBus）
-│   │   ├── exception/           # 應用例外
-│   │   ├── local_book/          # TXT 本地書格式偵測與解析
-│   │   ├── models/              # 資料契約層（Book/BookSource/Chapter...）
-│   │   ├── network/             # Dio 攔截器、StrResponse
-│   │   ├── services/            # 業務服務層（書源調度/下載/TTS/備份/校驗/日誌...）
-│   │   ├── storage/             # 磁碟快取、儲存路徑、用量統計
-│   │   ├── utils/               # 工具函式
-│   │   └── widgets/             # 共用 widget（書封）
-│   └── features/                # 各功能模組
-│       ├── about/               # 關於、版本更新、崩潰日誌
-│       ├── association/         # 深連結與檔案分享外部意圖
-│       ├── book_detail/         # 書籍詳情、目錄、換源、封面
-│       ├── bookshelf/           # 書架、批次更新/匯入
-│       ├── cache_manager/       # 下載佇列管理頁
-│       ├── explore/             # 發現分類瀏覽
-│       ├── reader_v2/          # 閱讀器主流程（八層架構）
-│       ├── replace_rule/        # 全域替換規則
-│       ├── search/             # 多書源搜尋
-│       ├── settings/           # 設定頁群
-│       ├── source_manager/     # 書源管理、校驗、偵錯、編輯
-│       └── welcome/            # 啟動閃屏、底部導航殼
-├── test/                        # 單元測試、Widget 測試、重點回歸測試
-├── tool/                        # 書源驗證/偵錯腳本（真實書源回歸用）
-├── docs/                        # Codebase Atlas 導航地圖與變更紀錄
-│   ├── night_reader_index.md    # atlas 索引（入口）
-│   ├── night_reader_adapter.md  # 通用 adapter
-│   └── night_reader/            # 各模組文件
-└── .github/workflows/          # CI / release workflow
-```
-
----
-
-## 開發環境需求
-
-- Flutter `3.47.0`
-- Dart SDK `^3.13.0`
-- Java `17`
-- Android SDK 與可用裝置 / 模擬器
-
----
-
-## 快速開始
-
-### 1. 安裝依賴
+在 repo 根目錄執行：
 
 ```bash
 flutter pub get
-```
-
-### 2. 靜態分析與測試
-
-本機僅做靜態分析與測試，不做 build。APK 建置與發布一律由 GitHub Actions 處理（見 Release 流程）。
-
-```bash
 flutter analyze
 flutter test
 ```
 
-### 3. Drift 生成（改過 table/DAO 才需要）
+這三個命令是一般修改的基本驗證。`flutter run` 用於本機 Android debug 與執行驗證；release APK 不在本機建置，由 GitHub Actions 處理。
+
+若只修改單一模組，可先執行相應測試縮短回饋時間，完成後再依改動風險決定是否跑全套。例如：
+
+```bash
+flutter test test/features/reader_v2
+flutter test test/features/source_manager
+flutter test test/shared/theme/theme_customization_test.dart
+```
+
+## Android 執行驗證
+
+先確認 Flutter 版本與 Android 目標：
+
+```bash
+flutter --version
+flutter emulators
+flutter devices
+```
+
+若尚未啟動 AVD，可先從 Android Studio 建立，或啟動已存在的 emulator，再執行 App：
+
+```bash
+flutter emulators --launch <emulator-id>
+flutter run -d <device-id>
+```
+
+變更涉及 UI、閱讀器互動、滾動、動畫、App lifecycle、本機儲存、Android plugin 或執行效能時，除了 analyze／test，還要重現受影響流程。依問題留下相應證據：
+
+| 問題類型 | 驗證證據 |
+|---|---|
+| 版面、主題、Dialog、選單與 loading／empty／error 狀態 | 模擬器或裝置截圖，以及可重現的操作路徑 |
+| 例外、背景任務、lifecycle、native plugin、GC 或 ANR | `flutter logs -d <device-id>` 或 `adb logcat` 的相關片段 |
+| 捲動、翻頁、動畫與排版效能 | Flutter frame timing、DevTools Performance；需要 Android 系統層證據時使用 Perfetto |
+| 只改純邏輯或資料轉換 | 對應單元測試；沒有執行 UI 時不要宣稱畫面行為已驗證 |
+
+實機保留給 release 前驗收，以及模擬器無法代表的觸控、特定 Android／廠牌行為或效能問題。交付說明要分開列出已驗證、尚未驗證與根據證據的推論。
+
+## 書源驗證
+
+規則引擎、網路、Cookie、搜尋、目錄或正文解析變更，除單元測試外，應使用 `tool/` 的真實書源腳本重現對應流程：
+
+- `tool/source_single_debug_test.dart`：單一書源逐階段偵錯。
+- `tool/source_batch_validation_test.dart`：批次書源校驗。
+- `tool/live_source_validation_test.dart`：live 書源驗證。
+- `tool/explore_batch_validation_test.dart`：發現分類驗證。
+
+批次校驗包裝腳本需要 Bash，並會設定本機 QuickJS library 路徑：
+
+```bash
+tool/run_source_validation.sh 0 10
+tool/flutter_test_with_quickjs.sh tool/source_single_debug_test.dart
+```
+
+Windows 可在 WSL 或其他具備 Bash、Python 3 與 Flutter 的環境執行這些 `.sh` 腳本。校驗會存取真實網站，結果需要區分 App 規則錯誤、執行環境缺件與上游網站異常。
+
+## Drift 生成與 schema
+
+修改 `lib/core/database/tables/`、DAO 定義或 Drift annotation 後執行：
 
 ```bash
 dart run build_runner build --delete-conflicting-outputs
-```
-
----
-
-## 測試
-
-執行全部測試：
-
-```bash
-flutter test
-```
-
-書源規則相關變更的回歸，優先用 `tool/` 下的腳本在真實書源上驗證：
-
-- `tool/source_single_debug_test.dart` — 單一書源逐階段偵錯
-- `tool/source_batch_validation_test.dart` / `live_source_validation_test.dart` — 批次校驗
-- `tool/explore_batch_validation_test.dart` — 發現分類驗證
-- 搭配 shell：`tool/run_source_validation.sh`、`tool/flutter_test_with_quickjs.sh`
-
----
-
-## Release 流程
-
-Android release 由 GitHub Actions workflow `.github/workflows/android-release.yml` 處理。
-
-### 觸發方式
-
-- 推送符合 `v*` 的 tag
-- 手動執行 `workflow_dispatch`（`gh workflow run android-release.yml --ref <ref>`）
-
-### 標準發布流程
-
-```bash
-flutter pub get
 flutter analyze
 flutter test
-git push origin HEAD
-git tag vX.Y.Z
-git push origin vX.Y.Z
 ```
 
-### 發布規則
+表結構變更還要在 `AppDatabase` 提供 schema migration；只更新 `.g.dart` 不代表既有使用者資料可升級。
 
-- 如需改版號，先更新 `pubspec.yaml` 並先提交該變更
-- 先推送 branch / commit，再建立與推送 release tag
-- 不要替尚未推送的本地 commit 建立 tag
-- tag 推上去後，確認 GitHub Actions 的 `Android Release` workflow 已開始建置
-- 看到遠端 workflow 進入建置階段後，即可結束本次 release 任務，不必等待 build 完成
+## 本地維護套件
 
-### Release workflow 目前會做的事
+`pubspec.yaml` 以 path dependency 使用三個專案內維護版本：
 
-- checkout 原始碼
-- 安裝 Java 17
-- 安裝 Flutter `3.47.0`
-- `flutter pub get`
-- 執行關鍵 analyze / test
-- 解出 Android release keystore
-- 建置 `arm64-v8a` release APK
-- 驗證 manifest
-- 發佈 GitHub Release 與 APK 附件
+- `third_party/flutter_tts`：上游 4.2.5 runtime，加上 Night Reader 的 AGP 9 built-in Kotlin build patch。
+- `third_party/flutter_js`：上游 0.8.7 runtime，加上 Night Reader 的 AGP 9 built-in Kotlin build patch。
+- `third_party/file_picker`：上游 11.0.3，加上 Win32 6／AGP 9 相容修補。
 
----
+這些目錄是 App 的實際依賴來源。修補或同步上游時只處理已成立的相容性問題，保留 path dependency，並驗證受影響平台的 plugin build 與執行流程；不要在同一變更中順帶升級無關套件。
 
-## 重要相依套件
+## 設定與資料入口
 
-完整依賴請參考 `pubspec.yaml`。關鍵依賴如下：
+| 用途 | 入口 |
+|---|---|
+| Flutter release 版本 | `.github/workflows/android-release.yml` |
+| Dart 約束、依賴與 assets | `pubspec.yaml` |
+| 全域依賴注入 | `lib/core/di/injection.dart` |
+| App 可同步讀取的設定鏡像 | `lib/core/config/app_config.dart` |
+| `SharedPreferences` key | `lib/core/constant/prefer_key.dart` |
+| App 私有檔案與快取路徑 | `lib/core/storage/app_storage_paths.dart` |
+| Drift schema、資料表與 DAO | `lib/core/database/` |
+| Android release CI | `.github/workflows/android-release.yml` |
 
-- `provider`、`event_bus`（狀態管理與事件通訊）
-- `dio`、`cookie_jar`、`dio_cookie_manager`（網路請求）
-- `drift`、`drift_flutter`（SQLite 資料庫）
-- `flutter_js`（JS 規則引擎，FFI 無法跨 isolate）
-- `webview_flutter`（headless WebView）
-- `flutter_tts`、`audio_service`、`just_audio`（語音朗讀）
-- `cached_network_image`、`flutter_cache_manager`（圖片快取）
-- `shared_preferences`（使用者偏好）
-- `workmanager`（背景任務，Isolate 內需重新初始化 DI，不可執行 JS 規則）
-- `app_links`、`receive_sharing_intent`（深連結與分享接收）
-- `shelf`、`shelf_router`、`shelf_static`、`network_info_plus`（區域網路傳書伺服器）
-- `home_widget`（桌面小工具）
-- `fast_gbk`（GB 編碼支援）
-- `get_it`、`logger`（依賴注入與日誌）
+不要把 keystore、密碼或 token 寫入 repo。Release workflow 需要的簽章資料由 GitHub Actions secrets 提供。
 
----
+## 執行與除錯邊界
+
+- `lib/main.dart` 的 App 啟動路徑與 Workmanager `callbackDispatcher()` 都會呼叫 `configureDependencies()`；背景 isolate 不會沿用主 isolate 的 GetIt 單例。
+- `SettingsProvider`、`AppConfig` 與 `PreferKey` 共同承擔可跨層讀取的設定。新增會被 Model 或 Reader 直接讀取的偏好時，要同步檢查三者。
+- Reader V2 的樣式會進入 layout signature 與 metrics cache key。字級、行高、字距、縮排、字型或內容轉換的改動，需要驗證快取失效與閱讀位置恢復。
+- 書源 HTTP 應經既有 `NetworkService` 與攔截器；需要使用者互動的驗證流程走 WebView，批次校驗不得要求 UI 互動。
+- 本地 SQLite、SharedPreferences 與 App 私有檔案是不同狀態來源；備份、還原、清理或遷移功能要逐一確認影響範圍。
+
+## 發布
+
+發布由 `.github/workflows/android-release.yml` 處理。完整順序、版號與 tag 約束以 [AGENTS.md](AGENTS.md) 的 `Release Publishing` 為準。
+
+一般開發完成後不應自行建立 release tag。手動 `workflow_dispatch` 會建置測試 APK artifact，但不建立 GitHub Release。
 
 ## 文件導覽
 
-本專案的導航地圖位於 `docs/night_reader_index.md`（Codebase Atlas 索引），適合在修改功能前先閱讀。日常工作從 atlas 入口 skill 進入：讀索引、挑相關模組文件、自帶變更/調查紀律。
-
----
-
-## 開發注意事項
-
-- 本機不做 build；APK 建置與發布一律在 GitHub Actions。
-- 書源、閱讀器、下載、快取與備份彼此有關聯，修改其中一塊通常要檢查其他流程。
-- Reader V2、Source Manager、主題模式與正文分頁是 release 的重點回歸區域，變更後需加強驗證。
-- 書源驗證流程涉及 WebView、Cookie 與真實網站互動，容易出現只有真機或真實網站才會發生的問題；優先用 `tool/` 腳本重現。
-- 後台任務（`main.dart callbackDispatcher`）在 Isolate 跑，需重新初始化 DI，且不可執行 JS 規則。
-- 改 Drift table/DAO 必須跑 `build_runner` 重新生成 `.g.dart`，並處理 schema migration。
-- `SettingsProvider` ↔ `AppConfig` ↔ `PreferKey` 三方需保持一致，否則 reader/models 會讀到舊值。
+- [README.md](README.md)：產品定位、功能與使用者快速開始。
+- [DESIGN.md](DESIGN.md)：色彩、字階、間距、主題與元件規則。
+- [docs/architecture.md](docs/architecture.md)：跨模組執行流程與狀態歸屬。
+- [docs/night_reader_index.md](docs/night_reader_index.md)：Codebase Atlas 模組導航與修改入口。

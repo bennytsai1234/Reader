@@ -282,9 +282,12 @@ APK 透過 GitHub Actions 建置並發布至 GitHub Releases。
 - WebView
 - `flutter_tts`
 
-開發環境與專案架構請參考：
+開發與維護文件：
 
-[DEVELOPMENT.md](DEVELOPMENT.md)
+- [DEVELOPMENT.md](DEVELOPMENT.md)：本機工具鏈、驗證與除錯入口
+- [DESIGN.md](DESIGN.md)：視覺、主題與互動系統
+- [docs/architecture.md](docs/architecture.md)：執行流程與狀態歸屬
+- [docs/night_reader_index.md](docs/night_reader_index.md)：Codebase Atlas 模組導航
 
 基本驗證：
 
